@@ -1,0 +1,38 @@
+# Default ESDM configuration
+# All values here are the sensible defaults discussed in 01-IMPLEMENTATION-PLAN.md.
+# Override any key on the CLI: esdm-train model.dim_latent=128
+
+model:
+  dim_input: 256          # embedding dimension F
+  dim_latent: 64          # VAE latent dimension
+  n_modes: 32             # number of spectral modes tracked
+  n_vibrational_steps: 4  # VDT recurrence depth
+  gamma: 0.1              # vibrational damping coefficient
+
+fusion:
+  alpha: 0.5              # geometric weight in M_N = alpha*norm(VV^T) - beta*norm(VL_FV^T)
+  beta:  0.5              # semantic penalty weight
+  n_eigvecs: 64           # top-k eigenvectors to keep from M_N
+
+clock:
+  eps: 1.0e-8
+  heat_death_patience: 200
+  lambda_clip: 100.0      # maximum allowed Lambda_tau
+
+elbo:
+  kl_s_weight: 0.01       # coupling strength V (barrier height analogue)
+  beta_conservation: null  # null => 1/S_0 (auto)
+
+training:
+  batch_size: 512
+  lr: 3.0e-4
+  weight_decay: 1.0e-5
+  max_steps: 50000
+  log_every: 50
+  checkpoint_every: 1000
+  seed: 42
+
+paths:
+  lf_pt: data/L_F.pt      # pre-built feature-space Laplacian
+  v_pt:  data/V.pt         # corpus embeddings
+  output_dir: results/

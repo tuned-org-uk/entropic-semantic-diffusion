@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=77.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "esdm"
+version = "0.1.0"
+description = "Entropic Semantic Diffusion Model — entropic-time spectral diffusion with dual-space item-kernel fusion"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "Lorenzo Moriondo", email = "tunedconsulting@gmail.com" }]
+keywords = [
+    "diffusion",
+    "entropic-time",
+    "spectral",
+    "vibrational",
+    "arrowspace",
+    "variational-autoencoder",
+    "graph-laplacian",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+# ---------------------------------------------------------------------------
+# Runtime dependencies
+# ---------------------------------------------------------------------------
+# torch is NOT pinned here because the correct wheel depends on CUDA/ROCm/MPS.
+# Install it separately before this package:
+#
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cu121
+#   uv pip install -e .
+#
+dependencies = [
+    "torch>=2.3",
+    "scipy>=1.13",
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+    "einops>=0.8",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "pandas>=2.2",
+    # VDT is a direct source dependency — provides VibrationalStateBlock,
+    # SpectralLoadingDecoder, SignedDensityMatrix, and diffusion utilities.
+    "vdeductive @ git+https://github.com/tuned-org-uk/vibrational-deduction-transformer.git",
+]
+
+# ---------------------------------------------------------------------------
+# Optional extras
+# ---------------------------------------------------------------------------
+[project.optional-dependencies]
+wandb = ["wandb>=0.17"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "build>=1.0",
+]
+all = [
+    "wandb>=0.17",
+]
+
+# ---------------------------------------------------------------------------
+# Console entry points
+# ---------------------------------------------------------------------------
+[project.scripts]
+"esdm-train"  = "esdm._cli.train:main"
+"esdm-build"  = "esdm._cli.build_laplacian:main"
+"esdm-sweep"  = "esdm._cli.sweep:main"
+
+# ---------------------------------------------------------------------------
+# Package discovery
+# ---------------------------------------------------------------------------
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["esdm*"]
+exclude = ["tests*", "docs*", "scripts*"]
+
+[tool.setuptools.package-data]
+esdm = [
+    "_configs/*.yaml",
+    "py.typed",
+]
+
+# ---------------------------------------------------------------------------
+# Project URLs
+# ---------------------------------------------------------------------------
+[project.urls]
+"Homepage"    = "https://github.com/tuned-org-uk/enthropic-semantic-diffusion"
+"Bug Tracker" = "https://github.com/tuned-org-uk/enthropic-semantic-diffusion/issues"
+"Source"      = "https://github.com/tuned-org-uk/enthropic-semantic-diffusion"
+
+# ---------------------------------------------------------------------------
+# Tool configuration
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
