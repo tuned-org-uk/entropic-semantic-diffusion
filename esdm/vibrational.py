@@ -19,7 +19,7 @@ from torch import Tensor
 
 # Import the VDT vibrational block — the ESDM wraps it, not replaces it.
 # Uncomment the correct import path once vdeductive is installed.
-# from vdeductive.vdt import VibrationalStateBlock as _VDTVibrationalBlock
+from esdm._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
 
 
 class VibrationalStateBlock(nn.Module):
@@ -48,7 +48,7 @@ class VibrationalStateBlock(nn.Module):
         self.dim = dim
         self.n_steps = n_steps
         self.gamma = gamma
-        # self._vdt_block = _VDTVibrationalBlock(dim=dim, n_heads=n_heads, n_steps=n_steps)
+        # self._vdt_block = _VDTVibrationalBlock(...)  # Phase 3: wire once the ESDM interface is final
 
     def forward(
         self,

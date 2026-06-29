@@ -46,9 +46,7 @@ dependencies = [
     "pyyaml>=6.0",
     "tqdm>=4.66",
     "pandas>=2.2",
-    # VDT is a direct source dependency — provides VibrationalStateBlock,
-    # SpectralLoadingDecoder, SignedDensityMatrix, and diffusion utilities.
-    "vdeductive @ git+https://github.com/tuned-org-uk/vibrational-deduction-transformer.git",
+    # VDT modules are vendored in esdm/_vendor; no external git dependency.
 ]
 
 # ---------------------------------------------------------------------------

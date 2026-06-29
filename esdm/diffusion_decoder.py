@@ -14,7 +14,7 @@ from torch import Tensor
 
 from esdm.clock import EntropicClock
 
-# from vdeductive.diffusion_decoder import DiffusionDecoder as _VDTDiffusionDecoder
+from esdm._vendor.diffusion_decoder import DiffusionDecoder as _VDTDiffusionDecoder
 
 
 class EntropicDiffusionDecoder(nn.Module):
@@ -30,7 +30,7 @@ class EntropicDiffusionDecoder(nn.Module):
         super().__init__()
         self.dim = dim
         self.n_steps = n_steps
-        # self._vdt_decoder = _VDTDiffusionDecoder(dim=dim, n_steps=n_steps)
+        # self._vdt_decoder = _VDTDiffusionDecoder(...)  # Phase 4: wire once the ESDM interface is final
 
     def forward(
         self,
