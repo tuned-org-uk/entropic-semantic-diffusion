@@ -55,8 +55,13 @@ class EntropicClock(nn.Module):
         self.register_buffer("_prev_phi",   torch.tensor(0.0))
         self.register_buffer("_flat_steps", torch.tensor(0))
 
-        # Per-mode tau vector — initialised lazily on first step
-        self._per_mode_tau: Optional[Tensor] = None
+        # Diagnostic buffers updated by step(); health_check() reads these.
+        self.register_buffer("conserved",  torch.tensor(0.0))
+        self.register_buffer("rho_sign",   torch.tensor(0.0))
+        self.register_buffer("Lambda_tau", torch.tensor(0.0))
+
+        # Per-mode tau vector — initialised lazily on first step.
+        # Registered as a buffer so it survives checkpoint save/load.
 
     # ------------------------------------------------------------------ #
 
@@ -69,6 +74,23 @@ class EntropicClock(nn.Module):
         dark_entropy: Tensor,
         S_0: Optional[Tensor] = None,
     ) -> ClockState:
+        """
+        Advance the entropic clock by one step.
+
+        Lazily creates the per-mode tau buffer the first time a vector-valued
+        ``kl_tau_current`` is seen, then accumulates ``|kl_tau_current|`` into
+        it. Diagnostic buffers (conserved, rho_sign, Lambda_tau) are updated
+        so ``health_check()`` can read them after a checkpoint restore.
+        """
+        # Ensure per-mode entropic time is checkpointed. Register on first use.
+        has_per_mode = "_per_mode_tau" in self._buffers
+        if not has_per_mode and kl_tau_current.dim() > 0:
+            self.register_buffer("_per_mode_tau", torch.zeros_like(kl_tau_current))
+        elif has_per_mode:
+            self._per_mode_tau = self._per_mode_tau + kl_tau_current.abs()
+
+        # TODO: compute tau_n, tau_max_est, Lambda_tau, delta_tau, conserved, rho_sign.
+        # Update the registered diagnostic buffers below as part of that work.
         raise NotImplementedError("Phase 2: implement EntropicClock.step()")
 
     # ------------------------------------------------------------------ #
@@ -90,4 +112,4 @@ class EntropicClock(nn.Module):
 
     @property
     def per_mode_tau(self) -> Optional[Tensor]:
-        return self._per_mode_tau
+        return self._buffers.get("_per_mode_tau")
