@@ -14,7 +14,7 @@ def _make_tensors(B: int = 8, F: int = 32):
     kl_S  = torch.tensor(0.1)
     kl_tau = torch.tensor(0.3)
     dark   = torch.tensor(0.2)
-    S_0    = (kl_tau + dark).detach().clone()
+    S_0    = (kl_S + kl_tau + dark).detach().clone()
     return x, x_hat, kl_z, kl_S, kl_tau, dark, S_0
 
 
@@ -26,16 +26,19 @@ def test_elbo_returns_finite():
 
 def test_conserved_zero_when_exact():
     x, x_hat, kl_z, kl_S, kl_tau, dark, S_0 = _make_tensors()
-    # S_0 = kl_tau + dark exactly → conserved should be ~0
+    # S_0 = kl_S + kl_tau + dark exactly → conserved should be ~0
     _, metrics = esdm_elbo(x, x_hat, kl_z, kl_S, kl_tau, dark, S_0)
     assert float(metrics["conserved"]) < 1e-6
 
 
 def test_S0_no_gradient():
     x, x_hat, kl_z, kl_S, kl_tau, dark, S_0 = _make_tensors()
+    # Give at least one tensor a gradient so the loss has a grad_fn.
+    x_hat = x_hat.requires_grad_(True)
     S_0.requires_grad_(False)
     loss, _ = esdm_elbo(x, x_hat, kl_z, kl_S, kl_tau, dark, S_0)
     loss.backward()
+    assert x_hat.grad is not None
     assert S_0.grad is None
 
 

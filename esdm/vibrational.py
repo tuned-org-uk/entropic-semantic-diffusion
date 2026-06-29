@@ -54,8 +54,8 @@ class VibrationalStateBlock(nn.Module):
         self,
         x: Tensor,          # (B, F)
         L_f: Tensor,        # (F, F) feature-space Laplacian
-        Lambda_tau: float,  # entropic pump scalar
-        delta_tau: float,   # entropic time step scalar
+        Lambda_tau: float | Tensor,  # entropic pump scalar (or per-mode tensor)
+        delta_tau: float | Tensor,   # entropic time step scalar (or per-mode tensor)
     ) -> tuple[Tensor, Tensor, Tensor]:
         """
         Returns (Q_t, rho_plus, rho_minus).
