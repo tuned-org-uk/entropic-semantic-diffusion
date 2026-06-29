@@ -1,0 +1,342 @@
+# 00 — Entropic Semantic Diffusion Model (ESDM): Design Document
+
+> **Status:** Conceptual design — pre-implementation  
+> **Sources:** Barontini 2026 (Phys. Rev. Research 8, L022047), VDT repo, quantum-vibrational repo, spectral-diffusion repo  
+> **Author:** Research note synthesised from prior work on Vibrational Deductive Transformer (VDT) and Spectral Diffusion Model (SDM)
+
+---
+
+## 1. The Core Problem
+
+The VDT wave recurrence, the SDM diffusion schedule, and the training loop all share one fundamental flaw: **time is external**.
+
+- VDT's wave recurrence index `t` is an integer step counter with no thermodynamic meaning
+- SDM's `cosine_alpha_bar(t, T=200)` is a fixed schedule over 200 preset steps
+- Training epochs are external wall-clock steps
+
+This is precisely the **Wheeler-DeWitt problem of time**: a closed system described by a time-independent Hamiltonian has no built-in mechanism to sequence its own evolution. Barontini (2026) solves this experimentally using a Bose-Einstein condensate partitioned into a "dark" (unobserved) and "bright" (observed) sector, and shows that an *entropic time* constructed entirely from internal entropy exchange between the sectors can replace the external laboratory clock — and reproduce the full measured dynamics via an effective Schrödinger equation parametrised by that internal time.
+
+The ESDM applies this lesson directly: every external time parameter in VDT and SDM is replaced by an entropic time derived from spectral entropy exchange between the latent (dark) and active (bright) sectors of the semantic system.
+
+---
+
+## 2. Two-Sector Partition
+
+### 2.1 Physical analogue
+
+Barontini partitions the closed BEC Hamiltonian as:
+
+$$\hat{H} = \hat{H}_\text{bright} + \hat{H}_\text{dark} + \hat{H}_\text{coupling}$$
+
+where `bright` is the observed sector, `dark` the unobserved sector, and `coupling` the optical barrier (height $V$) controlling entropy exchange between them.
+
+### 2.2 Semantic analogue
+
+The ESDM maps this partition onto the VDT/SDM architecture:
+
+| Barontini | ESDM |
+|---|---|
+| Bright sector (observed BEC half) | Active spectral modes: $\omega_k > \theta$ — the `N_active` population |
+| Dark sector (unobserved BEC half) | Latent wiring $L(z)$, inactive modes, ArrowSpace prior eigenpairs $(U_{1:q}, \lambda_{1:q})$ |
+| Coupling strength $V$ | `kl_S` regularisation weight — controls entropy exchange between sectors |
+| Barrier height → big bang / big crunch | Mode activation / mode collapse events during training |
+| BEC atom count $N(\phi)$ in bright sector | `N_active` — number of modes above threshold |
+| Clock field $\phi$ (centre of mass) | `log_lam_s` — the learnable log spectral scale |
+| Scale factor $a$ (BEC RMS radius) | Reconstruction width $\Sigma$ — spread of the decoded embedding |
+
+The total semantic Hamiltonian is therefore:
+
+$$\hat{H}_\text{sem} = \hat{H}_\text{item} + \hat{H}_\text{spectral} + \hat{H}_\text{wiring}(V)$$
+
+### 2.3 Why the partition matters
+
+- **Item sector** is observable: we can measure $\hat{x}$, compute reconstruction loss, and inspect the active mode population.
+- **Spectral sector** is latent: it governs the dynamics of item-space but is never directly observed during inference.
+- Entropy flows *between* sectors even though the total system entropy is conserved — exactly as in Barontini's miniuniverse. This is what the `entropy conservation` term in the ELBO enforces (see Section 5).
+
+---
+
+## 3. Entropic Time
+
+### 3.1 Definition
+
+Barontini defines entropic time (Eq. 3 of the paper) as:
+
+$$\tau(\lambda) = \frac{\sigma}{k_B} \int_\lambda \frac{dS}{d\phi} \, |d\phi|$$
+
+This is monotonically increasing by construction: as long as $dS$ and $d\phi$ share sign, the arrow of time cannot reverse. For the ESDM, the clock field $\phi \equiv \log\lambda_S$ is already present in SDM's `log_lam_s`, and the entropy in the bright sector is tracked by `kl_tau`. The discrete entropic time accumulator is:
+
+$$\tau_n = \sum_{i=1}^{n} |\Delta \, \text{kl\_tau}_i|$$
+
+where $\Delta \text{kl\_tau}_i$ is the per-step change in the tau-mode KL term of the VDT ELBO.
+
+### 3.2 Key properties
+
+1. **Monotonic** — the sum of absolute values cannot decrease, so the arrow of time is guaranteed.
+2. **Internally derived** — computed entirely from observable quantities (`kl_tau`) with no external clock.
+3. **Stops when entropy is not flowing** — if `kl_tau` is stable, $\tau_n$ stops increasing. This is the semantic equivalent of Barontini's observation that "no entropic time elapses between a big crunch and the subsequent big bang, because no entropy is exchanged there."
+4. **Heat death detection** — when $\tau_n$ stalls for many consecutive steps, the system has converged to a stationary state. This is a training termination criterion, not an epoch count.
+
+### 3.3 Non-monotonicity resolution
+
+The clock field `log_lam_s` does not evolve monotonically — it can increase and decrease across training. Barontini explicitly identifies this as the non-monotonicity problem for recollapsing minisuperspace models, and resolves it via the absolute-value integral. The ESDM inherits this fix: the entropic time $\tau$ is always increasing even when `log_lam_s` oscillates.
+
+---
+
+## 4. The Entropic Schrödinger Equation for Semantics
+
+### 4.1 Barontini's derivation
+
+Starting from the static WDW equation and applying a Feshbach-Villars decomposition (keeping only forward-in-time solutions), Barontini obtains (Eq. 6):
+
+$$i\hbar \,\partial_\tau \psi(\tau, a) = \Phi(\tau)\psi(\tau, a) + \Lambda(\tau) \, H_\text{geom} \, \psi(\tau, a)$$
+
+where $\Phi(\tau) = \alpha\omega\phi^2 d_\tau\phi$ is a global phase and $\Lambda(\tau) = (\partial_\phi S)^{-1} k_B / \sigma\omega\phi$ is the **entropic pump** — an entropy-dependent energy amplifier. When $\partial_\tau \Lambda = 0$ (no entropy flow), this reduces to an ordinary Schrödinger equation.
+
+### 4.2 ESDM wave recurrence
+
+The VDT wave recurrence (from `VibrationalStateBlock`) is:
+
+$$Q_{t+1} = 2Q_t - Q_{t-1} - dt^2 \, L_f Q_t - \gamma \Delta Q + dt^2 \, B_t$$
+
+In the ESDM this becomes, with $dt$ replaced by $\Delta\tau$ (entropic time step) and the forcing term gated by $\Lambda$:
+
+$$Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, L_f Q_t - \gamma \Delta Q + \Lambda(\tau) \cdot \Delta\tau^2 \, B_t$$
+
+where:
+- $L_f$ is the feature-space Laplacian (ArrowSpace)
+- $B_t$ is the attention-based forcing (self-attention + FFN output from `VibrationalStateBlock`)
+- $\Lambda(\tau) = |\partial_\phi \text{kl\_tau}|^{-1}$ — the discrete entropic pump
+- $\Delta\tau = |\Delta \text{kl\_tau}_t|$ — the entropic time step at step $t$
+
+**Interpretation of $\Lambda(\tau)$ as pump:**
+- When $\Lambda$ is large (entropy derivative small — modes stable), attention forcing is amplified. The system is in a low-entropy-flow regime and the forcing drives exploration.
+- When $\Lambda$ is small (entropy derivative large — rapid mode transitions), attention forcing is suppressed. The system is in a high-entropy-flow regime and the wave recurrence runs close to free vibrational dynamics.
+- When $\partial_\tau \Lambda < 0$ (pump shrinking), energy is flowing *into* the bright sector — an expansion phase.
+- When $\partial_\tau \Lambda > 0$ (pump growing), energy is being extracted from the bright sector — a contraction phase heading toward "big crunch".
+
+---
+
+## 5. The Entropic Diffusion Schedule
+
+### 5.1 Problem with the current schedule
+
+SDM uses `cosine_alpha_bar(t, T=200)` — a fixed external schedule over 200 preset steps regardless of what the spectral system is doing. This means:
+- Steps where no spectral change is occurring get the same diffusion weight as steps where a major mode transition is happening.
+- The schedule cannot adapt to different corpus geometries or different `lam_s` configurations.
+
+### 5.2 Entropic schedule
+
+Replace the fixed schedule with one indexed by accumulated entropic time:
+
+$$\bar{\alpha}(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau}{\tau_\text{max}}\right)$$
+
+where $\tau$ is the accumulated entropic time and $\tau_\text{max}$ is determined from the total entropy budget of the training run (estimated as $\tau_\text{max} = \sum_\text{all steps} |\Delta \text{kl\_tau}|$, updated as a running estimate).
+
+**Effect:** Steps where `kl_tau` is changing rapidly (large $|\Delta \text{kl\_tau}|$) contribute more to $\tau$ and therefore advance the diffusion schedule faster — dissolving semantic structure at precisely the moments when the spectral geometry is actively reorganising. Steps where `kl_tau` is stable contribute negligibly — the diffusion schedule slows down at plateaus automatically.
+
+### 5.3 Per-mode schedule
+
+Following SDM's existing `per_mode_variance`, the entropic schedule can be applied per-mode:
+
+$$\bar{\alpha}_k(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau_k}{\tau_{k,\text{max}}}\right)$$
+
+where $\tau_k = \sum |\Delta \text{kl\_tau}_k|$ accumulates separately for each mode $k$. Modes that transition early (high $\tau_k$) reach their noise floor early; modes that stay stable longer maintain their signal longer.
+
+---
+
+## 6. Architecture
+
+### 6.1 Module overview
+
+```
+Input x  (B, D)
+     │
+     ▼
+┌─────────────────────┐
+│  EntropicClock      │  NEW — accumulates τ from |Δkl_tau|
+│                     │        computes Λ(τ), emits dark_sector_entropy
+└─────────┬───────────┘
+          │  τ, Λ(τ), Δτ
+          ▼
+┌─────────────────────┐
+│ VibrationalState    │  VDT — wave recurrence, NOW gated by Λ(τ)
+│ Block               │        dt → Δτ, B_t scaled by Λ(τ)
+└─────────┬───────────┘
+          │  Q_t, ρ_+, ρ_-
+          ▼
+┌─────────────────────┐
+│ SpectralLoading     │  VDT — unchanged
+│ Decoder             │        z, U_q → W, ω, S
+└─────────┬───────────┘
+          │  L(z), N_active, log_lam_s
+          ▼
+┌─────────────────────┐
+│ EntropicDiffusion   │  SDM — cosine_alpha_bar replaced by ᾱ(τ)
+│ Decoder             │        per-mode schedule indexed by τ_k
+└─────────┬───────────┘
+          │  x̂
+          ▼
+   Prediction / Generation
+```
+
+### 6.2 Module specifications
+
+**`EntropicClock`** (new module)
+- Inputs: `kl_tau` per step (scalar or per-mode vector)
+- Outputs: `tau` (accumulated entropic time), `Lambda_tau` (entropic pump), `delta_tau` (current step size), `dark_sector_entropy` (KL of inactive modes)
+- State: running sum $\tau_n$, running estimate of $\tau_\text{max}$
+- Key method: `step(kl_tau_current, kl_tau_prev)` → updates all outputs
+
+**`VibrationalStateBlock`** (modified from VDT)
+- Change: accept `Lambda_tau` and `delta_tau` from `EntropicClock`
+- Change: replace `dt` with `delta_tau` in recurrence
+- Change: scale forcing term `B_t` by `Lambda_tau`
+- Everything else unchanged
+
+**`SpectralLoadingDecoder`** (unchanged from VDT)
+- Produces `log_lam_s` (clock field $\phi$), `N_active`, `L(z)`
+- Feeds `log_lam_s` back to `EntropicClock` as $\phi$
+
+**`EntropicDiffusionDecoder`** (modified from SDM)
+- Change: replace `cosine_alpha_bar(t, T)` with `alpha_bar_entropic(tau, tau_max)`
+- Change: per-mode schedule uses per-mode `tau_k` from `EntropicClock`
+- Everything else unchanged (forward step, LGMRF prior, reverse chain)
+
+### 6.3 Signed interference as confidence
+
+The `SignedDensityMatrix` from VDT tracks $\rho = \rho_+ - \rho_-$. From the quantum-vibrational paper, negative eigenvalues of the amplitude Laplacian $\Lambda_A(t) = D(t) - a(t)a(t)^\top$ signal active destructive interference. In the ESDM this becomes a **prediction confidence signal**:
+
+$$\text{confidence}(\tau) = \frac{\rho_+}{\rho_+ + \rho_- + \epsilon}$$
+
+When $\rho_- > \rho_+$ (more destructive than constructive interference), the model is in a decoherent state — structurally analogous to Barontini's "big crunch" where the entropic clock stops. Predictions made in this regime should be flagged as low-confidence.
+
+---
+
+## 7. The ESDM ELBO
+
+The ESDM extends the VDT three-term ELBO with an entropy conservation penalty:
+
+$$\mathcal{L}_\text{ESDM} = \underbrace{\mathbb{E}_q[\log p(x \mid z, W)]}_\text{reconstruction} - \underbrace{\text{KL}(q(z) \,\|\, \mathcal{N}(0,I))}_\text{kl\_z} - \underbrace{\text{KL}(q(S) \,\|\, p(S|I))}_\text{kl\_S} - \underbrace{\text{KL}(q(\omega) \,\|\, p(\omega|\tau, L))}_\text{kl\_tau} - \underbrace{\beta \cdot \left|S_\text{bright}(\tau) + S_\text{dark}(\tau) - S_0\right|^2}_\text{entropy conservation}$$
+
+**New term: entropy conservation**
+- $S_\text{bright}(\tau) = \text{kl\_tau}$ (KL of active modes)
+- $S_\text{dark}(\tau) = \sum_{k: \omega_k < \theta} \text{KL}(\omega_k)$ (KL of inactive modes)
+- $S_0 = S_\text{bright}(0) + S_\text{dark}(0)$ (total entropy at initialisation)
+- $\beta$ is a small weight (suggested: $\beta \in [0.001, 0.01]$, or $\beta = 1/S_0$ for a dimensionless form)
+
+This directly mirrors Barontini's experimental verification that "within our errorbars, the entropy of the whole miniuniverse (dark and bright sector) is constant" across the full run.
+
+---
+
+## 8. Training Diagnostics and Health Monitoring
+
+The complete per-batch monitoring loop:
+
+```python
+# per batch
+kl_bright    = kl_tau                        # active modes entropy
+kl_dark      = sum kl(omega_k) for inactive  # dark sector entropy
+tau_n       += abs(delta_kl_bright)          # entropic time accumulator (monotone)
+Lambda_tau   = 1.0 / (abs(d_kl_bright/d_phi) + eps)  # entropic pump
+conserved    = abs(kl_bright + kl_dark - S_0)         # should → 0
+rho_sign     = rho_minus / (rho_plus + eps)           # interference ratio → confidence
+```
+
+### 8.1 Health check table
+
+| Metric | Healthy | Warning | Critical |
+|---|---|---|---|
+| `tau_n` | Monotonically increasing | Flat for > 50 steps | Flat for > 200 steps (heat death) |
+| `conserved` | $< 0.05 \cdot S_0$ | $0.05$–$0.2 \cdot S_0$ | $> 0.2 \cdot S_0$ |
+| `rho_sign` | Oscillating then stabilising | Monotonically increasing | $> 0.9$ (near-total decoherence) |
+| `N_active` | Grows from 0 to $\geq F/2$ | Stalls at $< F/4$ | Collapses after growing (big crunch) |
+| `Lambda_tau` | Varies with mode transitions | Explodes ($> 100$) | NaN |
+
+### 8.2 Regime identification
+
+Using Barontini's language, training passes through identifiable phases:
+
+1. **Big bang** ($\tau_n$ starts growing, `N_active` rising): active modes populating, entropy flowing from dark to bright sector
+2. **Expansion** ($\Lambda_\tau$ moderate, `conserved` stable): steady semantic organisation
+3. **Maximum extension** (`N_active` plateau, $\tau_n$ slowing): diffusion schedule near $\bar{\alpha}(\tau) \approx 0.5$
+4. **Contraction / big crunch** (`N_active` falling, `rho_sign` rising): modes collapsing back to dark sector
+5. **Heat death** ($\tau_n$ stalled, `conserved` near 0): stationary state — training should stop
+
+---
+
+## 9. Barrier Height Sweep (Experimental Protocol)
+
+Barontini varies the barrier height $V = H_\text{coupling}/H^\text{max}_\text{coupling}$ and observes that low $V$ produces cyclic big bang/big crunch dynamics while high $V$ drives the system toward heat death.
+
+The ESDM analogue is a sweep over the `kl_S` weight (the semantic coupling strength):
+
+| `kl_S` weight | Predicted behaviour | Analogue |
+|---|---|---|
+| Very low | Many mode activation/collapse cycles, fast $\tau_n$ | Low barrier — cyclic BEC |
+| Moderate | Single clean expansion + gradual convergence | Intermediate barrier |
+| High | `N_active` barely grows, $\tau_n$ nearly constant | High barrier — heat death |
+
+This sweep is the primary validation experiment for the ESDM. Each value of `kl_S` produces a $\tau_n$ vs. training-step curve directly analogous to Barontini's Fig. 2.
+
+---
+
+## 10. Connection to Thermal Time and ArrowSpace
+
+### 10.1 Thermal time hypothesis
+
+Barontini notes that his entropic time "bears conceptual similarities to the thermal time hypothesis" (Connes & Rovelli, 1994), but differs in being operationally constructed from measurable entropy exchange rather than from the algebraic structure of observables. The ESDM inherits this operational character: $\tau_n$ is computed from `kl_tau` which is a directly measurable quantity in the ELBO.
+
+### 10.2 ArrowSpace dual-space hypothesis
+
+The ArrowSpace hypothesis holds that every vector space is simultaneously a geometric item-space and a semantic feature-space. In the ESDM partition:
+- **Item-space** = bright sector (observed, reconstructed, measured via $\hat{x}$)
+- **Feature-space** = dark sector (Laplacian eigenpairs, spectral loading, ArrowSpace wiring $L_F$)
+
+The Fiedler vector of $L_F$ plays the role of Barontini's scale factor $a$ — it measures the "size of the semantic universe" in feature-space. The Spectral Complementarity Conjecture from the quantum-vibrational paper (that the ArrowSpace Fiedler vector and the amplitude Laplacian bottom eigenvector tend to $90°$ as graph size grows) maps cleanly onto the dark/bright orthogonality: when one sector is maximally uncertain, the other is maximally determined.
+
+### 10.3 Optimisation as recursive semantic search
+
+The ESDM optimisation is not gradient descent on a fixed landscape but a recursive process: each update changes $L_F$, which changes the dark sector entropy, which changes $\tau_n$, which changes the diffusion schedule, which changes the reconstruction loss, which loops back to update $L_F$. This is the **optimisation-as-recursive-semantic-search** interpretation — the system is searching its own spectral geometry for a configuration where the two-sector entropy conservation law is satisfied.
+
+---
+
+## 11. Open Questions
+
+1. **Feshbach-Villars decomposition in the discrete case.** Does the analogous decomposition in the VDT recurrence correspond to the `kl_tau` positive/negative components of the mode frequency distribution?
+
+2. **Multiple clock fields.** Both `log_lam_s` and the Fiedler eigenvalue of $L_F$ are candidate clocks. Do they produce the same $\tau_n$ trajectory? Do they diverge near a big crunch?
+
+3. **Quantum bounce vs. singularity.** Can the ESDM be engineered to "bounce" — reactivating modes rather than collapsing — by changing the sign of $\Lambda$ near a crunch?
+
+4. **Loschmidt echo as reversibility test.** Running $\tau$ backwards and measuring recovery of the original embedding distribution is a direct test of the arrow of time in semantic space.
+
+5. **$\beta$ calibration for the conservation term.** Natural choice: $\beta = 1/S_0$ (normalised by initial total entropy), making the conservation penalty dimensionless.
+
+---
+
+## 12. Implementation Checklist
+
+- [ ] `EntropicClock` module: accumulates $\tau_n$, computes $\Lambda(\tau)$, emits `dark_sector_entropy`
+- [ ] Modify `VibrationalStateBlock.forward()`: accept `Lambda_tau`, `delta_tau`; scale `B_t`; replace `dt`
+- [ ] Add `dark_sector_entropy` metric to step-level CSV log
+- [ ] Modify `alpha_bar` in `spectral_diff/schedule.py`: replace `cosine_alpha_bar(t, T)` with `alpha_bar_entropic(tau, tau_max)`
+- [ ] Add entropy conservation term to ELBO in `spectral_diff/elbo.py`
+- [ ] Add `rho_sign` confidence output to model forward pass
+- [ ] Add `conserved` health metric to `spectral_kl_health_check`
+- [ ] Experiment: `kl_S` weight sweep (barrier height $V$ analogue) → produce $\tau_n$ vs. step curves
+- [ ] Experiment: verify entropy conservation law across training run
+- [ ] Experiment: Loschmidt echo reversibility test
+
+---
+
+## References
+
+- Barontini, G. (2026). *Testing the problem of time with cold atoms*. Phys. Rev. Research 8, L022047. DOI: 10.1103/1h9j-df4k
+- Connes, A. & Rovelli, C. (1994). Von Neumann algebra automorphisms and time-thermodynamics relation. Class. Quantum Grav. 11, 2899.
+- Page, D.N. & Wootters, W.K. (1983). Evolution without evolution. Phys. Rev. D 27, 2885.
+- Kiefer, C. & Sandhöfer, B. (2022). Quantum cosmology. Z. Naturforsch. A 77, 543.
+- Moriondo, L. (2025). *Vibrational Deductive Transformer*. github.com/tuned-org-uk/vibrational-deduction-transformer
+- Moriondo, L. (2025). *Real Amplitudes and Signed Interference in Vibrational Systems*. github.com/tuned-org-uk/quantum-vibrational
+- Moriondo, L. (2025). *Spectral Diffusion Model*. github.com/tuned-org-uk/spectral-diffusion
+- Moriondo, L. (2024). *ArrowSpace: Semantic Basins*. tuned.org.uk/posts/020_arrowspace_semantic_basins_part2
