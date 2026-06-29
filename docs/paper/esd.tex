@@ -4,6 +4,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{amsmath, amssymb, amsthm}
+\usepackage[dvipsnames, svgnames]{xcolor} 
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{booktabs}
@@ -42,14 +43,17 @@
 % ============================================================
 
 \title{%
-  \textbf{Entropic Semantic Diffusion: Spectral Search and Internal Time from Entropy}%
+  \textbf{Entropic Semantic Diffusion Model:\\Spectral Search and Internal Time from Entropy}%
 }
 
-\author{
-  Lorenzo Moriondo \\
+\author{%
+  Lorenzo Moriondo\\[2pt]
+\small Independent Researcher --- tuned.org.uk\\
+\small ORCID: 0000-0002-8804-2963\\
   \texttt{tunedconsulting@gmail.com} \\
-  \href{https://www.tuned.org.uk}{tuned.org.uk}
-}
+  \href{https://github.com/tuned-org-uk/enthropic-semantic-diffusion}{%
+    github.com/tuned-org-uk/enthropic-semantic-diffusion}}
+
 
 \date{June 2026 \\ \small{Draft -- comments welcome}}
 
@@ -290,8 +294,28 @@ bose--einstein condensate, variational inference.
 % TODO
 
 % ============================================================
-\bibliographystyle{unsrt}
-\bibliography{refs}
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{Barontini2026}
+G.~Barontini,
+\newblock {Testing the problem of time with cold atoms},
+\newblock {\em Physical Review Research}, 8:L022047, 2026.
+\newblock doi: \href{https://doi.org/10.1103/1h9j-df4k}{10.1103/1h9j-df4k}.
+
+\bibitem{MoriondoAzizi2026}
+L.~Moriondo and I.~Azizi,
+\newblock {From Embedding Geometry to Spectral Search: Energy Dispersion Networks for Vector Retrieval},
+\newblock arXiv:2606.21535 [cs.IR], 2026.
+\newblock \href{https://arxiv.org/abs/2606.21535}{https://arxiv.org/abs/2606.21535}.
+
+\bibitem{Moriondo2025JOSS}
+L.~Moriondo,
+\newblock {ArrowSpace: introducing Spectral Indexing for vector search},
+\newblock {\em Journal of Open Source Software}, 10(113):9002, 2025.
+\newblock doi: \href{https://doi.org/10.21105/joss.09002}{10.21105/joss.09002}.
+
+\end{thebibliography}
 % ============================================================
 % refs.bib entries to include:
 %  Barontini2026, ConnesRovelli1994, PageWootters1983,
