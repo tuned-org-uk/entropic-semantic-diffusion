@@ -17,10 +17,13 @@ breaks without an explicit checkpoint.
 - No external time variable anywhere in the forward pass after Phase 2.
 - The feature-space Laplacian `L_F ∈ R^{F×F}` is built from the ArrowSpace GW algorithm
   (eigenmaps mode only; energymaps is out of scope).
+- The fusion space is **item-space** because both training and inference operate there.
+- The fused matrix is therefore fixed to **Mode B**:
+  `M_N = α·norm(VV^T) − β·norm(VL_F V^T)`.
 - The dual-space fused matrix is computed once per training run and cached; it is not
   re-computed per batch.
-
-**Open decisions deferred to end of this document (Section 6).**
+- `S_0` is fixed from the **first batch** as `kl_tau(0) + dark_entropy(0)` and then stored
+  as a non-gradient buffer.
 
 ---
 
@@ -35,7 +38,7 @@ enthropy-semantic-diffusion/
 ├── esdm/
 │   ├── __init__.py
 │   ├── clock.py                            # EntropicClock
-│   ├── laplacian.py                        # Dual-space fused matrix M
+│   ├── laplacian.py                        # Item-space fused matrix M_N
 │   ├── vibrational.py                      # VibrationalStateBlock (modified)
 │   ├── spectral_decoder.py                 # SpectralLoadingDecoder (unchanged interface)
 │   ├── diffusion_decoder.py                # EntropicDiffusionDecoder
@@ -48,7 +51,7 @@ enthropy-semantic-diffusion/
 │   ├── test_elbo.py
 │   └── test_model.py
 ├── scripts/
-│   ├── build_laplacian.py                  # one-shot: compute and save L_F and M
+│   ├── build_laplacian.py                  # one-shot: compute and save L_F and M_N
 │   ├── train.py
 │   └── sweep_kl_s.py                       # barrier-height sweep (Section 9 of design)
 └── requirements.txt
@@ -56,32 +59,34 @@ enthropy-semantic-diffusion/
 
 ---
 
-## 2. Phase 1 — Dual-Space Fused Matrix `M` (`esdm/laplacian.py`)
+## 2. Phase 1 — Item-Space Fused Matrix `M_N` (`esdm/laplacian.py`)
 
 This is the foundational data structure identified in the dual-space analysis. It must be
-built before any forward pass. Two modes are implemented; the default is **Mode B**
-(item-space kernel fusion).
+built before any forward pass and is the only fusion matrix used by training and inference.
 
-### 2.1 Mathematical objects
+### 2.1 Mathematical object
 
 Let `V ∈ R^{N×F}` be the corpus embedding matrix and `L_F ∈ R^{F×F}` the feature-space
 graph Laplacian built by the ArrowSpace GW algorithm on the *transposed* feature matrix.
 
-| Mode | Formula | Dimension | Use case |
-|------|---------|-----------|----------|
-| A — feature basis | `M_F = α·norm(V^T V) + β·norm(L_F)` | `F×F` | Shared feature eigenbasis |
-| B — item kernel | `M_N = α·norm(VV^T) − β·norm(VL_F V^T)` | `N×N` | Fused item-item similarity |
-| C — block coupled | `[[α VV^T, γV], [γV^T, β L_F]]` | `(N+F)×(N+F)` | Explicit dual-domain |
+The fused item-space kernel is:
 
-Mode B is the implementation default. Mode C is the richer representation and should be
-explored after Mode B is validated.
+```text
+M_N = α·norm(VV^T) − β·norm(VL_F V^T)
+```
+
+Interpretation:
+- `VV^T` is geometric item-item affinity.
+- `VL_FV^T` is semantic roughness/interaction induced by the feature graph.
+- The subtraction makes the semantic term act as a structural penalty on purely geometric
+  neighborhoods, consistent with the SPIN/ArrowSpace reading of Laplacian energy.
 
 ### 2.2 `laplacian.py` API
 
 ```python
 class DualSpaceMatrix:
     """
-    Builds and caches the fused geometric-semantic matrix.
+    Builds and caches the fused item-space geometric-semantic matrix.
 
     Parameters
     ----------
@@ -89,24 +94,23 @@ class DualSpaceMatrix:
     L_F : Tensor  (F, F) — feature-space Laplacian from ArrowSpace GW
     alpha : float        — weight on geometric term (default 0.5)
     beta : float         — weight on semantic term  (default 0.5)
-    mode : str           — 'A' | 'B' | 'C'          (default 'B')
 
     Attributes
     ----------
-    M : Tensor            — fused matrix (cached, not re-computed)
-    eigvals : Tensor      — eigenvalues of M (for health monitoring)
-    eigvecs : Tensor      — eigenvectors of M (for dual-space projection)
-    fiedler_vec : Tensor  — second eigenvector of M (semantic universe size proxy)
+    M : Tensor            — fused item-space matrix M_N (cached)
+    eigvals : Tensor      — eigenvalues of M_N (for health monitoring)
+    eigvecs : Tensor      — eigenvectors of M_N (for item-space projection)
+    fiedler_vec : Tensor  — second eigenvector of M_N (semantic universe size proxy)
     """
 
     def build(self, V: Tensor, L_F: Tensor) -> None: ...
 
     def project(self, x: Tensor, k: int) -> Tensor:
-        """Project item vectors onto top-k eigenvectors of M."""
+        """Project item vectors onto top-k eigenvectors of M_N."""
         ...
 
     def rayleigh(self, x: Tensor) -> Tensor:
-        """R(x) = x^T M x / x^T x  — fused Dirichlet energy."""
+        """R(x) = x^T M_N x / x^T x  — fused Dirichlet energy in item-space."""
         ...
 ```
 
@@ -114,15 +118,16 @@ class DualSpaceMatrix:
 
 Both `VV^T` and `VL_F V^T` are normalized by their Frobenius norm before blending.
 This ensures `alpha` and `beta` are dimensionless mixing coefficients analogous to the
-tau parameter in ArrowSpace SPIN.
+`tau` parameter in ArrowSpace SPIN.
 
 ### 2.4 Test checkpoint
 
 `tests/test_laplacian.py`: for random `V (50, 32)` and `L_F (32, 32)`:
-- `M` is symmetric positive semi-definite for modes A and B.
-- `eigvals ≥ -1e-7` (numerical zero tolerance).
-- `rayleigh(x) ∈ [0, 1]` for unit-norm `x`.
-- `fiedler_vec` is orthogonal to the constant vector.
+- `M_N` is symmetric.
+- `eigvals` are finite and numerically stable.
+- `rayleigh(x)` is finite for unit-norm `x`.
+- `fiedler_vec` is orthogonal to the constant vector up to tolerance.
+- Projecting to top-k eigvecs preserves batch dimension.
 
 ---
 
@@ -164,6 +169,7 @@ class EntropicClock(nn.Module):
         rho_plus: Tensor,         # constructive interference density
         rho_minus: Tensor,        # destructive interference density
         dark_entropy: Tensor,     # KL sum over inactive modes
+        S_0: Tensor | None = None,
     ) -> ClockState: ...
 
     def alpha_bar(self, tau: Tensor | None = None) -> Tensor:
@@ -226,16 +232,16 @@ where `delta_tau` and `Lambda_tau` come from `EntropicClock.step()`.
   (stable spectral geometry) and suppressed when modes are rapidly transitioning
   (direct analogue of Barontini's entropy-dependent pump).
 
-### 4.3 Dual-space coupling (optional extension)
+### 4.3 Dual-space coupling in item-space
 
-After the recurrence, optionally project `Q_t` through the fused matrix:
+After the recurrence, optionally project `Q_t` through the fused item-space matrix:
 
 ```python
-# dual-space filtered state (experimental)
+# dual-space filtered state in item-space (experimental)
 Q_filtered = DualSpaceMatrix.project(Q_t.flatten(1), k=n_modes).reshape_as(Q_t)
 ```
 
-This couples the wave state to the joint geometric-semantic eigenbasis.
+This keeps the fusion exactly where training and inference happen: item-space.
 Controlled by a boolean flag `use_dual_projection` (default `False`).
 
 ### 4.4 Test checkpoint
@@ -314,13 +320,14 @@ def esdm_elbo(
     loss = recon + kl_z + kl_S + kl_tau + beta * conserved**2
     return loss, {
         "recon": recon, "kl_z": kl_z, "kl_S": kl_S,
-        "kl_tau": kl_tau, "conserved": conserved, "beta": beta,
+        "kl_tau": kl_tau, "dark_entropy": dark_entropy,
+        "conserved": conserved, "beta": beta,
     }
 ```
 
 ### 6.2 `S_0` initialisation
 
-`S_0` is computed from the first forward pass and stored as a non-gradient buffer
+`S_0` is computed from the **first forward pass only** and stored as a non-gradient buffer
 in the top-level `ESDM` module. It must not change after the first step.
 
 ### 6.3 Test checkpoint
@@ -329,6 +336,7 @@ in the top-level `ESDM` module. It must not change after the first step.
 - All five terms are non-negative.
 - `conserved → 0` when `kl_tau + dark_entropy == S_0` exactly.
 - Gradient flows to `kl_z`, `kl_S`, `kl_tau` but not to `S_0`.
+- `S_0` is set once and remains unchanged across later batches.
 
 ---
 
@@ -343,24 +351,33 @@ class ESDM(nn.Module):
         # 1. Spectral loading: produce log_lam_s, N_active, L_z, kl_tau, kl_S
         spectral = self.spectral_decoder(x)
 
-        # 2. Entropic clock: update tau, Lambda, delta_tau
+        # 2. First-batch S_0 initialisation
+        if self.S_0 is None:
+            self.S_0 = (spectral.kl_tau + spectral.dark_entropy).detach()
+
+        # 3. Entropic clock: update tau, Lambda, delta_tau
         clock_state = self.clock.step(
             kl_tau_current = spectral.kl_tau,
             phi_current    = spectral.log_lam_s,
             rho_plus       = spectral.rho_plus,
             rho_minus      = spectral.rho_minus,
             dark_entropy   = spectral.dark_entropy,
+            S_0            = self.S_0,
         )
 
-        # 3. Wave recurrence: Q_t gated by Lambda(tau)
+        # 4. Wave recurrence: Q_t gated by Lambda(tau)
         Q, rho_plus, rho_minus = self.vibrational(
             x, clock_state.Lambda_tau, clock_state.delta_tau
         )
 
-        # 4. Entropic diffusion decode: alpha_bar from clock
+        # 5. Optional item-space projection through M_N
+        if self.use_dual_projection:
+            Q = self.dual_space.project(Q.flatten(1), k=self.n_modes).reshape_as(Q)
+
+        # 6. Entropic diffusion decode: alpha_bar from clock
         x_hat = self.diffusion_decoder(Q, spectral.L_z, self.clock)
 
-        # 5. ELBO
+        # 7. ELBO
         loss, metrics = esdm_elbo(
             x, x_hat,
             kl_z         = spectral.kl_z,
@@ -384,7 +401,7 @@ class ESDM(nn.Module):
         c = self.clock
         return {
             "tau_n":       c.tau_n,
-            "tau_flat":    c._flat_steps,           # steps since last tau increase
+            "tau_flat":    c._flat_steps,
             "conserved":   c.conserved,
             "rho_sign":    c.rho_sign,
             "N_active":    self._last_N_active,
@@ -395,24 +412,28 @@ class ESDM(nn.Module):
 
 ---
 
-## 8. Phase 7 — Dual-Space Integration Experiments
+## 8. Phase 7 — Item-Space Fusion Experiments
 
 These are validation experiments, not training runs.
 
-### 8.1 Experiment E1 — Mode comparison
+### 8.1 Experiment E1 — Fused item kernel validation
 
-Build `M` in modes A, B, C for a fixed corpus. Compare:
-- Eigenvalue decay rate (should be slower for mode B/C, indicating richer structure).
-- `rayleigh(v)` distribution vs. pure `v^T L_F v / v^T v` — mode B should show
-  greater discrimination between in-distribution and OOD items.
-- Jaccard overlap between top-k neighbours under `M` vs. cosine vs. SPIN lambda-aware.
+Compare:
+- cosine similarity from `VV^T`
+- pure semantic kernel from `VL_FV^T`
+- fused kernel `M_N`
 
-Expected result: mode B separates geometric and semantic outliers more cleanly than
-either `VV^T` or `L_F` alone (analogous to SPIN's semantic uplift improvement).
+Metrics:
+- Eigenvalue decay rate
+- `rayleigh(v)` distribution under each kernel
+- Jaccard overlap between top-k neighbours under `M_N` vs. cosine vs. SPIN lambda-aware
+
+Expected result: `M_N` separates geometric and semantic outliers more cleanly than
+pure geometry alone, while remaining fully usable in item-space training and inference.
 
 ### 8.2 Experiment E2 — Fiedler vector tracking
 
-During training, log `fiedler_vec` of `M` every 50 steps. Plot cosine angle between
+During training, log `fiedler_vec` of `M_N` every 50 steps. Plot cosine angle between
 the Fiedler vector and the bottom eigenvector of the amplitude Laplacian from the
 vibrational block. Per the Spectral Complementarity Conjecture, this angle should
 tend toward 90° as training stabilises.
@@ -424,38 +445,7 @@ Following 00-DESIGN.md §9, sweep `kl_S ∈ {0.001, 0.01, 0.05, 0.1, 0.5}` and p
 
 ---
 
-## 9. Open Decisions
-
-Two architectural choices require a human decision before implementation begins:
-
-### Decision D1 — Dual-space matrix mode
-
-> **Default recommendation:** Mode B (`M_N = α norm(VV^T) − β norm(VL_F V^T)`).
->
-> **Rationale:** Mode B lives in item-space (N×N), integrates directly with the existing
-> ArrowSpace search pipeline, and has a clear physical interpretation (geometric affinity
-> minus semantic roughness penalty). Mode C is richer but introduces a larger matrix and
-> a coupling hyperparameter `γ` that requires separate tuning.
->
-> **Question for human:** Start with Mode B only, or implement Mode C in parallel as an
-> ablation target?
-
-### Decision D2 — `S_0` initialisation strategy
-
-> The conservation term `|kl_bright + kl_dark - S_0|^2` requires a fixed baseline `S_0`.
-> Three options:
->
-> | Option | Description | Risk |
-> |--------|-------------|------|
-> | (a) First-batch `S_0` | Set `S_0 = kl_tau(0) + dark_entropy(0)` at step 0 | Sensitive to batch 0 noise |
-> | (b) Warm-up average | Set `S_0 = mean over first 100 steps` | Delays conservation enforcement |
-> | (c) Hyperparameter | `S_0` is a user-set target entropy | Requires corpus-level pre-analysis |
->
-> **Question for human:** Which `S_0` initialisation strategy is preferred?
-
----
-
-## 10. Implementation Sequence
+## 9. Implementation Sequence
 
 | Phase | File | Depends on | Estimated complexity |
 |-------|------|------------|----------------------|
@@ -472,12 +462,12 @@ Do not begin Phase 6 until Phases 1–5 each pass their unit tests independently
 
 ---
 
-## 11. Dependency Pinning
+## 10. Dependency Pinning
 
 ```text
 torch>=2.3.0
 numpy>=1.26
-scipy>=1.13          # sparse eigensolver for L_F and M
+scipy>=1.13          # sparse eigensolver for L_F and M_N
 einops>=0.8          # for vibrational block reshaping
 pytest>=8.0
 ```
