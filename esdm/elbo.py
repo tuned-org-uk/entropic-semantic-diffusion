@@ -54,7 +54,7 @@ def esdm_elbo(
     beta         : conservation weight; None → 1/S_0
     """
     recon_loss = -gaussian_log_likelihood(x, x_hat)
-    conserved = (kl_tau + dark_entropy - S_0).abs()
+    conserved = (kl_S + kl_tau + dark_entropy - S_0).abs()
     if beta is None:
         _beta: Tensor = 1.0 / (S_0.detach() + 1e-8)
     else:
