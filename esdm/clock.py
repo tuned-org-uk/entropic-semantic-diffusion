@@ -87,15 +87,19 @@ class EntropicClock(nn.Module):
         has_per_mode = "_per_mode_tau" in self._buffers
         if kl_tau_current.dim() > 0 and not has_per_mode:
             self.register_buffer("_per_mode_tau", torch.zeros_like(kl_tau_current))
+            self.register_buffer("_prev_kl_tau_per_mode", torch.zeros_like(kl_tau_current))
         if kl_tau_current.dim() > 0:
-            self._per_mode_tau = self._per_mode_tau + kl_tau_current.abs()
+            delta_kl_per_mode = (kl_tau_current - self._prev_kl_tau_per_mode).detach()
+            self._per_mode_tau = self._per_mode_tau + delta_kl_per_mode.abs()
+            self._prev_kl_tau_per_mode = kl_tau_current.detach().clone()
 
         # ---- scalar Δkl for tau_n and Lambda ---------------------------- #
         delta_kl = kl_tau_current - self._prev_kl_tau
         delta_tau = delta_kl.abs()
         delta_tau_scalar = delta_tau.sum() if delta_tau.dim() > 0 else delta_tau
 
-        # Accumulate monotone entropic time
+        # Accumulate monotone entropic time (detached — buffers are not parameters)
+        delta_tau_scalar = delta_tau_scalar.detach()
         self.tau_n = self.tau_n + delta_tau_scalar
         self.tau_max_est = torch.maximum(self.tau_max_est, self.tau_n)
 
@@ -131,14 +135,14 @@ class EntropicClock(nn.Module):
         self.rho_sign = rho_sign.detach().clone()
 
         return ClockState(
-            tau_n=float(self.tau_n),
-            tau_max_est=float(self.tau_max_est),
-            Lambda_tau=float(Lambda_tau),
-            delta_tau=float(delta_tau_scalar),
-            phi=float(phi_current),
-            dark_entropy=float(dark_entropy),
-            conserved=float(conserved),
-            rho_sign=float(rho_sign),
+            tau_n=float(self.tau_n.detach()),
+            tau_max_est=float(self.tau_max_est.detach()),
+            Lambda_tau=float(Lambda_tau.detach()),
+            delta_tau=float(delta_tau_scalar.detach()),
+            phi=float(phi_current.detach()),
+            dark_entropy=float(dark_entropy.detach()),
+            conserved=float(conserved.detach()),
+            rho_sign=float(rho_sign.detach()),
         )
 
     # ------------------------------------------------------------------ #

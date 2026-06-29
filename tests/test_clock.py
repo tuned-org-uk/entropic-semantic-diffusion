@@ -42,12 +42,69 @@ def test_heat_death_triggers():
 
 
 def test_lambda_clipped():
+    """Lambda_tau is clipped when d_kl is near zero (stable mode)."""
     from esdm.clock import EntropicClock
-    clock = EntropicClock(lambda_clip=100.0)
-    # Very small d_phi -> Lambda would explode without clipping
-    kl = torch.tensor(1.0)
-    phi = torch.tensor(1e-15)
-    state = clock.step(kl, phi,
-                       torch.tensor(0.5), torch.tensor(0.5),
-                       torch.tensor(0.1))
-    assert state.Lambda_tau <= 100.0 + 1e-6
+    clock = EntropicClock(lambda_clip=100.0, eps=1e-8)
+    # First step establishes prev state.
+    clock.step(
+        kl_tau_current=torch.tensor(1.0),
+        phi_current=torch.tensor(0.0),
+        rho_plus=torch.tensor(0.5),
+        rho_minus=torch.tensor(0.5),
+        dark_entropy=torch.tensor(0.1),
+    )
+    # Stable mode: kl_tau unchanged (d_kl = 0) while phi moves freely.
+    # denom -> eps, Lambda -> 1/eps, which must be clipped to lambda_clip.
+    state = clock.step(
+        kl_tau_current=torch.tensor(1.0),
+        phi_current=torch.tensor(1.0),
+        rho_plus=torch.tensor(0.5),
+        rho_minus=torch.tensor(0.5),
+        dark_entropy=torch.tensor(0.1),
+    )
+    assert state.Lambda_tau == pytest.approx(100.0, abs=1e-4)
+
+
+def test_lambda_small_when_entropy_flows():
+    """Lambda_tau is small when entropy flows rapidly (large d_kl / d_phi)."""
+    from esdm.clock import EntropicClock
+    clock = EntropicClock(lambda_clip=100.0, eps=1e-8)
+    clock.step(
+        kl_tau_current=torch.tensor(0.0),
+        phi_current=torch.tensor(0.0),
+        rho_plus=torch.tensor(0.5),
+        rho_minus=torch.tensor(0.5),
+        dark_entropy=torch.tensor(0.1),
+    )
+    state = clock.step(
+        kl_tau_current=torch.tensor(1.0),
+        phi_current=torch.tensor(0.1),
+        rho_plus=torch.tensor(0.5),
+        rho_minus=torch.tensor(0.5),
+        dark_entropy=torch.tensor(0.1),
+    )
+    # d_kl = 1.0, d_phi = 0.1 -> denom = 10 -> Lambda = 0.1
+    assert state.Lambda_tau < 1.0
+
+
+def test_per_mode_tau_accumulates_delta():
+    """per_mode_tau accumulates |Delta kl_tau|, not |kl_tau|."""
+    from esdm.clock import EntropicClock
+    clock = EntropicClock()
+    sequence = [
+        torch.tensor([1.0, 2.0]),
+        torch.tensor([2.0, 0.0]),
+        torch.tensor([0.0, 3.0]),
+    ]
+    for kl in sequence:
+        clock.step(
+            kl_tau_current=kl,
+            phi_current=torch.tensor(0.0),
+            rho_plus=torch.tensor(0.5),
+            rho_minus=torch.tensor(0.5),
+            dark_entropy=torch.tensor(0.1),
+        )
+    per_mode = clock.per_mode_tau
+    assert per_mode is not None
+    # |Delta| sequence: [1,2], [1,2], [2,3] -> cumulative [4,7]
+    assert torch.allclose(per_mode, torch.tensor([4.0, 7.0]), atol=1e-6)

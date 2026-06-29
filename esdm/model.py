@@ -9,8 +9,6 @@ See docs/01-IMPLEMENTATION-PLAN.md §7 for the full specification.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
-
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -20,6 +18,7 @@ from esdm.diffusion_decoder import EntropicDiffusionDecoder
 from esdm.elbo  import esdm_elbo
 from esdm.spectral_decoder import SpectralLoadingDecoder
 from esdm.vibrational import VibrationalStateBlock
+from esdm._vendor.spectral import spectral_basis_kl
 
 
 @dataclass
@@ -43,7 +42,10 @@ class ESDM(nn.Module):
         self.cfg = cfg
         self.dim_input = cfg["model"]["dim_input"]
         self.dim_latent = cfg["model"]["dim_latent"]
+        self.n_nodes = cfg["model"]["n_nodes"]
         self.n_modes = cfg["model"]["n_modes"]
+        self.mode_threshold = cfg["model"].get("mode_threshold", 0.01)
+        self.lam_s = cfg["model"].get("lam_s", 1.0)
 
         self.clock = EntropicClock(
             eps=cfg["clock"]["eps"],
@@ -56,10 +58,16 @@ class ESDM(nn.Module):
         self.register_buffer("S_0", None)  # set on first forward pass
         self.register_buffer("_last_N_active", torch.tensor(0))
 
+        # rho buffers are updated from the vibrational block after each step
+        # and fed back to the clock on the next step.  Initialised as identity
+        # so the first clock.step has well-defined rho_sign diagnostics.
+        self.register_buffer("_last_rho_plus", torch.eye(1))
+        self.register_buffer("_last_rho_minus", torch.eye(1))
+
         # Sub-modules
         self.spectral_decoder = SpectralLoadingDecoder(
             q=self.dim_latent,
-            d=self.dim_input,
+            d=self.n_nodes,
         )
         self.vibrational = VibrationalStateBlock(
             dim=self.dim_input,
@@ -75,37 +83,96 @@ class ESDM(nn.Module):
         self._encoder = nn.Linear(self.dim_input, self.dim_latent)
 
         # Frozen spectral basis and base Laplacian for the smoke path.
-        self.register_buffer("U_q", torch.randn(self.dim_input, self.dim_latent))
-        self.register_buffer("L_base", torch.eye(self.dim_input))
+        self.register_buffer("U_q", torch.randn(self.n_nodes, self.dim_latent))
+        self.register_buffer("L_base", torch.eye(self.n_nodes))
+
+        # Leading eigenvalues of the base Laplacian, used by spectral KLs.
+        # Computed once at init; shape (dim_latent,).
+        self.register_buffer(
+            "eigvals_q",
+            torch.linalg.eigvalsh(self.L_base)[:self.dim_latent],
+        )
 
     # ------------------------------------------------------------------ #
 
-    def _dummy_spectral_metrics(self, L_z: Tensor) -> dict[str, Tensor]:
+    def _compute_spectral_metrics(
+        self,
+        W: Tensor,
+        omega: Tensor,
+        S: Tensor,
+        L_z: Tensor,
+        log_var_S: Tensor,
+    ) -> dict[str, Tensor]:
         """
-        Minimal placeholder spectral metrics for the smoke-test path.
+        Compute real spectral KLs and bright/dark sector diagnostics.
 
-        In a full implementation these are derived from the encoder, the
-        spectral decoder outputs (omega, S, log_var_S), and the mode KL
-        utilities in ``vdeductive.model``.  Here we return positive scalars
-        so the clock and ELBO have valid inputs.
+        Parameters
+        ----------
+        W, omega, S, L_z, log_var_S
+            Outputs of ``SpectralLoadingDecoder``:
+            W (B, N, q), omega (B, q), S (B, q, q), L_z (B, N, N),
+            log_var_S (B, q, q).
+
+        Returns
+        -------
+        dict with keys: kl_S, kl_tau, dark_entropy, N_active, log_lam_s.
         """
-        device, dtype = L_z.device, L_z.dtype
-        kl_S = torch.tensor(0.01, device=device, dtype=dtype)
-        kl_tau = torch.tensor(0.1, device=device, dtype=dtype)
-        dark_entropy = torch.tensor(0.05, device=device, dtype=dtype)
-        N_active = torch.tensor(self.n_modes // 2, device=device)
-        log_lam_s = torch.tensor(0.0, device=device, dtype=dtype)
-        rho_plus = torch.tensor(0.5, device=device, dtype=dtype)
-        rho_minus = torch.tensor(0.5, device=device, dtype=dtype)
+        # Spectral-basis KL for the S posterior.
+        kl_S = spectral_basis_kl(S, log_var_S, self.eigvals_q, lam_s=self.lam_s)
+
+        # Mode-weight KL: treat omega as the expected value under a Gamma
+        # posterior with shape a = omega and rate b = 1.  This gives a live
+        # KL that varies with the spectral decoder output while we do not yet
+        # have a dedicated variational head for log_a/log_b.
+        log_a = omega.clamp(min=1e-8).log()
+        log_b = torch.zeros_like(omega)
+        kl_per_mode = self._tau_mode_kl_per_mode(log_a, log_b)
+
+        active = omega > self.mode_threshold
+        inactive = ~active
+        kl_tau = (kl_per_mode * active.float()).sum(dim=-1).mean()
+        dark_entropy = (kl_per_mode * inactive.float()).sum(dim=-1).mean()
+
+        # Clock field: log spectral scale derived from mean mode weight.
+        log_lam_s = torch.log(omega.mean().clamp(min=1e-8))
+
+        # Number of active modes (mean over batch).
+        N_active = active.float().sum(dim=-1).mean()
+
         return {
             "kl_S": kl_S,
             "kl_tau": kl_tau,
             "dark_entropy": dark_entropy,
             "N_active": N_active,
             "log_lam_s": log_lam_s,
-            "rho_plus": rho_plus,
-            "rho_minus": rho_minus,
         }
+
+    def _tau_mode_kl_per_mode(
+        self,
+        log_a: Tensor,
+        log_b: Tensor,
+        tau: float = 1.0,
+        a_min: float = 0.1,
+    ) -> Tensor:
+        """
+        Per-mode KL( Gamma(a,b) || Exp(tau * lambda_k) ), shape (B, q).
+
+        Mirrors ``esdm._vendor.spectral.tau_mode_kl`` but returns the
+        per-mode values so they can be split into bright/active and
+        dark/inactive sectors.
+        """
+        a = log_a.exp().clamp(min=a_min)
+        b = log_b.exp()
+        r = tau * self.eigvals_q.clamp(min=1e-6).unsqueeze(0)
+        kl = (
+            log_b
+            - r.log()
+            - torch.lgamma(a)
+            - (1.0 - a) * torch.digamma(a)
+            - a
+            + a * r / b
+        )
+        return kl
 
     # ------------------------------------------------------------------ #
 
@@ -113,14 +180,14 @@ class ESDM(nn.Module):
         """
         End-to-end forward pass.
 
-        This is a minimal Phase 6 wiring that exercises all sub-modules.  The
-        spectral metrics are placeholders; a production model would compute
-        them from the encoder and spectral KL utilities.
+        Spectral KLs are computed live from the spectral decoder outputs and
+        drive the entropic clock, the conservation term, and the diffusion
+        schedule.
         """
-        # 1. Spectral loading: produce L(z) and placeholder spectral outputs.
+        # 1. Spectral loading: produce L(z) and live spectral outputs.
         z = self._encoder(x)
-        L_z = self.spectral_decoder(z, self.U_q, self.L_base)[3]
-        spectral = self._dummy_spectral_metrics(L_z)
+        W, omega, S, L_z, log_var_S = self.spectral_decoder(z, self.U_q, self.L_base)
+        spectral = self._compute_spectral_metrics(W, omega, S, L_z, log_var_S)
 
         # 2. First-batch S_0 initialisation
         if self.S_0 is None:
@@ -132,8 +199,8 @@ class ESDM(nn.Module):
         clock_state = self.clock.step(
             kl_tau_current=spectral["kl_tau"],
             phi_current=spectral["log_lam_s"],
-            rho_plus=spectral["rho_plus"],
-            rho_minus=spectral["rho_minus"],
+            rho_plus=self._last_rho_plus,
+            rho_minus=self._last_rho_minus,
             dark_entropy=spectral["dark_entropy"],
             S_0=self.S_0,
         )
@@ -145,7 +212,9 @@ class ESDM(nn.Module):
             Lambda_tau=clock_state.Lambda_tau,
             delta_tau=clock_state.delta_tau,
         )
-        self._last_N_active.fill_(int(spectral["N_active"]))
+        self._last_rho_plus = rho_plus.detach().clone()
+        self._last_rho_minus = rho_minus.detach().clone()
+        self._last_N_active.fill_(int(spectral["N_active"].item()))
 
         # 5. Entropic diffusion decode: alpha_bar from clock
         x_hat = self.diffusion_decoder(Q, L_z, self.clock, noise=torch.zeros_like(Q))

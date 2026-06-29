@@ -5,7 +5,10 @@
 model:
   dim_input: 256          # embedding dimension F
   dim_latent: 64          # VAE latent dimension
+  n_nodes: 256            # corpus node count N (graph size; often == dim_input for smoke tests)
   n_modes: 32             # number of spectral modes tracked
+  mode_threshold: 0.01    # threshold for classifying a spectral mode as active
+  lam_s: 1.0              # precision multiplier for spectral-basis prior
   n_vibrational_steps: 4  # VDT recurrence depth
   gamma: 0.1              # vibrational damping coefficient
 

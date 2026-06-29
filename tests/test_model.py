@@ -2,7 +2,6 @@
 Phase 6 test — ESDM top-level model.
 Smoke-tests only until all sub-modules are implemented.
 """
-import pytest
 import yaml
 from pathlib import Path
 
@@ -33,6 +32,7 @@ def test_forward_pass():
     cfg = _default_cfg()
     cfg["model"]["dim_input"] = 32
     cfg["model"]["dim_latent"] = 8
+    cfg["model"]["n_nodes"] = 32
     cfg["model"]["n_modes"] = 8
     model = ESDM(cfg)
     x = torch.randn(4, cfg["model"]["dim_input"])
@@ -40,3 +40,38 @@ def test_forward_pass():
     assert out.x_hat.shape == x.shape
     assert torch.isfinite(out.loss)
     assert out.clock is not None
+
+
+def test_training_loop_advances_entropic_time():
+    """A short training loop must increase tau_n and decrease alpha_bar."""
+    import torch
+    from esdm.model import ESDM
+
+    cfg = _default_cfg()
+    cfg["model"]["dim_input"] = 32
+    cfg["model"]["dim_latent"] = 8
+    cfg["model"]["n_nodes"] = 32
+    cfg["model"]["n_modes"] = 8
+    cfg["model"]["n_vibrational_steps"] = 2
+
+    torch.manual_seed(42)
+    model = ESDM(cfg)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    taus = []
+    alphas = []
+    for step in range(5):
+        x = torch.randn(8, cfg["model"]["dim_input"])
+        optimizer.zero_grad()
+        out = model(x)
+        out.loss.backward()
+        optimizer.step()
+        taus.append(out.clock.tau_n)
+        alphas.append(float(model.clock.alpha_bar()))
+
+    # Entropic time must be strictly increasing across the loop.
+    assert all(taus[i + 1] > taus[i] for i in range(len(taus) - 1))
+    # Diffusion schedule must decrease as tau accumulates.
+    assert alphas[-1] < alphas[0]
+    # Loss stayed finite.
+    assert all(torch.isfinite(torch.tensor(a)) for a in alphas)
