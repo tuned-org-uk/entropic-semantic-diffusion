@@ -1,10 +1,13 @@
 """
 Phase 5 — ESDM ELBO with entropy conservation term.
 
-L_ESDM = recon - kl_z - kl_S - kl_tau - β · |kl_bright + kl_dark - S_0|²
+L_ESDM = recon_loss + kl_z + kl_S + kl_tau + β · |kl_bright + kl_dark - S_0|²
 
 where β = 1/S_0 by default (dimensionless).
 S_0 is set from the first forward pass and never updated.
+
+All terms are positive and add to the total cost (lower-is-better loss convention).
+This matches the standard variational bound written as a loss to be minimised.
 
 See docs/01-IMPLEMENTATION-PLAN.md §6 for the full specification.
 """
@@ -35,8 +38,9 @@ def esdm_elbo(
     """
     Compute the ESDM ELBO and return (loss, metrics_dict).
 
-    All KL terms are expected as *positive* scalars; they are subtracted
-    from the log-likelihood (lower-is-better loss convention).
+    All terms are returned as positive scalars that sum to the total loss
+    (lower is better). KL terms are added to the reconstruction cost, which
+    is the loss-minimisation equivalent of subtracting them from the ELBO.
 
     Parameters
     ----------
@@ -49,16 +53,16 @@ def esdm_elbo(
     S_0          : initial total entropy (buffer, not parameter)
     beta         : conservation weight; None → 1/S_0
     """
-    recon = -gaussian_log_likelihood(x, x_hat)
+    recon_loss = -gaussian_log_likelihood(x, x_hat)
     conserved = (kl_tau + dark_entropy - S_0).abs()
     if beta is None:
         _beta: Tensor = 1.0 / (S_0.detach() + 1e-8)
     else:
         _beta = torch.tensor(beta, dtype=x.dtype, device=x.device)
 
-    loss = recon + kl_z + kl_S + kl_tau + _beta * conserved.pow(2)
+    loss = recon_loss + kl_z + kl_S + kl_tau + _beta * conserved.pow(2)
     return loss, {
-        "recon":        recon.detach(),
+        "recon":        recon_loss.detach(),
         "kl_z":         kl_z.detach(),
         "kl_S":         kl_S.detach(),
         "kl_tau":       kl_tau.detach(),
