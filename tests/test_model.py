@@ -27,13 +27,16 @@ def test_health_check_runs():
     assert "heat_death" in hc
 
 
-@pytest.mark.skip(reason="Requires all phases to be implemented")
 def test_forward_pass():
     import torch
     from esdm.model import ESDM
     cfg = _default_cfg()
+    cfg["model"]["dim_input"] = 32
+    cfg["model"]["dim_latent"] = 8
+    cfg["model"]["n_modes"] = 8
     model = ESDM(cfg)
     x = torch.randn(4, cfg["model"]["dim_input"])
     out = model(x)
     assert out.x_hat.shape == x.shape
     assert torch.isfinite(out.loss)
+    assert out.clock is not None
