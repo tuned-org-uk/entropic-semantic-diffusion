@@ -77,21 +77,69 @@ class EntropicClock(nn.Module):
         """
         Advance the entropic clock by one step.
 
-        Lazily creates the per-mode tau buffer the first time a vector-valued
-        ``kl_tau_current`` is seen, then accumulates ``|kl_tau_current|`` into
-        it. Diagnostic buffers (conserved, rho_sign, Lambda_tau) are updated
-        so ``health_check()`` can read them after a checkpoint restore.
+        Computes the entropic time step ``delta_tau = |Δ kl_tau|``,
+        the entropic pump ``Lambda_tau = 1 / |∂_φ kl_tau|``, and updates
+        all persistent buffers. A vector-valued ``kl_tau_current`` is
+        treated as per-mode KLs; a scalar is treated as the bright-sector
+        total.
         """
-        # Ensure per-mode entropic time is checkpointed. Register on first use.
+        # ---- per-mode entropic time (checkpointed) ---------------------- #
         has_per_mode = "_per_mode_tau" in self._buffers
-        if not has_per_mode and kl_tau_current.dim() > 0:
+        if kl_tau_current.dim() > 0 and not has_per_mode:
             self.register_buffer("_per_mode_tau", torch.zeros_like(kl_tau_current))
-        elif has_per_mode:
+        if kl_tau_current.dim() > 0:
             self._per_mode_tau = self._per_mode_tau + kl_tau_current.abs()
 
-        # TODO: compute tau_n, tau_max_est, Lambda_tau, delta_tau, conserved, rho_sign.
-        # Update the registered diagnostic buffers below as part of that work.
-        raise NotImplementedError("Phase 2: implement EntropicClock.step()")
+        # ---- scalar Δkl for tau_n and Lambda ---------------------------- #
+        delta_kl = kl_tau_current - self._prev_kl_tau
+        delta_tau = delta_kl.abs()
+        delta_tau_scalar = delta_tau.sum() if delta_tau.dim() > 0 else delta_tau
+
+        # Accumulate monotone entropic time
+        self.tau_n = self.tau_n + delta_tau_scalar
+        self.tau_max_est = torch.maximum(self.tau_max_est, self.tau_n)
+
+        # Entropic pump Λ(τ) = 1 / |∂_φ kl_tau|  (discrete)
+        d_phi = phi_current - self._prev_phi
+        d_kl_scalar = delta_kl.sum() if delta_kl.dim() > 0 else delta_kl
+        denom = (d_kl_scalar / (d_phi + self.eps)).abs() + self.eps
+        Lambda_tau = (1.0 / denom).clamp(0.0, self.lambda_clip)
+
+        # Heat death counter: reset on entropy flow, else increment
+        if delta_tau_scalar.item() <= self.eps:
+            self._flat_steps = self._flat_steps + 1
+        else:
+            self._flat_steps.zero_()
+
+        # Conservation diagnostic: |kl_tau + dark_entropy - S_0|
+        kl_tau_scalar = kl_tau_current.sum() if kl_tau_current.dim() > 0 else kl_tau_current
+        if S_0 is not None:
+            conserved = (kl_tau_scalar + dark_entropy - S_0).abs()
+        else:
+            conserved = torch.tensor(0.0, dtype=kl_tau_scalar.dtype, device=kl_tau_scalar.device)
+
+        # Signed interference ratio
+        rho_sign = rho_minus / (rho_plus + self.eps)
+
+        # Persist previous-step values for next call
+        self._prev_kl_tau = kl_tau_current.detach().clone()
+        self._prev_phi = phi_current.detach().clone()
+
+        # Update diagnostic buffers
+        self.Lambda_tau = Lambda_tau.detach().clone()
+        self.conserved = conserved.detach().clone()
+        self.rho_sign = rho_sign.detach().clone()
+
+        return ClockState(
+            tau_n=float(self.tau_n),
+            tau_max_est=float(self.tau_max_est),
+            Lambda_tau=float(Lambda_tau),
+            delta_tau=float(delta_tau_scalar),
+            phi=float(phi_current),
+            dark_entropy=float(dark_entropy),
+            conserved=float(conserved),
+            rho_sign=float(rho_sign),
+        )
 
     # ------------------------------------------------------------------ #
 
@@ -99,8 +147,15 @@ class EntropicClock(nn.Module):
         """
         Entropic cosine schedule:
             alpha_bar(τ) = cos²(π/2 · τ / τ_max_est)
+
+        If ``tau`` is None, uses the current accumulated ``self.tau_n``.
+        The argument is clamped to ``[0, tau_max_est]`` so the schedule
+        stays numerically well-behaved.
         """
-        raise NotImplementedError("Phase 2: implement EntropicClock.alpha_bar()")
+        if tau is None:
+            tau = self.tau_n
+        ratio = (tau / self.tau_max_est).clamp(0.0, 1.0)
+        return torch.cos(ratio * (torch.pi / 2.0)).pow(2)
 
     # ------------------------------------------------------------------ #
 

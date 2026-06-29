@@ -6,7 +6,6 @@ import pytest
 import torch
 
 
-@pytest.mark.skip(reason="Phase 2 not yet implemented")
 def test_tau_n_monotone():
     from esdm.clock import EntropicClock
     clock = EntropicClock(eps=1e-8, heat_death_patience=200)
@@ -23,7 +22,6 @@ def test_tau_n_monotone():
         tau_prev = state.tau_n
 
 
-@pytest.mark.skip(reason="Phase 2 not yet implemented")
 def test_alpha_bar_bounds():
     from esdm.clock import EntropicClock
     clock = EntropicClock()
@@ -35,7 +33,6 @@ def test_alpha_bar_bounds():
     assert abs(float(ab_end)   - 0.0) < 1e-5
 
 
-@pytest.mark.skip(reason="Phase 2 not yet implemented")
 def test_heat_death_triggers():
     from esdm.clock import EntropicClock
     patience = 10
@@ -44,7 +41,6 @@ def test_heat_death_triggers():
     assert clock.is_heat_death()
 
 
-@pytest.mark.skip(reason="Phase 2 not yet implemented")
 def test_lambda_clipped():
     from esdm.clock import EntropicClock
     clock = EntropicClock(lambda_clip=100.0)
