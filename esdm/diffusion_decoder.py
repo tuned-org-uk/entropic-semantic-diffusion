@@ -12,8 +12,9 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from esdm.clock import EntropicClock
+
 # from vdeductive.diffusion_decoder import DiffusionDecoder as _VDTDiffusionDecoder
-# from esdm.clock import EntropicClock
 
 
 class EntropicDiffusionDecoder(nn.Module):
@@ -33,9 +34,9 @@ class EntropicDiffusionDecoder(nn.Module):
 
     def forward(
         self,
-        Q: Tensor,       # (B, F) vibrational state
-        L_z: Tensor,     # (B, F, F) or (F, F) wiring Laplacian from spectral decoder
-        clock,           # EntropicClock instance
+        Q: Tensor,          # (B, F) vibrational state
+        L_z: Tensor,        # (B, F, F) or (F, F) wiring Laplacian from spectral decoder
+        clock: EntropicClock,  # entropic clock providing alpha_bar(tau)
     ) -> Tensor:
         """
         Returns x_hat (B, F) — reconstructed item embedding.
