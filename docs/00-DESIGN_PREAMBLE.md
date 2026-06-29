@@ -4,9 +4,9 @@ The proposed model is a **closed two-sector semantic system** whose internal dyn
 
 ### Two-Sector Partition
 
-Following the Barontini partition $$\hat{H} = \hat{H}_\text{bright} + \hat{H}_\text{dark} + \hat{H}_\text{coupling}$$, the semantic system is split as:[^1]
+Following the Barontini partition $$\hat{H} = \hat{H}_\mathit{bright} + \hat{H}_\mathit{dark} + \hat{H}_\mathit{coupling}$$, the semantic system is split as:[^1]
 
-$$\hat{H}_\text{sem} = \hat{H}_\text{item} + \hat{H}_\text{spectral} + \hat{H}_\text{wiring}(V)$$
+$$\hat{H}_\mathit{sem} = \hat{H}_\mathit{item} + \hat{H}_\mathit{spectral} + \hat{H}_\mathit{wiring}(V)$$
 
 - **Item sector** (bright): the observed embedding reconstruction $$\hat{x}$$, active modes $$\omega_k > \theta$$ — what the VDT calls the `N_active` population
 - **Spectral sector** (dark): the latent wiring $L(z)$, inactive modes, the ArrowSpace prior eigenpairs $$(U_{1:q}, \lambda_{1:q})$$ — structurally equivalent to the unobserved BEC sector
@@ -17,15 +17,15 @@ $$\hat{H}_\text{sem} = \hat{H}_\text{item} + \hat{H}_\text{spectral} + \hat{H}_\
 
 Adapting Eq. (3) from Barontini, the entropic time is defined over the trajectory of the spectral clock field $$\phi \equiv \log \lambda_S$$ (the log of the learnable spectral scale, already present in SDM's `log_lam_s` ):[^1]
 
-$$\tau_n = \frac{\sigma}{k_B} \sum_{i=1}^{n} \left| \frac{\Delta S_i}{\Delta \phi_i} \right| |\Delta \phi_i| = \sum_{i=1}^{n} |\Delta \text{kl\_tau}_i|$$
+$$\tau_n = \frac{\sigma}{k_B} \sum_{i=1}^{n} \left| \frac{\Delta S_i}{\Delta \phi_i} \right| |\Delta \phi_i| = \sum_{i=1}^{n} |\Delta \mathit{kl\_tau}_i|$$
 
-where $$\Delta \text{kl\_tau}_i$$ is the per-step change in the tau-mode KL from the VDT ELBO . This is monotonically increasing by construction — the arrow of time cannot reverse, solving the non-monotonicity problem identified in the previous analysis.
+where $$\Delta \mathit{kl\_tau}_i$$ is the per-step change in the tau-mode KL from the VDT ELBO . This is monotonically increasing by construction — the arrow of time cannot reverse, solving the non-monotonicity problem identified in the previous analysis.
 
 ### The Entropic Schrödinger Equation for Semantics
 
 Barontini derives his effective equation by Feshbach-Villars decomposition of the static WDW equation, yielding:[^1]
 
-$$i\hbar \partial_\tau \psi = \Phi(\tau)\psi + \Lambda(\tau) H_\text{geom} \psi$$
+$$i\hbar \partial_\tau \psi = \Phi(\tau)\psi + \Lambda(\tau) H_\mathit{geom} \psi$$
 
 The ESDM analogue replaces this with the VDT wave recurrence , now gated by the entropic pump $\Lambda$:
 
@@ -63,7 +63,7 @@ Input x (B, D)
 
 | Module | Source | New contribution from Barontini |
 | :-- | :-- | :-- |
-| `EntropicClock` | **New** | Accumulates $\|\Delta \text{kl\_tau}\|$, computes $\Lambda(\tau)$, emits `dark_sector_entropy` |
+| `EntropicClock` | **New** | Accumulates $\|\Delta \mathit{kl\_tau}\|$, computes $\Lambda(\tau)$, emits `dark_sector_entropy` |
 | `VibrationalStateBlock` | VDT | $\Lambda(\tau)$ gating of forcing term $B_t$ |
 | `SpectralLoadingDecoder` | VDT | Unchanged; `N_active` → bright-sector size proxy |
 | `EntropicDiffusionDecoder` | SDM | `cosine_alpha_bar` replaced by $\tau$-indexed schedule |
@@ -72,22 +72,22 @@ Input x (B, D)
 
 The current SDM uses a fixed `cosine_alpha_bar(t, T=200)` . Replace it with:
 
-$\bar{\alpha}(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau}{\tau_\text{max}}\right)$
+$\bar{\alpha}(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau}{\tau_\mathit{max}}\right)$
 
 where $\tau$ is accumulated entropic time, not a fixed step count. This means:
 
 - Steps where `kl_tau` is changing rapidly get *more* diffusion time (larger $\Delta\tau$), dissolving features at semantically active moments
 - Steps where entropy is flat get *less* time — the schedule slows down at plateaus automatically
-- $\tau_\text{max}$ is determined empirically as the total entropic time of the training run, not preset
+- $\tau_\mathit{max}$ is determined empirically as the total entropic time of the training run, not preset
 
 
 ### The ELBO
 
 The ESDM extends the VDT three-term ELBO  with a conservation term:
 
-$\mathcal{L}_\text{ESDM} = \underbrace{\mathbb{E}_q[\log p(x | z, W)]}_\text{reconstruction} - \underbrace{\text{KL}(q(z) \| \mathcal{N}(0,I))}_\text{kl\_z} - \underbrace{\text{KL}(q(S) \| p(S|I))}_\text{kl\_S} - \underbrace{\text{KL}(q(\omega) \| p(\omega|\tau,L))}_\text{kl\_tau} - \underbrace{\beta \cdot |S_\text{bright}(\tau) + S_\text{dark}(\tau) - S_0|^2}_\text{entropy conservation}$
+$\mathcal{L}_\mathit{ESDM} = \underbrace{\mathbb{E}_q[\log p(x | z, W)]}_\mathit{reconstruction} - \underbrace{\mathit{KL}(q(z) \| \mathcal{N}(0,I))}_\mathit{kl\_z} - \underbrace{\mathit{KL}(q(S) \| p(S|I))}_\mathit{kl\_S} - \underbrace{\mathit{KL}(q(\omega) \| p(\omega|\tau,L))}_\mathit{kl\_tau} - \underbrace{\beta \cdot |S_\mathit{bright}(\tau) + S_\mathit{dark}(\tau) - S_0|^2}_\mathit{entropy conservation}$
 
-The last term is new: it penalises violation of the conservation law that Barontini verifies experimentally — total entropy of the closed system must remain constant even as entropy flows between sectors. $S_\text{dark}(\tau)$ is the KL of inactive modes; $S_\text{bright}(\tau)$ is `kl_tau` of active modes; $S_0$ is their sum at initialisation.[^1]
+The last term is new: it penalises violation of the conservation law that Barontini verifies experimentally — total entropy of the closed system must remain constant even as entropy flows between sectors. $S_\mathit{dark}(\tau)$ is the KL of inactive modes; $S_\mathit{bright}(\tau)$ is `kl_tau` of active modes; $S_0$ is their sum at initialisation.[^1]
 
 ### Signed Interference as a Prediction Signal
 
