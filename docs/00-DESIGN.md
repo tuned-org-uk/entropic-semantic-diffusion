@@ -26,7 +26,7 @@ The ESDM applies this lesson directly: every external time parameter in VDT and 
 
 Barontini partitions the closed BEC Hamiltonian as:
 
-$$\hat{H} = \hat{H}_\text{bright} + \hat{H}_\text{dark} + \hat{H}_\text{coupling}$$
+$$\hat{H} = \hat{H}_\mathit{bright} + \hat{H}_\mathit{dark} + \hat{H}_\mathit{coupling}$$
 
 where `bright` is the observed sector, `dark` the unobserved sector, and `coupling` the optical barrier (height $V$) controlling entropy exchange between them.
 
@@ -46,7 +46,7 @@ The ESDM maps this partition onto the VDT/SDM architecture:
 
 The total semantic Hamiltonian is therefore:
 
-$$\hat{H}_\text{sem} = \hat{H}_\text{item} + \hat{H}_\text{spectral} + \hat{H}_\text{wiring}(V)$$
+$$\hat{H}_\mathit{sem} = \hat{H}_\mathit{item} + \hat{H}_\mathit{spectral} + \hat{H}_\mathit{wiring}(V)$$
 
 ### 2.3 Why the partition matters
 
@@ -66,9 +66,9 @@ $$\tau(\lambda) = \frac{\sigma}{k_B} \int_\lambda \frac{dS}{d\phi} \, |d\phi|$$
 
 This is monotonically increasing by construction: as long as $dS$ and $d\phi$ share sign, the arrow of time cannot reverse. For the ESDM, the clock field $\phi \equiv \log\lambda_S$ is already present in SDM's `log_lam_s`, and the entropy in the bright sector is tracked by `kl_tau`. The discrete entropic time accumulator is:
 
-$$\tau_n = \sum_{i=1}^{n} |\Delta \, \text{kl\_tau}_i|$$
+$$\tau_n = \sum_{i=1}^{n} |\Delta \, \mathit{kl\_tau}_i|$$
 
-where $\Delta \text{kl\_tau}_i$ is the per-step change in the tau-mode KL term of the VDT ELBO.
+where $\Delta \mathit{kl\_tau}_i$ is the per-step change in the tau-mode KL term of the VDT ELBO.
 
 ### 3.2 Key properties
 
@@ -89,7 +89,7 @@ The clock field `log_lam_s` does not evolve monotonically — it can increase an
 
 Starting from the static WDW equation and applying a Feshbach-Villars decomposition (keeping only forward-in-time solutions), Barontini obtains (Eq. 6):
 
-$$i\hbar \,\partial_\tau \psi(\tau, a) = \Phi(\tau)\psi(\tau, a) + \Lambda(\tau) \, H_\text{geom} \, \psi(\tau, a)$$
+$$i\hbar \,\partial_\tau \psi(\tau, a) = \Phi(\tau)\psi(\tau, a) + \Lambda(\tau) \, H_\mathit{geom} \, \psi(\tau, a)$$
 
 where $\Phi(\tau) = \alpha\omega\phi^2 d_\tau\phi$ is a global phase and $\Lambda(\tau) = (\partial_\phi S)^{-1} k_B / \sigma\omega\phi$ is the **entropic pump** — an entropy-dependent energy amplifier. When $\partial_\tau \Lambda = 0$ (no entropy flow), this reduces to an ordinary Schrödinger equation.
 
@@ -106,8 +106,8 @@ $$Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, L_f Q_t - \gamma \Delta Q + \Lambda
 where:
 - $L_f$ is the feature-space Laplacian (ArrowSpace)
 - $B_t$ is the attention-based forcing (self-attention + FFN output from `VibrationalStateBlock`)
-- $\Lambda(\tau) = |\partial_\phi \text{kl\_tau}|^{-1}$ — the discrete entropic pump
-- $\Delta\tau = |\Delta \text{kl\_tau}_t|$ — the entropic time step at step $t$
+- $\Lambda(\tau) = |\partial_\phi \mathit{kl\_tau}|^{-1}$ — the discrete entropic pump
+- $\Delta\tau = |\Delta \mathit{kl\_tau}_t|$ — the entropic time step at step $t$
 
 **Interpretation of $\Lambda(\tau)$ as pump:**
 - When $\Lambda$ is large (entropy derivative small — modes stable), attention forcing is amplified. The system is in a low-entropy-flow regime and the forcing drives exploration.
@@ -129,19 +129,19 @@ SDM uses `cosine_alpha_bar(t, T=200)` — a fixed external schedule over 200 pre
 
 Replace the fixed schedule with one indexed by accumulated entropic time:
 
-$$\bar{\alpha}(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau}{\tau_\text{max}}\right)$$
+$$\bar{\alpha}(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau}{\tau_\mathit{max}}\right)$$
 
-where $\tau$ is the accumulated entropic time and $\tau_\text{max}$ is determined from the total entropy budget of the training run (estimated as $\tau_\text{max} = \sum_\text{all steps} |\Delta \text{kl\_tau}|$, updated as a running estimate).
+where $\tau$ is the accumulated entropic time and $\tau_\mathit{max}$ is determined from the total entropy budget of the training run (estimated as $\tau_\mathit{max} = \sum_\mathit{all steps} |\Delta \mathit{kl\_tau}|$, updated as a running estimate).
 
-**Effect:** Steps where `kl_tau` is changing rapidly (large $|\Delta \text{kl\_tau}|$) contribute more to $\tau$ and therefore advance the diffusion schedule faster — dissolving semantic structure at precisely the moments when the spectral geometry is actively reorganising. Steps where `kl_tau` is stable contribute negligibly — the diffusion schedule slows down at plateaus automatically.
+**Effect:** Steps where `kl_tau` is changing rapidly (large $|\Delta \mathit{kl\_tau}|$) contribute more to $\tau$ and therefore advance the diffusion schedule faster — dissolving semantic structure at precisely the moments when the spectral geometry is actively reorganising. Steps where `kl_tau` is stable contribute negligibly — the diffusion schedule slows down at plateaus automatically.
 
 ### 5.3 Per-mode schedule
 
 Following SDM's existing `per_mode_variance`, the entropic schedule can be applied per-mode:
 
-$$\bar{\alpha}_k(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau_k}{\tau_{k,\text{max}}}\right)$$
+$$\bar{\alpha}_k(\tau) = \cos^2\!\left(\frac{\pi}{2} \cdot \frac{\tau_k}{\tau_{k,\mathit{max}}}\right)$$
 
-where $\tau_k = \sum |\Delta \text{kl\_tau}_k|$ accumulates separately for each mode $k$. Modes that transition early (high $\tau_k$) reach their noise floor early; modes that stay stable longer maintain their signal longer.
+where $\tau_k = \sum |\Delta \mathit{kl\_tau}_k|$ accumulates separately for each mode $k$. Modes that transition early (high $\tau_k$) reach their noise floor early; modes that stay stable longer maintain their signal longer.
 
 ---
 
@@ -185,7 +185,7 @@ Input x  (B, D)
 **`EntropicClock`** (new module)
 - Inputs: `kl_tau` per step (scalar or per-mode vector)
 - Outputs: `tau` (accumulated entropic time), `Lambda_tau` (entropic pump), `delta_tau` (current step size), `dark_sector_entropy` (KL of inactive modes)
-- State: running sum $\tau_n$, running estimate of $\tau_\text{max}$
+- State: running sum $\tau_n$, running estimate of $\tau_\mathit{max}$
 - Key method: `step(kl_tau_current, kl_tau_prev)` → updates all outputs
 
 **`VibrationalStateBlock`** (modified from VDT)
@@ -207,7 +207,7 @@ Input x  (B, D)
 
 The `SignedDensityMatrix` from VDT tracks $\rho = \rho_+ - \rho_-$. From the quantum-vibrational paper, negative eigenvalues of the amplitude Laplacian $\Lambda_A(t) = D(t) - a(t)a(t)^\top$ signal active destructive interference. In the ESDM this becomes a **prediction confidence signal**:
 
-$$\text{confidence}(\tau) = \frac{\rho_+}{\rho_+ + \rho_- + \epsilon}$$
+$$\mathit{confidence}(\tau) = \frac{\rho_+}{\rho_+ + \rho_- + \epsilon}$$
 
 When $\rho_- > \rho_+$ (more destructive than constructive interference), the model is in a decoherent state — structurally analogous to Barontini's "big crunch" where the entropic clock stops. Predictions made in this regime should be flagged as low-confidence.
 
@@ -217,12 +217,12 @@ When $\rho_- > \rho_+$ (more destructive than constructive interference), the mo
 
 The ESDM extends the VDT three-term ELBO with an entropy conservation penalty:
 
-$$\mathcal{L}_\text{ESDM} = \underbrace{\mathbb{E}_q[\log p(x \mid z, W)]}_\text{reconstruction} - \underbrace{\text{KL}(q(z) \,\|\, \mathcal{N}(0,I))}_\text{kl\_z} - \underbrace{\text{KL}(q(S) \,\|\, p(S|I))}_\text{kl\_S} - \underbrace{\text{KL}(q(\omega) \,\|\, p(\omega|\tau, L))}_\text{kl\_tau} - \underbrace{\beta \cdot \left|S_\text{bright}(\tau) + S_\text{dark}(\tau) - S_0\right|^2}_\text{entropy conservation}$$
+$$\mathcal{L}_\mathit{ESDM} = \underbrace{\mathbb{E}_q[\log p(x \mid z, W)]}_\mathit{reconstruction} - \underbrace{\mathit{KL}(q(z) \,\|\, \mathcal{N}(0,I))}_\mathit{kl\_z} - \underbrace{\mathit{KL}(q(S) \,\|\, p(S|I))}_\mathit{kl\_S} - \underbrace{\mathit{KL}(q(\omega) \,\|\, p(\omega|\tau, L))}_\mathit{kl\_tau} - \underbrace{\beta \cdot \left|S_\mathit{bright}(\tau) + S_\mathit{dark}(\tau) - S_0\right|^2}_\mathit{entropy conservation}$$
 
 **New term: entropy conservation**
-- $S_\text{bright}(\tau) = \text{kl\_tau}$ (KL of active modes)
-- $S_\text{dark}(\tau) = \sum_{k: \omega_k < \theta} \text{KL}(\omega_k)$ (KL of inactive modes)
-- $S_0 = S_\text{bright}(0) + S_\text{dark}(0)$ (total entropy at initialisation)
+- $S_\mathit{bright}(\tau) = \mathit{kl\_tau}$ (KL of active modes)
+- $S_\mathit{dark}(\tau) = \sum_{k: \omega_k < \theta} \mathit{KL}(\omega_k)$ (KL of inactive modes)
+- $S_0 = S_\mathit{bright}(0) + S_\mathit{dark}(0)$ (total entropy at initialisation)
 - $\beta$ is a small weight (suggested: $\beta \in [0.001, 0.01]$, or $\beta = 1/S_0$ for a dimensionless form)
 
 This directly mirrors Barontini's experimental verification that "within our errorbars, the entropy of the whole miniuniverse (dark and bright sector) is constant" across the full run.
@@ -267,7 +267,7 @@ Using Barontini's language, training passes through identifiable phases:
 
 ## 9. Barrier Height Sweep (Experimental Protocol)
 
-Barontini varies the barrier height $V = H_\text{coupling}/H^\text{max}_\text{coupling}$ and observes that low $V$ produces cyclic big bang/big crunch dynamics while high $V$ drives the system toward heat death.
+Barontini varies the barrier height $V = H_\mathit{coupling}/H^\mathit{max}_\mathit{coupling}$ and observes that low $V$ produces cyclic big bang/big crunch dynamics while high $V$ drives the system toward heat death.
 
 The ESDM analogue is a sweep over the `kl_S` weight (the semantic coupling strength):
 
