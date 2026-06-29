@@ -96,7 +96,7 @@ The attention-forcing term $B_t$ in the VDT wave recurrence is gated by $\Lambda
 
 $$Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, L_f Q_t - \gamma \Delta Q + \Lambda(\tau) \cdot \Delta\tau^2 \, B_t$$
 
-where $\Lambda(\tau) = |\partial_\phi \text{kl\_tau}|^{-1}$. When modes are stable (small entropy derivative), $\Lambda$ is large and attention drives exploration. When modes are in rapid transition (large entropy derivative), $\Lambda$ is small and the wave recurrence runs as free vibrational dynamics.
+where $$\Lambda(\tau) = |\partial_\phi \mathit{kl\_tau}|^{-1}$$. When modes are stable (small entropy derivative), $\Lambda$ is large and attention drives exploration. When modes are in rapid transition (large entropy derivative), $\Lambda$ is small and the wave recurrence runs as free vibrational dynamics.
 
 ### Entropic Diffusion Schedule
 
@@ -143,7 +143,7 @@ Input x  (B, D)
 
 The objective extends the VDT ELBO with an entropy conservation term:
 
-$$\mathcal{L} = \underbrace{\mathbb{E}_q[\log p(x \mid z, W)]}_{\text{reconstruction}} - \underbrace{\mathrm{KL}(q(z) \,\|\, \mathcal{N}(0,I))}_{\text{kl\_z}} - \underbrace{\mathrm{KL}(q(S) \,\|\, p(S|I))}_{\text{kl\_S}} - \underbrace{\mathrm{KL}(q(\omega) \,\|\, p(\omega|\tau,L))}_{\text{kl\_tau}} - \underbrace{\beta \cdot |S_\text{bright}(\tau) + S_\text{dark}(\tau) - S_0|^2}_{\text{entropy conservation}}$$
+$$\mathcal{L} = \underbrace{\mathbb{E}_q[\log p(x \mid z, W)]}_{\text{reconstruction}} - \underbrace{\mathrm{KL}(q(z) \,\|\, \mathcal{N}(0,I))}_{\text{kl\_z}} - \underbrace{\mathrm{KL}(q(S) \,\|\, p(S|I))}_{\mathit{kl\_S}} - \underbrace{\mathrm{KL}(q(\omega) \,\|\, p(\omega|\tau,L))}_{\text{kl\_tau}} - \underbrace{\beta \cdot |S_\text{bright}(\tau) + S_\text{dark}(\tau) - S_0|^2}_{\text{entropy conservation}}$$
 
 The conservation term enforces that entropy flowing from dark to bright sector is balanced globally — directly mirroring the BEC miniuniverse conservation law verified by Barontini.
 
