@@ -447,15 +447,15 @@ Following 00-DESIGN.md §9, sweep `kl_S ∈ {0.001, 0.01, 0.05, 0.1, 0.5}` and p
 
 ## 9. Implementation Sequence
 
-| Phase | File | Depends on | Estimated complexity |
-|-------|------|------------|----------------------|
-| 1 | `laplacian.py` | ArrowSpace GW output | Medium |
-| 2 | `clock.py` | — | Low |
-| 3 | `vibrational.py` | `clock.py` | Low (minimal diff) |
-| 4 | `diffusion_decoder.py` | `clock.py` | Low (schedule swap) |
-| 5 | `elbo.py` | `clock.py` | Low |
-| 6 | `model.py` | All of above | Medium |
-| 7 | Experiments | `model.py`, `laplacian.py` | Medium–High |
+| Phase | File | Depends on | Estimated complexity | Status |
+|-------|------|------------|----------------------|--------|
+| 1 | `laplacian.py` | ArrowSpace GW output | Medium | ✅ |
+| 2 | `clock.py` | — | Low | ✅ |
+| 3 | `vibrational.py` | `clock.py` | Low (minimal diff) | ✅ |
+| 4 | `diffusion_decoder.py` | `clock.py` | Low (schedule swap) | ✅ |
+| 5 | `elbo.py` | `clock.py` | Low | ✅ |
+| 6 | `model.py` | All of above | Medium | ✅ (smoke-test wiring) |
+| 7 | Experiments | `model.py`, `laplacian.py` | Medium–High | ⬜ |
 
 Start with Phase 1 and 2 in parallel (they have no mutual dependency).
 Do not begin Phase 6 until Phases 1–5 each pass their unit tests independently.

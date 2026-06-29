@@ -317,13 +317,13 @@ The ESDM optimisation is not gradient descent on a fixed landscape but a recursi
 
 ## 12. Implementation Checklist
 
-- [ ] `EntropicClock` module: accumulates $\tau_n$, computes $\Lambda(\tau)$, emits `dark_sector_entropy`
-- [ ] Modify `VibrationalStateBlock.forward()`: accept `Lambda_tau`, `delta_tau`; scale `B_t`; replace `dt`
+- [x] `EntropicClock` module: accumulates $\tau_n$, computes $\Lambda(\tau)$, emits `dark_sector_entropy`
+- [x] Modify `VibrationalStateBlock.forward()`: accept `Lambda_tau`, `delta_tau`; scale `B_t`; replace `dt`
 - [ ] Add `dark_sector_entropy` metric to step-level CSV log
-- [ ] Modify `alpha_bar` in `spectral_diff/schedule.py`: replace `cosine_alpha_bar(t, T)` with `alpha_bar_entropic(tau, tau_max)`
-- [ ] Add entropy conservation term to ELBO in `spectral_diff/elbo.py`
-- [ ] Add `rho_sign` confidence output to model forward pass
-- [ ] Add `conserved` health metric to `spectral_kl_health_check`
+- [x] Implement entropic-time `alpha_bar` in `clock.py` and consume it in `diffusion_decoder.py`
+- [x] Add entropy conservation term to ELBO in `esdm/elbo.py`
+- [x] Add `rho_sign` confidence output to model forward pass (via `clock.step`)
+- [x] Add `conserved` health metric to `ESDM.health_check()`
 - [ ] Experiment: `kl_S` weight sweep (barrier height $V$ analogue) → produce $\tau_n$ vs. step curves
 - [ ] Experiment: verify entropy conservation law across training run
 - [ ] Experiment: Loschmidt echo reversibility test
