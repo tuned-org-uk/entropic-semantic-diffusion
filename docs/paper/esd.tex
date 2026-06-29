@@ -1,0 +1,302 @@
+\documentclass[11pt]{article}
+
+% ---------- packages ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+
+% ---------- hyperref config ----------
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = blue!60!black,
+  citecolor  = teal,
+  urlcolor   = teal,
+  pdftitle   = {Entropic Semantic Diffusion: Spectral Search and Internal Time from Entropy},
+  pdfauthor  = {Lorenzo Moriondo},
+}
+
+% ---------- theorem environments ----------
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{conjecture}{Conjecture}
+\newtheorem{remark}{Remark}
+
+% ---------- custom commands ----------
+\newcommand{\ESDM}{\textsc{esdm}}
+\newcommand{\VDT}{\textsc{vdt}}
+\newcommand{\SDM}{\textsc{sdm}}
+\newcommand{\SPIN}{\textsc{spin}}
+\newcommand{\Ltau}{\Lambda(\tau)}
+\newcommand{\taun}{\tau_n}
+\newcommand{\alphabar}{\bar{\alpha}(\tau)}
+\newcommand{\Lf}{L_F}
+
+% ============================================================
+\begin{document}
+% ============================================================
+
+\title{%
+  \textbf{Entropic Semantic Diffusion: Spectral Search and Internal Time from Entropy}%
+}
+
+\author{
+  Lorenzo Moriondo \\
+  \texttt{tunedconsulting@gmail.com} \\
+  \href{https://www.tuned.org.uk}{tuned.org.uk}
+}
+
+\date{June 2026 \\ \small{Draft -- comments welcome}}
+
+\maketitle
+
+% ============================================================
+\begin{abstract}
+% ============================================================
+
+Diffusion models and variational sequence architectures parametrise their
+dynamics by an \emph{external} time variable -- a fixed integer step counter or
+a predetermined noise schedule -- that is semantically meaningless and
+thermodynamically inert.
+This is a semantic instance of the \emph{Wheeler--DeWitt problem of time}: a
+closed system described by a time-independent Hamiltonian admits no intrinsic
+mechanism to order its own evolution.
+We draw on a recent cold-atom experiment by Barontini (2026), in which a
+Bose--Einstein condensate partitioned into an observed (\emph{bright}) and an
+unobserved (\emph{dark}) sector is shown to self-sequence its own dynamics via
+\emph{entropic time} -- a monotonically increasing quantity constructed entirely
+from internal entropy exchange between the two sectors -- and proposes an
+effective Schr\"odinger equation parametrised by this internal time that
+quantitatively reproduces the measured dynamics.
+
+The \emph{Entropic Semantic Diffusion Model} (\ESDM) applies this lesson to a
+unified semantic architecture combining the Vibrational Deductive Transformer
+(\VDT), the Spectral Diffusion Model (\SDM), and the ArrowSpace dual-space
+hypothesis.
+The corpus embedding space is partitioned into two sectors: the \emph{bright
+sector} of active spectral modes $\omega_k > \theta$ (observable, governs
+reconstruction) and the \emph{dark sector} of latent feature-space wiring
+$L_F$ and inactive modes (unobserved, governs dynamics).
+Entropic time $\taun = \sum_i |\Delta\,\text{kl\_tau}_i|$ accumulates from the
+absolute change in the tau-mode KL divergence of the \VDT ELBO; it is
+monotonically increasing by construction and stops advancing when no entropy is
+exchanged between sectors -- the semantic analogue of Barontini's heat death.
+The fixed cosine diffusion schedule is replaced by $\alphabar =
+\cos^2\!\bigl(\frac{\pi}{2}\cdot\frac{\tau}{\tau_{\max}}\bigr)$, so that
+semantic structure dissolves at precisely the moments the spectral geometry is
+actively reorganising.
+The \VDT wave recurrence is gated by an \emph{entropic pump}
+$\Ltau = |\partial_\phi\,\text{kl\_tau}|^{-1}$ that amplifies attention forcing
+during low-entropy-flow regimes and suppresses it during rapid mode transitions,
+in direct correspondence with Barontini's Eq.~(6).
+An entropy conservation term $\beta\,|S_{\text{bright}}(\tau) +
+S_{\text{dark}}(\tau) - S_0|^2$ is added to the ELBO, enforcing the global
+constancy of semantic entropy observed empirically in the BEC miniuniverse.
+
+The resulting architecture has no external epoch counter, no preset number of
+diffusion steps, and no fixed noise schedule: its temporal structure emerges
+entirely from the internal thermodynamics of the dual-space semantic system.
+Training phases (big bang, expansion, maximum extension, big crunch, heat
+death) map onto identifiable regimes of the spectral diagnostics, and a
+\texttt{kl\_S} barrier-height sweep directly reproduces the topological
+transition structure of Barontini's Fig.~2.
+We argue that this construction formalises the ArrowSpace dual-space
+hypothesis -- every vector space is simultaneously a geometric item-space and
+a semantic feature-space -- as a thermodynamic duality, and that optimisation
+in the \ESDM is equivalently a \emph{recursive semantic search} over the
+spectral geometry of the corpus.
+
+\end{abstract}
+
+\vspace{1em}
+\noindent\textbf{Keywords:} entropic time, spectral diffusion, vibrational transformer,
+Wheeler--DeWitt problem, ArrowSpace, graph Laplacian, semantic search,
+bose--einstein condensate, variational inference.
+
+\newpage
+
+% ============================================================
+\tableofcontents
+% ============================================================
+
+\newpage
+
+% ============================================================
+\section{Introduction}
+\label{sec:introduction}
+% ============================================================
+% TODO: expand
+% - The semantic gap and the dual-space hypothesis (ArrowSpace / SPIN)
+% - External time as a design limitation in VDT and SDM
+% - The Wheeler-DeWitt problem as the unifying framing
+% - Barontini as experimental existence proof
+% - Paper contributions and structure
+
+\section{Background}
+\label{sec:background}
+
+  \subsection{The ArrowSpace Dual-Space Hypothesis}
+  \label{sec:arrowspace}
+  % TODO:
+  % - Item-space vs. feature-space Laplacian L_F
+  % - Graph Wiring (GW) and epiplexity
+  % - Fiedler vector as semantic scale factor
+  % - SPIN: spectral augmentation of retrieval
+
+  \subsection{Vibrational Deductive Transformer (VDT)}
+  \label{sec:vdt}
+  % TODO:
+  % - Wave recurrence, VibrationalStateBlock
+  % - SignedDensityMatrix, rho_+, rho_-
+  % - ELBO: reconstruction + kl_z + kl_S + kl_tau
+  % - External time flaw
+
+  \subsection{Spectral Diffusion Model (SDM)}
+  \label{sec:sdm}
+  % TODO:
+  % - LGMRF prior, per-mode variance
+  % - cosine_alpha_bar(t, T=200) and its limitations
+  % - Connection to VDT latent structure
+
+  \subsection{Barontini's Experiment: Internal Time from Entropy}
+  \label{sec:barontini}
+  % TODO:
+  % - BEC setup, bright / dark partition, optical barrier
+  % - Entropic time definition (Eq. 3)
+  % - Entropy conservation law
+  % - Entropic Schrödinger equation (Eq. 6): phi, Lambda(tau)
+  % - Three key experimental results
+
+\section{The Wheeler--DeWitt Problem in Semantic Architectures}
+\label{sec:wdw}
+% TODO:
+% - Formal statement: VDT + SDM as a closed system with external t
+% - Why external time is a structural flaw, not just a design choice
+% - The two-sector partition as the solution structure
+
+\section{Entropic Time for Semantics}
+\label{sec:entropic_time}
+
+  \subsection{Definition and Monotonicity}
+  \label{sec:tau_definition}
+  % tau_n = sum |Delta kl_tau_i|, monotonicity proof
+
+  \subsection{Clock Field and Non-Monotonicity Resolution}
+  \label{sec:clock_field}
+  % log_lam_s as phi, absolute-value integral fix
+
+  \subsection{Heat Death and Termination}
+  \label{sec:heat_death}
+  % tau_n stalling as intrinsic stopping criterion
+
+\section{Entropic Semantic Diffusion Model (ESDM)}
+\label{sec:esdm}
+
+  \subsection{Two-Sector Partition}
+  \label{sec:partition}
+  % Bright: N_active modes; Dark: L_F, inactive modes
+  % Full correspondence table (Barontini vs. ESDM)
+
+  \subsection{The Entropic Pump and Gated Wave Recurrence}
+  \label{sec:wave_recurrence}
+  % Lambda(tau) = |d_phi kl_tau|^{-1}
+  % Modified VibrationalStateBlock equation
+  % Interpretation: exploration vs. free dynamics
+
+  \subsection{Entropic Diffusion Schedule}
+  \label{sec:schedule}
+  % alpha_bar(tau), per-mode schedule alpha_bar_k(tau_k)
+  % Comparison to cosine_alpha_bar(t, T)
+
+  \subsection{The ESDM ELBO}
+  \label{sec:elbo}
+  % Full five-term objective
+  % Entropy conservation term: beta calibration
+
+  \subsection{Signed Interference as Confidence}
+  \label{sec:confidence}
+  % rho_sign = rho_- / (rho_+ + eps)
+  % Low-confidence detection without external validation
+
+  \subsection{Architecture Summary}
+  \label{sec:architecture}
+  % Four modules: EntropicClock, VibrationalStateBlock,
+  %               SpectralLoadingDecoder, EntropicDiffusionDecoder
+  % Data flow diagram
+
+\section{Training Dynamics and Diagnostics}
+\label{sec:training}
+
+  \subsection{Per-Batch Health Monitoring}
+  \label{sec:monitoring}
+  % kl_bright, kl_dark, tau_n, Lambda_tau, conserved, rho_sign
+  % Health check table (healthy / warning / critical)
+
+  \subsection{Phase Identification}
+  \label{sec:phases}
+  % Big bang, expansion, maximum extension, big crunch, heat death
+  % Barontini correspondence
+
+\section{Experimental Protocol}
+\label{sec:experiments}
+
+  \subsection{Barrier Height Sweep (kl\_S analogue of $V$)}
+  \label{sec:barrier_sweep}
+  % kl_S sweep: tau_n vs. training-step curves
+  % Predicted regimes: cyclic / clean expansion / heat death
+  % Direct analogue of Barontini Fig. 2
+
+  \subsection{Entropy Conservation Verification}
+  \label{sec:conservation_exp}
+  % S_bright(tau) + S_dark(tau) = S_0 throughout training
+
+  \subsection{Loschmidt Echo: Reversibility Test}
+  \label{sec:loschmidt}
+  % Run tau backwards; measure embedding recovery
+  % Arrow-of-time test in semantic space
+
+\section{Connection to Thermal Time and Recursive Semantic Search}
+\label{sec:thermal_time}
+
+  \subsection{Connes--Rovelli Thermal Time Hypothesis}
+  \label{sec:connes_rovelli}
+  % Operational vs. algebraic construction of time
+
+  \subsection{ArrowSpace Dual-Space as Thermodynamic Duality}
+  \label{sec:duality}
+  % Item-space = bright sector; feature-space = dark sector
+  % Spectral Complementarity Conjecture
+
+  \subsection{Optimisation as Recursive Semantic Search}
+  \label{sec:recursive_search}
+  % L_F -> dark entropy -> tau -> schedule -> loss -> L_F loop
+  % SPIN as the retrieval-time projection of this loop
+
+\section{Open Questions}
+\label{sec:open_questions}
+% 1. Feshbach-Villars decomposition in the discrete case
+% 2. Multiple clock fields: log_lam_s vs. Fiedler eigenvalue
+% 3. Quantum bounce vs. singularity: sign flip of Lambda
+% 4. Loschmidt echo as formal reversibility test
+% 5. beta calibration for the conservation term
+
+\section{Conclusion}
+\label{sec:conclusion}
+% TODO
+
+% ============================================================
+\bibliographystyle{unsrt}
+\bibliography{refs}
+% ============================================================
+% refs.bib entries to include:
+%  Barontini2026, ConnesRovelli1994, PageWootters1983,
+%  KieferSandhofer2022, DeWitt1967,
+%  Moriondo2025VDT, Moriondo2025SDM, Moriondo2025QV,
+%  Moriondo2024ArrowSpace, Moriondo2026SPIN
+
+\end{document}
