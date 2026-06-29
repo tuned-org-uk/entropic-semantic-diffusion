@@ -68,5 +68,5 @@ def esdm_elbo(
         "kl_tau":       kl_tau.detach(),
         "dark_entropy": dark_entropy.detach(),
         "conserved":    conserved.detach(),
-        "beta":         _beta.detach() if isinstance(_beta, Tensor) else torch.tensor(_beta),
+        "beta":         _beta.detach() if isinstance(_beta, Tensor) else torch.tensor(_beta, dtype=x.dtype, device=x.device),
     }
