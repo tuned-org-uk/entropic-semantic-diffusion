@@ -17,7 +17,6 @@ def V_and_LF():
     return V, L_F
 
 
-@pytest.mark.skip(reason="Phase 1 not yet implemented")
 def test_M_is_symmetric(V_and_LF):
     from esdm.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF
@@ -26,7 +25,6 @@ def test_M_is_symmetric(V_and_LF):
     assert torch.allclose(dsm.M, dsm.M.T, atol=1e-6)
 
 
-@pytest.mark.skip(reason="Phase 1 not yet implemented")
 def test_eigvals_finite(V_and_LF):
     from esdm.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF
@@ -36,7 +34,6 @@ def test_eigvals_finite(V_and_LF):
     assert torch.all(torch.isfinite(dsm.eigvals))
 
 
-@pytest.mark.skip(reason="Phase 1 not yet implemented")
 def test_rayleigh_finite(V_and_LF):
     from esdm.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF
@@ -48,7 +45,6 @@ def test_rayleigh_finite(V_and_LF):
     assert torch.isfinite(r)
 
 
-@pytest.mark.skip(reason="Phase 1 not yet implemented")
 def test_project_shape(V_and_LF):
     from esdm.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF

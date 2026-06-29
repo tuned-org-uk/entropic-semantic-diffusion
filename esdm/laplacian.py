@@ -16,10 +16,10 @@ specification.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Optional, Union
 
 import torch
+import torch.nn as nn
 from torch import Tensor
 
 # scipy sparse matrices are accepted from pyarrowspace's .to_csr() output
@@ -30,8 +30,7 @@ except ImportError:  # pragma: no cover
     _SCIPY_AVAILABLE = False
 
 
-@dataclass
-class DualSpaceMatrix:
+class DualSpaceMatrix(nn.Module):
     """
     Builds and caches the fused item-space geometric-semantic matrix M_N.
 
@@ -50,16 +49,22 @@ class DualSpaceMatrix:
     ``pyarrowspace.GraphLaplacian``.  The Rust core already transposes the
     data matrix to F×N before computing k-NN, so L_F arrives here in the
     correct orientation — rows and columns both index features.
+
+    Cached tensors (M, eigvals, eigvecs, fiedler_vec) are registered as
+    buffers so ``.to(device)`` and ``state_dict()``/``load_state_dict()``
+    work as for any other ``nn.Module``.
     """
 
-    alpha: float = 0.5
-    beta: float = 0.5
+    def __init__(self, alpha: float = 0.5, beta: float = 0.5) -> None:
+        super().__init__()
+        self.alpha = alpha
+        self.beta = beta
 
-    # Cached attributes (populated by build())
-    M: Optional[Tensor] = field(default=None, repr=False)
-    eigvals: Optional[Tensor] = field(default=None, repr=False)
-    eigvecs: Optional[Tensor] = field(default=None, repr=False)
-    fiedler_vec: Optional[Tensor] = field(default=None, repr=False)
+        # Cached spectral data — populated by build().
+        self.register_buffer("M", None)
+        self.register_buffer("eigvals", None)
+        self.register_buffer("eigvecs", None)
+        self.register_buffer("fiedler_vec", None)
 
     # ------------------------------------------------------------------ #
 
