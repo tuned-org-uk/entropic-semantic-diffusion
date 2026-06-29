@@ -143,7 +143,7 @@ Input x  (B, D)
 
 The objective extends the VDT ELBO with an entropy conservation term:
 
-$$\mathcal{L} = \underbrace{\mathbb{E}_q[\log p(x \mid z, W)]}_{\text{reconstruction}} - \underbrace{\mathrm{KL}(q(z) \,\|\, \mathcal{N}(0,I))}_{\text{kl\_z}} - \underbrace{\mathrm{KL}(q(S) \,\|\, p(S|I))}_{\mathit{kl\_S}} - \underbrace{\mathrm{KL}(q(\omega) \,\|\, p(\omega|\tau,L))}_{\text{kl\_tau}} - \underbrace{\beta \cdot |S_\text{bright}(\tau) + S_\text{dark}(\tau) - S_0|^2}_{\text{entropy conservation}}$$
+$$\mathcal{L} = \underbrace{\mathbb{E}_q[\log p(x \mid z, W)]}_{\text{reconstruction}} - \underbrace{\mathrm{KL}(q(z) \,\|\, \mathcal{N}(0,I))}_{\mathit{kl\_z}} - \underbrace{\mathrm{KL}(q(S) \,\|\, p(S|I))}_{\mathit{kl\_S}} - \underbrace{\mathrm{KL}(q(\omega) \,\|\, p(\omega|\tau,L))}_{\mathit{kl\_tau}} - \underbrace{\beta \cdot |S_\text{bright}(\tau) + S_\text{dark}(\tau) - S_0|^2}_{\text{entropy conservation}}$$
 
 The conservation term enforces that entropy flowing from dark to bright sector is balanced globally — directly mirroring the BEC miniuniverse conservation law verified by Barontini.
 
