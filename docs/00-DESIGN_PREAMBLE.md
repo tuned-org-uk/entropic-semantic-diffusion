@@ -4,41 +4,41 @@ The proposed model is a **closed two-sector semantic system** whose internal dyn
 
 ### Two-Sector Partition
 
-Following the Barontini partition $\hat{H} = \hat{H}_\text{bright} + \hat{H}_\text{dark} + \hat{H}_\text{coupling}$, the semantic system is split as:[^1]
+Following the Barontini partition $$\hat{H} = \hat{H}_\text{bright} + \hat{H}_\text{dark} + \hat{H}_\text{coupling}$$, the semantic system is split as:[^1]
 
-$\hat{H}_\text{sem} = \hat{H}_\text{item} + \hat{H}_\text{spectral} + \hat{H}_\text{wiring}(V)$
+$$\hat{H}_\text{sem} = \hat{H}_\text{item} + \hat{H}_\text{spectral} + \hat{H}_\text{wiring}(V)$$
 
-- **Item sector** (bright): the observed embedding reconstruction $\hat{x}$, active modes $\omega_k > \theta$ — what the VDT calls the `N_active` population
-- **Spectral sector** (dark): the latent wiring $L(z)$, inactive modes, the ArrowSpace prior eigenpairs $(U_{1:q}, \lambda_{1:q})$ — structurally equivalent to the unobserved BEC sector
-- **Coupling** $V$: the spectral loading regulariser `kl_S`, whose weight directly controls entropy exchange between the two sectors — the optical barrier height analogue
+- **Item sector** (bright): the observed embedding reconstruction $$\hat{x}$$, active modes $$\omega_k > \theta$$ — what the VDT calls the `N_active` population
+- **Spectral sector** (dark): the latent wiring $L(z)$, inactive modes, the ArrowSpace prior eigenpairs $$(U_{1:q}, \lambda_{1:q})$$ — structurally equivalent to the unobserved BEC sector
+- **Coupling** $$V$$: the spectral loading regulariser `kl_S`, whose weight directly controls entropy exchange between the two sectors — the optical barrier height analogue
 
 
 ### Entropic Time Definition
 
-Adapting Eq. (3) from Barontini, the entropic time is defined over the trajectory of the spectral clock field $\phi \equiv \log \lambda_S$ (the log of the learnable spectral scale, already present in SDM's `log_lam_s` ):[^1]
+Adapting Eq. (3) from Barontini, the entropic time is defined over the trajectory of the spectral clock field $$\phi \equiv \log \lambda_S$$ (the log of the learnable spectral scale, already present in SDM's `log_lam_s` ):[^1]
 
-$\tau_n = \frac{\sigma}{k_B} \sum_{i=1}^{n} \left| \frac{\Delta S_i}{\Delta \phi_i} \right| |\Delta \phi_i| = \sum_{i=1}^{n} |\Delta \text{kl\_tau}_i|$
+$$\tau_n = \frac{\sigma}{k_B} \sum_{i=1}^{n} \left| \frac{\Delta S_i}{\Delta \phi_i} \right| |\Delta \phi_i| = \sum_{i=1}^{n} |\Delta \text{kl\_tau}_i|$$
 
-where $\Delta \text{kl\_tau}_i$ is the per-step change in the tau-mode KL from the VDT ELBO . This is monotonically increasing by construction — the arrow of time cannot reverse, solving the non-monotonicity problem identified in the previous analysis.
+where $$\Delta \text{kl\_tau}_i$$ is the per-step change in the tau-mode KL from the VDT ELBO . This is monotonically increasing by construction — the arrow of time cannot reverse, solving the non-monotonicity problem identified in the previous analysis.
 
 ### The Entropic Schrödinger Equation for Semantics
 
 Barontini derives his effective equation by Feshbach-Villars decomposition of the static WDW equation, yielding:[^1]
 
-$i\hbar \partial_\tau \psi = \Phi(\tau)\psi + \Lambda(\tau) H_\text{geom} \psi$
+$$i\hbar \partial_\tau \psi = \Phi(\tau)\psi + \Lambda(\tau) H_\text{geom} \psi$$
 
 The ESDM analogue replaces this with the VDT wave recurrence , now gated by the entropic pump $\Lambda$:
 
-$Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, L_f Q_t - \gamma \Delta Q + \Lambda(\tau) \cdot \Delta\tau^2 \, B_t$
+$$Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, L_f Q_t - \gamma \Delta Q + \Lambda(\tau) \cdot \Delta\tau^2 \, B_t$$
 
 where:
 
-- $L_f$ is the feature-space Laplacian from ArrowSpace
-- $B_t$ is the attention forcing term (self-attention + FFN output)
-- $\Lambda(\tau) = (\partial_\phi S)^{-1} k_B / \sigma\omega\phi$ — the entropy derivative of the spectral sector, directly analogous to Barontini's pump[^1]
-- $\Delta\tau$ replaces $dt$ — steps are now measured in entropic units, not external integer steps
+- $$L_f$$ is the feature-space Laplacian from ArrowSpace
+- $$B_t$$ is the attention forcing term (self-attention + FFN output)
+- $$\Lambda(\tau) = (\partial_\phi S)^{-1} k_B / \sigma\omega\phi$$ — the entropy derivative of the spectral sector, directly analogous to Barontini's pump[^1]
+- $$\Delta\tau$$ replaces $$dt$$ — steps are now measured in entropic units, not external integer steps
 
-When $\Lambda(\tau) \approx 0$ (no entropy exchange, modes stable), the recurrence reduces to free vibrational dynamics. When $\Lambda(\tau)$ is large (rapid mode activation or collapse), the attention forcing is amplified — the model is thermodynamically *forced* to attend harder precisely when the spectral geometry is changing.
+When $$\Lambda(\tau) \approx 0$$ (no entropy exchange, modes stable), the recurrence reduces to free vibrational dynamics. When $$\Lambda(\tau)$$ is large (rapid mode activation or collapse), the attention forcing is amplified — the model is thermodynamically *forced* to attend harder precisely when the spectral geometry is changing.
 
 ### Architecture: Four Modules
 
