@@ -1,16 +1,22 @@
 """
 Phase 3 (adapter) — SpectralLoadingDecoder.
 
-Thin re-export of the VDT SpectralLoadingDecoder. The interface is unchanged;
-this file exists so the rest of the ESDM package has a single import surface.
+Thin re-export of the VDT ``SpectralLoadingDecoder`` from ``vdeductive.model``.
+The original implementation lives in the ``vdeductive`` package; this module
+exists so the rest of the ESDM package has a single import surface and can be
+replaced by an ESDM-specific wrapper later without changing call-sites.
+
+The VDT forward signature is:
+
+    forward(z: Tensor, U_q: Tensor, L_base: Tensor)
+        -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]
+
+returning ``(W, omega, S, L_z, log_var_S)``.  ESDM-specific quantities such as
+``N_active``, ``log_lam_s``, ``kl_S``, ``kl_tau`` and ``dark_entropy`` are
+derived from these tensors in the top-level ``ESDM`` model.
 """
 from __future__ import annotations
 
-# from vdeductive.spectral import SpectralLoadingDecoder  # uncomment when vdeductive is installed
-# from vdeductive.wiring_decoder import WiringDecoder
+from vdeductive.model import SpectralLoadingDecoder
 
-# Placeholder types so the rest of the package can import without error
-class SpectralLoadingDecoder:
-    """Stub — replace with: from vdeductive.spectral import SpectralLoadingDecoder"""
-    def __init__(self, *args, **kwargs):  # noqa: ANN001
-        raise NotImplementedError("Import SpectralLoadingDecoder from vdeductive.spectral")
+__all__ = ["SpectralLoadingDecoder"]
