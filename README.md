@@ -86,7 +86,7 @@ The mapping from Barontini's physical experiment to the semantic architecture:
 
 The discrete entropic time accumulator, analogous to Barontini's Eq. (3):
 
-$$\tau_n = \sum_{i=1}^{n} |\Delta \, \text{kl\_tau}_i|$$
+$$\tau_n = \sum_{i=1}^{n} |\Delta \, \mathit{kl\_tau}_i|$$
 
 This is the sum of absolute changes in the tau-mode KL term of the VDT ELBO. It is **monotonically increasing by construction**. When `kl_tau` is stable (no entropy exchange between sectors), $\tau_n$ stops — no time elapses, consistent with Barontini's observation that no entropic time passes between a big crunch and the subsequent big bang.
 
