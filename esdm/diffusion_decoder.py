@@ -1,12 +1,25 @@
 """
 Phase 4 — EntropicDiffusionDecoder.
 
-Wraps the VDT DiffusionDecoder, replacing its fixed cosine_alpha_bar(t, T=200)
-schedule with clock.alpha_bar(tau) from the EntropicClock.
+Implements the ESDM reverse chain directly from the design formula, replacing
+the fixed SDM ``cosine_alpha_bar(t, T=200)`` schedule with the entropic-time
+schedule provided by ``EntropicClock``:
+
+    alpha_bar_t = clock.alpha_bar(tau=clock.tau_n)
+    x_hat = sqrt(alpha_bar_t) * Q + sqrt(1 - alpha_bar_t) * noise
+
+The VDT ``DiffusionDecoder`` is not used as a black box here because its
+interface is built around an embedding table ``E: (N, D)`` and node indices,
+which have no natural ESDM counterpart: ``Q: (B, F)`` is already the
+embedding to be reconstructed.  We do import the VDT decoder as a utility
+source for ``recon_loss()`` and ``TauModeDiffusion`` if future extensions
+need them.
 
 See docs/01-IMPLEMENTATION-PLAN.md §5 for the full specification.
 """
 from __future__ import annotations
+
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -14,31 +27,54 @@ from torch import Tensor
 
 from esdm.clock import EntropicClock
 
-from esdm._vendor.diffusion_decoder import DiffusionDecoder as _VDTDiffusionDecoder
-
 
 class EntropicDiffusionDecoder(nn.Module):
     """
     SDM reverse chain with tau-indexed schedule.
 
-    The only change vs. VDT DiffusionDecoder:
-        BEFORE:  alpha_bar_t = cosine_alpha_bar(t, T=200)
-        AFTER:   alpha_bar_t = clock.alpha_bar(tau=clock.tau_n)
+    Parameters
+    ----------
+    dim : int
+        Feature dimension ``F`` of the vibrational state ``Q`` and of the
+        reconstructed output ``x_hat``.
+    use_per_mode : bool
+        If ``True`` and ``clock.per_mode_tau`` is available, compute a
+        separate ``alpha_bar`` for each feature mode.  This lets different
+        modes reach their noise floor at different entropic rates.
     """
 
-    def __init__(self, dim: int, n_steps: int = 10) -> None:
+    def __init__(self, dim: int, use_per_mode: bool = False) -> None:
         super().__init__()
         self.dim = dim
-        self.n_steps = n_steps
-        # self._vdt_decoder = _VDTDiffusionDecoder(...)  # Phase 4: wire once the ESDM interface is final
+        self.use_per_mode = use_per_mode
 
     def forward(
         self,
-        Q: Tensor,          # (B, F) vibrational state
-        L_z: Tensor,        # (B, F, F) or (F, F) wiring Laplacian from spectral decoder
-        clock: EntropicClock,  # entropic clock providing alpha_bar(tau)
+        Q: Tensor,              # (B, F) vibrational state
+        L_z: Tensor,            # (B, F, F) or (F, F) wiring Laplacian (unused here)
+        clock: EntropicClock,   # entropic clock providing alpha_bar(tau)
+        noise: Optional[Tensor] = None,
     ) -> Tensor:
         """
-        Returns x_hat (B, F) — reconstructed item embedding.
+        Returns x_hat (B, F).
+
+        ``noise`` defaults to standard Gaussian if not provided, matching the
+        diffusion prior.  Pass ``noise=torch.zeros_like(Q)`` for a fully
+        deterministic reconstruction.
         """
-        raise NotImplementedError("Phase 4: implement EntropicDiffusionDecoder.forward()")
+        if Q.dim() != 2:
+            raise ValueError(f"EntropicDiffusionDecoder expects Q of shape (B, F). Got {tuple(Q.shape)}.")
+
+        if self.use_per_mode and clock.per_mode_tau is not None:
+            alpha_bar = clock.alpha_bar(tau=clock.per_mode_tau)  # (F,)
+        else:
+            alpha_bar = clock.alpha_bar()  # scalar
+
+        alpha_bar = alpha_bar.to(dtype=Q.dtype, device=Q.device)
+
+        if noise is None:
+            noise = torch.randn_like(Q)
+
+        a_sqrt = alpha_bar.sqrt()
+        noise_sqrt = (1.0 - alpha_bar).sqrt()
+        return a_sqrt * Q + noise_sqrt * noise
