@@ -33,9 +33,12 @@ def test_conserved_zero_when_exact():
 
 def test_S0_no_gradient():
     x, x_hat, kl_z, kl_S, kl_tau, dark, S_0 = _make_tensors()
+    # Give at least one tensor a gradient so the loss has a grad_fn.
+    x_hat = x_hat.requires_grad_(True)
     S_0.requires_grad_(False)
     loss, _ = esdm_elbo(x, x_hat, kl_z, kl_S, kl_tau, dark, S_0)
     loss.backward()
+    assert x_hat.grad is not None
     assert S_0.grad is None
 
 
