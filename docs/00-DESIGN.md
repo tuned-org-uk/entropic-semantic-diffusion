@@ -115,6 +115,62 @@ where:
 - When $\partial_\tau \Lambda < 0$ (pump shrinking), energy is flowing *into* the bright sector — an expansion phase.
 - When $\partial_\tau \Lambda > 0$ (pump growing), energy is being extracted from the bright sector — a contraction phase heading toward "big crunch".
 
+### 4.3 WHT Spectral Filter on the Laplacian
+
+The feature-space Laplacian $L_f \in \mathbb{R}^{F \times F}$ (ArrowSpace GW eigenmaps) must be applied in the wave recurrence as $L_f Q_t$. For high-dimensional feature spaces ($F \gg 1$), this matrix–vector product is expensive and its spectrum may contain components that are irrelevant or harmful to the diffusion trajectory.
+
+The **Walsh–Hadamard Transform (WHT) spectral filter** offers an $O(F \log F)$ alternative that selectively zeroes out Laplacian spectral components outside a learned pass-band, using the Hadamard basis as a computationally cheap proxy for the eigenbasis.
+
+#### 4.3.1 WHT filter definition
+
+Let $H_F \in \{-1, +1\}^{F \times F}$ be the normalised Hadamard matrix:
+
+$$H_F = \frac{1}{\sqrt{F}} W_F$$
+
+where $W_F$ is the standard Walsh–Hadamard matrix of order $F$ (required: $F = 2^m$ for integer $m$, or padded to the nearest power of two). The WHT-filtered Laplacian action on state $Q \in \mathbb{R}^{B \times F}$ is computed as:
+
+$$\widetilde{L_f Q} = H_F^\top \bigl(g \odot (H_F L_f H_F^\top)\bigr) H_F Q$$
+
+where $g \in \mathbb{R}^F$ is a learnable **spectral gate vector** initialised to $\mathbf{1}$ (identity — no filtering) and applied element-wise to the WHT-domain Laplacian rows. In practice, since $L_f$ is fixed after `build_laplacian.py`, the WHT-domain Laplacian $\hat{L}_f = H_F L_f H_F^\top$ is **precomputed once** and cached alongside $L_f$.
+
+The recurrence term becomes:
+
+$$\Delta\tau^2 \, L_f Q_t \quad \longrightarrow \quad \Delta\tau^2 \, H_F^\top (g \odot (\hat{L}_f \cdot (H_F Q_t)^\top)^\top$$
+
+Simplified, letting $\hat{Q}_t = H_F Q_t$ (the WHT of $Q_t$, computed in $O(F \log F)$):
+
+$$\widetilde{L_f Q_t} = H_F^\top \bigl(g \odot (\hat{L}_f \hat{Q}_t^\top)^\top\bigr)$$
+
+#### 4.3.2 Frequency interpretation
+
+The Hadamard basis orders vectors by **sequency** (the number of sign changes), which is the Walsh-domain analogue of frequency. Low-sequency components of $Q_t$ correspond to smooth, globally-coherent vibrational modes; high-sequency components correspond to local, noisy oscillations.
+
+The spectral gate $g$ therefore acts as a **pass-band filter** on the Laplacian action:
+
+| Gate region | Effect on diffusion |
+|---|---|
+| $g_k \approx 1$ for low sequency | Smooth/global Laplacian modes preserved — slow semantic drift |
+| $g_k \approx 0$ for high sequency | Local/noisy modes suppressed — prevents diffusion from chasing noise |
+| $g_k$ learned end-to-end | Optimal pass-band co-adapted with entropic time schedule |
+
+This is the **Laplacian spectral filter directive for the diffusion process** identified as a core research driver: the WHT gate selects which frequency bands of the feature-space Laplacian are allowed to direct the diffusion trajectory.
+
+#### 4.3.3 Full wave recurrence with WHT filter
+
+The complete ESDM wave recurrence, incorporating the entropic time gating (§4.2) and the WHT spectral filter, is:
+
+$$\boxed{Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, \widetilde{L_f Q_t} \;-\; \gamma \Delta Q \;+\; \Lambda(\tau) \cdot \Delta\tau^2 \, B_t}$$
+
+where $\widetilde{L_f Q_t} = H_F^\top (g \odot (\hat{L}_f \hat{Q}_t^\top)^\top)$ and $g \in \mathbb{R}^F$ is a learnable parameter of `VibrationalStateBlock`.
+
+#### 4.3.4 Per-mode WHT scheduling
+
+Following the per-mode entropic time $\tau_k$ already used in the diffusion schedule (§5.3), the gate $g$ can be made **time-varying** by conditioning on $\tau_k$:
+
+$$g_k(\tau_k) = \sigma\!\left(w_k - s \cdot \frac{\tau_k}{\tau_{k,\mathit{max}}}\right)$$
+
+where $w_k$ is a learned bias, $s > 0$ is a sharpness parameter, and $\sigma$ is the sigmoid. This implements a soft **frequency annealing**: early in entropic time all frequencies are passed (global exploration); as $\tau_k$ accumulates, high-sequency components are progressively gated out (local noise suppressed), and the diffusion is channelled into smooth semantic basin descent.
+
 ---
 
 ## 5. The Entropic Diffusion Schedule
@@ -162,6 +218,7 @@ Input x  (B, D)
 ┌─────────────────────┐
 │ VibrationalState    │  VDT — wave recurrence, NOW gated by Λ(τ)
 │ Block               │        dt → Δτ, B_t scaled by Λ(τ)
+│                     │        L_f Q_t → WHT-filtered L̃_f Q_t  [NEW]
 └─────────┬───────────┘
           │  Q_t, ρ_+, ρ_-
           ▼
@@ -192,6 +249,7 @@ Input x  (B, D)
 - Change: accept `Lambda_tau` and `delta_tau` from `EntropicClock`
 - Change: replace `dt` with `delta_tau` in recurrence
 - Change: scale forcing term `B_t` by `Lambda_tau`
+- **Change (new): apply WHT filter to $L_f Q_t$** — precomputed $\hat{L}_f = H_F L_f H_F^\top$ cached at init; learnable gate $g \in \mathbb{R}^F$ replaces bare Laplacian action; optional time-varying gate $g_k(\tau_k)$ from `EntropicClock.per_mode_tau`
 - Everything else unchanged
 
 **`SpectralLoadingDecoder`** (unchanged from VDT)
@@ -241,6 +299,9 @@ tau_n       += abs(delta_kl_bright)          # entropic time accumulator (monoto
 Lambda_tau   = 1.0 / (abs(d_kl_bright/d_phi) + eps)  # entropic pump
 conserved    = abs(kl_bright + kl_dark - S_0)         # should → 0
 rho_sign     = rho_minus / (rho_plus + eps)           # interference ratio → confidence
+# WHT filter health
+g_mean       = g.mean().item()               # mean gate activation (1.0 = open, 0.0 = closed)
+g_entropy    = -(g * g.log() + (1-g) * (1-g+eps).log()).mean()  # gate uncertainty
 ```
 
 ### 8.1 Health check table
@@ -252,6 +313,8 @@ rho_sign     = rho_minus / (rho_plus + eps)           # interference ratio → c
 | `rho_sign` | Oscillating then stabilising | Monotonically increasing | $> 0.9$ (near-total decoherence) |
 | `N_active` | Grows from 0 to $\geq F/2$ | Stalls at $< F/4$ | Collapses after growing (big crunch) |
 | `Lambda_tau` | Varies with mode transitions | Explodes ($> 100$) | NaN |
+| `g_mean` | $0.4$–$0.8$ (selective) | $< 0.1$ (over-filtered) | $> 0.99$ (WHT filter inactive) |
+| `g_entropy` | High early, low late (annealing) | Constant throughout | NaN |
 
 ### 8.2 Regime identification
 
@@ -259,7 +322,7 @@ Using Barontini's language, training passes through identifiable phases:
 
 1. **Big bang** ($\tau_n$ starts growing, `N_active` rising): active modes populating, entropy flowing from dark to bright sector
 2. **Expansion** ($\Lambda_\tau$ moderate, `conserved` stable): steady semantic organisation
-3. **Maximum extension** (`N_active` plateau, $\tau_n$ slowing): diffusion schedule near $\bar{\alpha}(\tau) \approx 0.5$
+3. **Maximum extension** (`N_active` plateau, $\tau_n$ slowing): diffusion schedule near $\bar{\alpha}(\tau) \approx 0.5$; WHT gate begins annealing high-sequency components
 4. **Contraction / big crunch** (`N_active` falling, `rho_sign` rising): modes collapsing back to dark sector
 5. **Heat death** ($\tau_n$ stalled, `conserved` near 0): stationary state — training should stop
 
@@ -295,9 +358,11 @@ The ArrowSpace hypothesis holds that every vector space is simultaneously a geom
 
 The Fiedler vector of $L_F$ plays the role of Barontini's scale factor $a$ — it measures the "size of the semantic universe" in feature-space. The Spectral Complementarity Conjecture from the quantum-vibrational paper (that the ArrowSpace Fiedler vector and the amplitude Laplacian bottom eigenvector tend to $90°$ as graph size grows) maps cleanly onto the dark/bright orthogonality: when one sector is maximally uncertain, the other is maximally determined.
 
+The WHT filter (§4.3) acts directly in the dark sector: it selects which feature-space Laplacian frequencies propagate into the bright sector wave recurrence. The learned gate $g$ therefore encodes the **spectral filter directive** — the learnable boundary between dark and bright sector information flow.
+
 ### 10.3 Optimisation as recursive semantic search
 
-The ESDM optimisation is not gradient descent on a fixed landscape but a recursive process: each update changes $L_F$, which changes the dark sector entropy, which changes $\tau_n$, which changes the diffusion schedule, which changes the reconstruction loss, which loops back to update $L_F$. This is the **optimisation-as-recursive-semantic-search** interpretation — the system is searching its own spectral geometry for a configuration where the two-sector entropy conservation law is satisfied.
+The ESDM optimisation is not gradient descent on a fixed landscape but a recursive process: each update changes $L_F$, which changes the dark sector entropy, which changes $\tau_n$, which changes the diffusion schedule *and the WHT gate pass-band*, which changes the reconstruction loss, which loops back to update $L_F$. This is the **optimisation-as-recursive-semantic-search** interpretation — the system is searching its own spectral geometry for a configuration where the two-sector entropy conservation law is satisfied.
 
 ---
 
@@ -313,12 +378,20 @@ The ESDM optimisation is not gradient descent on a fixed landscape but a recursi
 
 5. **$\beta$ calibration for the conservation term.** Natural choice: $\beta = 1/S_0$ (normalised by initial total entropy), making the conservation penalty dimensionless.
 
+6. **WHT gate initialisation strategy.** Initialising $g$ from the eigenvalue spectrum of $\hat{L}_f$ (gate open only on low-energy bands) may provide a warm start that avoids the "gate-all-closed" collapse during early training.
+
+7. **Relationship between WHT sequency and Laplacian eigenorder.** For sparse feature graphs, WHT sequency and $L_F$ eigenorder are correlated but not identical. Quantifying this gap determines how much the WHT proxy loses relative to exact spectral filtering.
+
 ---
 
 ## 12. Implementation Checklist
 
 - [x] `EntropicClock` module: accumulates $\tau_n$, computes $\Lambda(\tau)$, emits `dark_sector_entropy`
 - [x] Modify `VibrationalStateBlock.forward()`: accept `Lambda_tau`, `delta_tau`; scale `B_t`; replace `dt`
+- [x] Precompute WHT-domain Laplacian $\hat{L}_f = H_F L_f H_F^\top$ in `build_laplacian.py`; cache alongside $L_f$
+- [ ] Add learnable spectral gate $g \in \mathbb{R}^F$ to `VibrationalStateBlock`; wire WHT filter into recurrence
+- [ ] Add optional time-varying gate $g_k(\tau_k)$ with sigmoid annealing (§4.3.4)
+- [ ] Add `g_mean` and `g_entropy` to step-level CSV log and `health_check()`
 - [ ] Add `dark_sector_entropy` metric to step-level CSV log
 - [x] Implement entropic-time `alpha_bar` in `clock.py` and consume it in `diffusion_decoder.py`
 - [x] Add entropy conservation term to ELBO in `esdm/elbo.py`
@@ -327,6 +400,7 @@ The ESDM optimisation is not gradient descent on a fixed landscape but a recursi
 - [ ] Experiment: `kl_S` weight sweep (barrier height $V$ analogue) → produce $\tau_n$ vs. step curves
 - [ ] Experiment: verify entropy conservation law across training run
 - [ ] Experiment: Loschmidt echo reversibility test
+- [ ] Experiment: WHT gate sequency analysis — plot $g_k$ vs. eigenvalue rank of $\hat{L}_f$ at convergence
 
 ---
 
