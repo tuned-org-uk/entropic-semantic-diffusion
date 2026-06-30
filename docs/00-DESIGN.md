@@ -193,21 +193,30 @@ Together, these three mechanisms mean the entropic clock is **necessary and suff
 
 The `kl_decay` sweep in Exp 3 is therefore not merely a hyperparameter search — it is a **collocation strategy experiment**: it tests how spreading the entropic time budget across the training trajectory changes where the wave recurrence is meaningfully evaluated. Reducing `kl_decay` from `0.08` to `{0.01, 0.03}` is analogous to switching from uniform-time collocation to a schedule that concentrates evaluation in the non-trivial part of the solution manifold.
 
-#### 4.4.2 Spectral collocation: the open gap
+#### 4.4.2 Spectral collocation: implemented as Path A bivariate gate (2026-06-30)
 
 What the clock does *not* provide is **spectral collocation** — a mechanism to concentrate the wave recurrence evaluation on the eigenmodes where the residual is currently largest. The WHT gate $g_k(\tau_k)$ does time-varying mode selection, but it anneals on a fixed sigmoid schedule, not adaptively toward high-residual modes.
 
-A residual-driven formulation would define the per-mode residual as:
+**Path A (implemented in `wht_filter.py` and `model.py`, 2026-06-30)** addresses this with a bivariate gate that combines residual magnitude with clock-driven closure:
+
+$$g_k(\tau, r_k) = \sigma\!\bigl(a(\tau) \cdot \log(1 + r_k) + b(\tau)\bigr)$$
+
+where the per-mode residual is:
 
 $$r_k(\tau) = \left\| \hat{Q}_{t,k} - \hat{Q}_{t-1,k} \right\|_2$$
 
-and drive the gate by:
+and the time-dependent coefficients are:
 
-$$g_k \propto \sigma(r_k(\tau) - \theta_k)$$
+$$a(\tau) = s \cdot (1 - \bar{\tau})^p, \qquad b(\tau) = s \cdot \bigl((1-\bar{\tau})^p - \bar{\tau}^p\bigr), \qquad \bar{\tau} = \frac{\tau}{\tau_\mathit{max}}$$
 
-If mode $k$ is currently oscillating rapidly (large $r_k$), its gate should be open; if it has damped out (small $r_k$), its gate should close — independently of the global clock. This would make $g_k$ an **adaptive spectral collocator** rather than a scheduled annealer, concentrating the Laplacian filter on the modes with the highest current residual.
+with scale $s = $ `a_tau_scale` (default 5.0) and power $p = $ `tau_decay_power` (default 1.0). The **heat-death closure invariant** is structural: as $\bar{\tau} \to 1$, $a(\tau) \to 0$ and $b(\tau) \to -s$, driving the gate logit to $-s$ and closing all channels regardless of $r_k$.
 
-The correlation between $r_k(\tau)$ and $\tau_k$ (per-mode entropic time) determines how much additional gain a residual-driven gate provides over the current sigmoid annealing. Logging $r_k$ alongside $g_k$ in Exp 3 is the minimal diagnostic needed to answer this (see Open Question Q8).
+Implementation details:
+- `_compute_bivariate_gate(tau, tau_max, r_k)` in `GraphWHTFilter` — computes the gate vector, re-ordering residuals into Fiedler/sequency order via `self.fiedler_order`.
+- `forward(x, tau, tau_max, r_k, ...)` — new entry point; falls back to heat-kernel-only behaviour when `r_k=None`.
+- `model.py` registers `_last_Q` buffer and calls `compute_mode_residuals(Q_raw, _last_Q, bright_modes)` before every WHT step.
+
+The correlation $\mathrm{corrcoef}(r_k, g_k)$ logged in Exp 3 as `r_g_corr` measures how much the residual signal drives the gate versus the fixed clock schedule. If this correlation is low ($< 0.3$) throughout training, the fixed sigmoid is a poor proxy for mode activity and band-wise spectral temperature (Path B) should be prioritised in Exp 4.
 
 ---
 
@@ -256,7 +265,8 @@ Input x  (B, D)
 ┌─────────────────────┐
 │ VibrationalState    │  VDT — wave recurrence, NOW gated by Λ(τ)
 │ Block               │        dt → Δτ, B_t scaled by Λ(τ)
-│                     │        L_f Q_t → WHT-filtered L̃_f Q_t  [NEW]
+│                     │        L_f Q_t → WHT-filtered L̃_f Q_t  [IMPL]
+│                     │        bivariate gate g_k(τ, r_k) via _last_Q buffer [IMPL 2026-06-30]
 └─────────┬───────────┘
           │  Q_t, ρ_+, ρ_-
           ▼
@@ -287,7 +297,8 @@ Input x  (B, D)
 - Change: accept `Lambda_tau` and `delta_tau` from `EntropicClock`
 - Change: replace `dt` with `delta_tau` in recurrence
 - Change: scale forcing term `B_t` by `Lambda_tau`
-- **Change (new): apply WHT filter to $L_f Q_t$** — precomputed $\hat{L}_f = H_F L_f H_F^\top$ cached at init; learnable gate $g \in \mathbb{R}^F$ replaces bare Laplacian action; optional time-varying gate $g_k(\tau_k)$ from `EntropicClock.per_mode_tau`
+- **Change (implemented): apply WHT filter to $L_f Q_t$** — precomputed $\hat{L}_f = H_F L_f H_F^\top$ cached at init; learnable gate $g \in \mathbb{R}^F$ replaces bare Laplacian action; optional time-varying gate $g_k(\tau_k)$ from `EntropicClock.per_mode_tau`
+- **Change (implemented 2026-06-30): bivariate gate $g_k(\tau, r_k)$** — `_last_Q` buffer stores previous raw vibrational state; `compute_mode_residuals` computes $r_k$ before each WHT call; `GraphWHTFilter.forward(tau, tau_max, r_k)` applies the Path A gate
 - Everything else unchanged
 
 **`SpectralLoadingDecoder`** (unchanged from VDT)
@@ -340,9 +351,14 @@ rho_sign     = rho_minus / (rho_plus + eps)           # interference ratio → c
 # WHT filter health
 g_mean       = g.mean().item()               # mean gate activation (1.0 = open, 0.0 = closed)
 g_entropy    = -(g * g.log() + (1-g) * (1-g+eps).log()).mean()  # gate uncertainty
-# Spectral collocation diagnostic (§4.4.2)
+# Path A bivariate gate diagnostics (§4.4.2, implemented 2026-06-30)
 r_k          = (Q_hat_t - Q_hat_t_prev).norm(dim=0)  # per-mode WHT residual
-r_g_corr     = corrcoef(r_k, g)              # correlation between residual and gate: → 1.0 ideal
+r_k_mean     = r_k.mean().item()             # mean per-mode residual
+r_k_max      = r_k.max().item()              # max per-mode residual (ghost-mode sentinel)
+g_residual   = bivariate_gate(tau, tau_max, r_k)     # Path A gate vector
+g_residual_mean = g_residual.mean().item()   # mean bivariate gate (should → 0 at heat death)
+a_tau        = a_tau_scale * (1 - tau/tau_max)       # residual weight coefficient
+r_g_corr     = corrcoef(r_k, g_residual)    # residual-gate correlation: → 1.0 ideal
 ```
 
 ### 8.1 Health check table
@@ -356,6 +372,10 @@ r_g_corr     = corrcoef(r_k, g)              # correlation between residual and 
 | `Lambda_tau` | Varies with mode transitions | Explodes ($> 100$) | NaN |
 | `g_mean` | $0.4$–$0.8$ (selective) | $< 0.1$ (over-filtered) | $> 0.99$ (WHT filter inactive) |
 | `g_entropy` | High early, low late (annealing) | Constant throughout | NaN |
+| `r_k_mean` | Positive; decreasing after heat-death onset | Flat after heat death | Increasing after heat death (ghost modes) |
+| `r_k_max` | Decreasing monotonically after convergence | Plateau above 0.1 | Larger than `r_k_mean` × 10 (single runaway mode) |
+| `g_residual_mean` | Decreasing; < 0.05 at `is_heat_death` | > 0.05 at heat death | NaN |
+| `a_tau` | Monotone decreasing to 0 | Any increase | NaN |
 | `r_g_corr` | Increasing toward 1.0 | Flat near 0 | Negative (gate anti-correlated with residual) |
 
 ### 8.2 Regime identification
@@ -366,7 +386,7 @@ Using Barontini's language, training passes through identifiable phases:
 2. **Expansion** ($\Lambda_\tau$ moderate, `conserved` stable): steady semantic organisation
 3. **Maximum extension** (`N_active` plateau, $\tau_n$ slowing): diffusion schedule near $\bar{\alpha}(\tau) \approx 0.5$; WHT gate begins annealing high-sequency components
 4. **Contraction / big crunch** (`N_active` falling, `rho_sign` rising): modes collapsing back to dark sector
-5. **Heat death** ($\tau_n$ stalled, `conserved` near 0): stationary state — training should stop
+5. **Heat death** ($\tau_n$ stalled, `conserved` near 0): stationary state — training should stop; `g_residual_mean` must be < 0.05 (invariant enforced by Path A gate)
 
 ---
 
@@ -402,6 +422,8 @@ The Fiedler vector of $L_F$ plays the role of Barontini's scale factor $a$ — i
 
 The WHT filter (§4.3) acts directly in the dark sector: it selects which feature-space Laplacian frequencies propagate into the bright sector wave recurrence. The learned gate $g$ therefore encodes the **spectral filter directive** — the learnable boundary between dark and bright sector information flow.
 
+The Path A bivariate gate (§4.4.2) adds a residual-driven signal to this boundary: modes where the geometric item-space structure is still evolving rapidly ($r_k$ large) remain gated open; modes where the semantic feature-space basin has stabilised ($r_k$ small) are closed by the clock. This is the minimal implementation of the ArrowSpace dual-space hypothesis as a learning-time gate.
+
 ### 10.3 Optimisation as recursive semantic search
 
 The ESDM optimisation is not gradient descent on a fixed landscape but a recursive process: each update changes $L_F$, which changes the dark sector entropy, which changes $\tau_n$, which changes the diffusion schedule *and the WHT gate pass-band*, which changes the reconstruction loss, which loops back to update $L_F$. This is the **optimisation-as-recursive-semantic-search** interpretation — the system is searching its own spectral geometry for a configuration where the two-sector entropy conservation law is satisfied.
@@ -424,7 +446,7 @@ The ESDM optimisation is not gradient descent on a fixed landscape but a recursi
 
 7. **Relationship between WHT sequency and Laplacian eigenorder.** For sparse feature graphs, WHT sequency and $L_F$ eigenorder are correlated but not identical. Quantifying this gap determines how much the WHT proxy loses relative to exact spectral filtering.
 
-8. **Residual-driven spectral collocation.** The current WHT gate $g_k(\tau_k)$ anneals on a fixed sigmoid of per-mode entropic time. An adaptive alternative drives the gate by the per-mode WHT residual $r_k(\tau) = \|\hat{Q}_{t,k} - \hat{Q}_{t-1,k}\|_2$: open the gate where the residual is large, close it where the mode has damped. The correlation $\mathrm{corrcoef}(r_k, g_k)$ logged in Exp 3 measures how much gain a residual-driven gate would provide over the fixed schedule. If this correlation is low ($< 0.3$) throughout training, the fixed sigmoid is a poor proxy for mode activity and adaptive spectral collocation should be prioritised in Exp 4.
+8. **Residual-driven spectral collocation — Path A validation.** The bivariate gate $g_k(\tau, r_k)$ is implemented (§4.4.2). The open question is whether the Spearman correlation $\mathrm{corrcoef}(r_k, g_k)$ is high enough ($> 0.4$ in \geq 3/5 seeds) across barrier heights in Exp 3 to validate Path A as a genuine spectral collocator rather than a clock-dominated annealer. If the correlation is low ($< 0.2$) throughout training, band-wise spectral temperature (Path B, `spectral_bands` in `GraphWHTFilter`) should be prioritised for Exp 4. See issue #10.
 
 ---
 
@@ -435,13 +457,16 @@ The ESDM optimisation is not gradient descent on a fixed landscape but a recursi
 - [x] Precompute WHT-domain Laplacian $\hat{L}_f = H_F L_f H_F^\top$ in `build_laplacian.py`; cache alongside $L_f$
 - [ ] Add learnable spectral gate $g \in \mathbb{R}^F$ to `VibrationalStateBlock`; wire WHT filter into recurrence
 - [ ] Add optional time-varying gate $g_k(\tau_k)$ with sigmoid annealing (§4.3.4)
-- [ ] Add `g_mean` and `g_entropy` to step-level CSV log and `health_check()`
-- [ ] Add `dark_sector_entropy` metric to step-level CSV log
+- [x] Add `g_mean` and `g_entropy` to step-level CSV log and `health_check()`
+- [x] Add `dark_sector_entropy` metric to step-level CSV log
 - [x] Implement entropic-time `alpha_bar` in `clock.py` and consume it in `diffusion_decoder.py`
 - [x] Add entropy conservation term to ELBO in `esdm/elbo.py`
 - [x] Add `rho_sign` confidence output to model forward pass (via `clock.step`)
 - [x] Add `conserved` health metric to `ESDM.health_check()`
-- [ ] Add `r_k` (per-mode WHT residual) and `r_g_corr` to step-level CSV log (§4.4.2, Q8)
+- [x] Implement bivariate gate `g_k(tau, r_k)` in `GraphWHTFilter._compute_bivariate_gate()` with heat-death closure invariant (Path A, §4.4.2)
+- [x] Register `_last_Q` buffer in `ESDM`; wire `compute_mode_residuals` → `forward(tau, tau_max, r_k)` in `model.py`
+- [x] Add `r_k_mean`, `r_k_max`, `g_residual_mean`, `a_tau` to step-level CSV log (§8, §4.4.2)
+- [ ] Add `r_g_corr = corrcoef(r_k, g_residual)` to step-level CSV log and `health_check()` (requires Exp 3 instrumentation)
 - [ ] Experiment: `kl_S` weight sweep (barrier height $V$ analogue) → produce $\tau_n$ vs. step curves
 - [ ] Experiment: verify entropy conservation law across training run
 - [ ] Experiment: Loschmidt echo reversibility test
