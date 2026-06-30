@@ -266,11 +266,17 @@ The script asserts:
 - the path graph Laplacian matches the analytic spectrum `λ_k = 2 - 2·cos(πk/32)`;
 - the CFL-clamped time step `dt` never exceeds `sqrt(2 / λ_max)`;
 - `Q_t[0]` stays finite and does not blow up over 500 steps;
-- `is_heat_death()` fires by step 400 ± 50;
-- `rho_plus` and `rho_minus` remain finite and PSD.
+- `is_heat_death()` fires by step 400 ± 50 (with the default decay);
+- `rho_plus` and `rho_minus` remain finite and PSD;
+- `dark_entropy` and `conserved` are logged for the entropy-balance diagnostic.
+
+The default `kl_decay=0.08` consumes the entropy budget quickly and collapses
+`alpha_bar` by step ~100, matching the issue's heat-death timing.  Slower
+decays spread the schedule but delay heat death:
 
 ```bash
 .venv/bin/python scripts/run_exp2.py --output-dir runs/exp2 --seed 42
+.venv/bin/python scripts/run_exp2.py --kl-decay 0.02 --clock-eps 1e-4
 ```
 
 ### Test Suite

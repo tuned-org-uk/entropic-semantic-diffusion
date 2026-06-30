@@ -27,11 +27,25 @@ def main() -> None:
         default="runs/exp2",
         help="Output directory (default: runs/exp2)",
     )
+    parser.add_argument(
+        "--kl-decay",
+        type=float,
+        default=0.08,
+        help="KL decay rate (default: 0.08)",
+    )
+    parser.add_argument(
+        "--clock-eps",
+        type=float,
+        default=1e-8,
+        help="Clock flatness threshold (default: 1e-8)",
+    )
     args = parser.parse_args()
 
     main_cli(
         output_dir=f"{args.output_dir}/{args.seed}",
         seed=args.seed,
+        kl_decay=args.kl_decay,
+        clock_eps=args.clock_eps,
     )
     print("Experiment 2 complete — all assertions passed.")
 

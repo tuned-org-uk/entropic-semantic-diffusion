@@ -8,12 +8,17 @@ Depends on Exp 1 passing.  CPU only, expected runtime < 10 min.
 Note
 ----
 The issue spec drives the clock with ``kl_tau = exp(-0.01 * step)``.  With
-that decay the entropic time step remains above the clock's ``eps=1e-8``
-flatness threshold for far longer than 500 steps, so ``is_heat_death()``
-would not fire by step 400.  This script therefore parameterises the decay
-rate and defaults to ``0.08``, which produces heat death around step 400
-with ``heat_death_patience=200`` while preserving the qualitative behaviour
-of a decaying entropy flow.
+that decay and the default ``eps=1e-8`` the entropic time step remains
+above the flatness threshold for far longer than 500 steps, so
+``is_heat_death()`` would not fire by step 400.  This script parameterises
+the decay rate; the default ``kl_decay=0.08`` is chosen so that heat death
+fires near step 400 with ``eps=1e-8`` and ``heat_death_patience=200``.
+
+Diagnostic runs show that ``kl_decay=0.08`` consumes the entropy budget
+rapidly and collapses ``alpha_bar`` by step ~100, leaving the latter half of
+the run in the full-noise regime.  Slower decays (e.g. ``0.01–0.03``) spread
+the schedule but push heat death past step 400; they are useful for
+exploring schedule quality on longer horizons.
 """
 from __future__ import annotations
 
@@ -76,6 +81,7 @@ def run_experiment(
     n_steps: int = N_STEPS,
     kl_decay: float = 0.08,
     gamma: float = 0.1,
+    clock_eps: float = 1e-8,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
 ) -> pd.DataFrame:
@@ -91,9 +97,11 @@ def run_experiment(
     kl_decay : float
         Decay rate of the injected ``kl_tau = exp(-kl_decay * step)`` signal.
         The default ``0.08`` is chosen so that ``is_heat_death()`` fires near
-        step 400 with ``heat_death_patience=200``.
+        step 400 with ``eps=1e-8`` and ``heat_death_patience=200``.
     gamma : float
         Rayleigh damping initial value.
+    clock_eps : float
+        Flatness threshold passed to ``EntropicClock`` (default ``1e-8``).
     seed : int
         Random seed for reproducibility.
     output_dir : Path or str, optional
@@ -124,7 +132,10 @@ def run_experiment(
         n, lam_max, dt_cfl_bound,
     )
 
-    clock = EntropicClock(heat_death_patience=HEAT_DEATH_PATIENCE)
+    clock = EntropicClock(
+        eps=clock_eps,
+        heat_death_patience=HEAT_DEATH_PATIENCE,
+    )
     vsb = VibrationalStateBlock(
         dim=n,
         n_heads=1,
@@ -178,14 +189,25 @@ def run_experiment(
         ).item()
         dt_used = min(state.delta_tau, dt_cfl)
 
+        # In isolation mode the dark sector is not modelled, so dark_entropy
+        # is zero and conserved reduces to |kl_tau|.  They are logged so the
+        # CSV schema matches the shared convention and downstream diagnostics
+        # can still compute the conservation residual.
+        dark_entropy_val = 0.0
+        conserved = abs(kl_tau.item() + dark_entropy_val)
+
         records.append({
             "step": step,
             "seed": seed,
             "kl_decay": kl_decay,
+            "clock_eps": clock_eps,
             "kl_tau": kl_tau.item(),
+            "dark_entropy": dark_entropy_val,
+            "conserved": conserved,
             "Q_t_0": Q_t[0, 0].item(),
             "rho_plus": rho_plus.sum().item(),
             "rho_minus": rho_minus.sum().item(),
+            "rho_sign": state.rho_sign,
             "dt": dt_used,
             "dt_cfl_bound": dt_cfl_bound,
             "delta_tau": state.delta_tau,
@@ -253,13 +275,30 @@ def assert_success_criteria(
 def main_cli(
     output_dir: Optional[Path | str] = None,
     seed: int = 3407,
+    kl_decay: float = 0.08,
+    clock_eps: float = 1e-8,
 ) -> pd.DataFrame:
     """CLI entry point for Experiment 2."""
     metrics = run_experiment(
         n=N,
         n_steps=N_STEPS,
+        kl_decay=kl_decay,
+        clock_eps=clock_eps,
         seed=seed,
         output_dir=output_dir,
+    )
+    # Log key diagnostic summary for the user.
+    final = metrics.iloc[-1]
+    logger.info(
+        "Exp2 summary: tau_n=%.4f, alpha_bar=%.4e, Lambda_tau=%.4f, "
+        "rho_sign=%.6f, first_heat_death_step=%s",
+        final["tau_n"],
+        final["alpha_bar"],
+        final["Lambda_tau"],
+        final["rho_sign"],
+        metrics[metrics["is_heat_death"] == 1]["step"].min()
+        if metrics["is_heat_death"].any()
+        else "none",
     )
     assert_success_criteria(metrics)
     logger.info("Experiment 2 passed — all success criteria satisfied.")

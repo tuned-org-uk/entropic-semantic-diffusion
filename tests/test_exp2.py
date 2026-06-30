@@ -34,3 +34,31 @@ def test_run_experiment_passes_criteria():
     metrics = run_experiment(n=32, n_steps=500, seed=3407)
     assert len(metrics) == 500
     assert_success_criteria(metrics)
+
+def test_logged_columns_match_shared_convention():
+    metrics = run_experiment(n=32, n_steps=500, seed=3407)
+    expected = {
+        "step",
+        "seed",
+        "kl_decay",
+        "clock_eps",
+        "kl_tau",
+        "dark_entropy",
+        "conserved",
+        "Q_t_0",
+        "rho_plus",
+        "rho_minus",
+        "rho_sign",
+        "dt",
+        "dt_cfl_bound",
+        "delta_tau",
+        "tau_n",
+        "Lambda_tau",
+        "alpha_bar",
+        "is_heat_death",
+    }
+    assert expected.issubset(set(metrics.columns))
+    assert (metrics["dark_entropy"] == 0.0).all()
+    assert (metrics["conserved"] == metrics["kl_tau"]).all()
+    assert metrics["rho_sign"].between(0.0, 2.0).all()
+
