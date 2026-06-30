@@ -32,7 +32,12 @@ import pandas as pd
 import torch
 
 from esdm.clock import EntropicClock
-from esdm.vibrational import VibrationalStateBlock, _cfl_dt, _laplacian_from_dense
+from esdm.vibrational import (
+    VibrationalStateBlock,
+    _cfl_dt,
+    _laplacian_from_dense,
+    compute_mode_residuals,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -252,12 +257,22 @@ def run_experiment(
             dark_entropy=dark_entropy,
         )
 
+        Q_prev = Q_t.detach().clone()
         Q_t, rho_plus, rho_minus = vsb(
             Q_t,
             L_f=L_f.unsqueeze(0),          # (1, n, n)
             Lambda_tau=state.Lambda_tau,
             delta_tau=state.delta_tau,
         )
+
+        # Per-mode residual for the Path-A bivariate WHT gate.
+        r_k = compute_mode_residuals(
+            Q_t.detach(), Q_prev, bright_modes=bright_modes
+        )
+        g_residual = torch.sigmoid(torch.log1p(r_k))
+        r_k_mean = float(r_k.mean())
+        r_k_max = float(r_k.max())
+        g_residual_mean = float(g_residual.mean())
 
         # Recompute the actual CFL-clamped dt used inside the block so it can
         # be logged and asserted.  _cfl_dt returns the strictest of the
@@ -292,6 +307,9 @@ def run_experiment(
             "dark_entropy": dark_entropy_val,
             "g_mean": g_mean,
             "g_entropy": g_entropy,
+            "r_k_mean": r_k_mean,
+            "r_k_max": r_k_max,
+            "g_residual_mean": g_residual_mean,
             "conserved": conserved,
             "Q_t_0": Q_t[0, 0].item(),
             "rho_plus": rho_plus.sum().item(),
@@ -351,6 +369,15 @@ def assert_success_criteria(
     first_hd = int(heat_death_steps.iloc[0])
     assert 350 <= first_hd <= 450, (
         f"Heat death at step {first_hd}, expected 400 ± 50"
+    )
+
+    # Path-A diagnostic: residual-derived gate should decay after heat death.
+    post_hd = metrics.iloc[first_hd:]
+    g_res_at_hd = post_hd["g_residual_mean"].iloc[0]
+    g_res_final = post_hd["g_residual_mean"].iloc[-1]
+    assert g_res_final <= g_res_at_hd + 1e-6, (
+        f"g_residual_mean did not decay after heat death: "
+        f"at_hd={g_res_at_hd:.6f}, final={g_res_final:.6f}"
     )
 
     # rho_plus and rho_minus must stay finite and non-negative (PSD).

@@ -48,6 +48,9 @@ def test_logged_columns_match_shared_convention():
         "dark_entropy",
         "g_mean",
         "g_entropy",
+        "r_k_mean",
+        "r_k_max",
+        "g_residual_mean",
         "conserved",
         "Q_t_0",
         "rho_plus",
@@ -67,6 +70,22 @@ def test_logged_columns_match_shared_convention():
     assert metrics["rho_sign"].between(0.0, 2.0).all()
     # Default lambda_clip should be the lowered value.
     assert metrics["lambda_clip"].iloc[0] == 15.0
+
+
+def test_residual_columns_present_and_nonnegative():
+    metrics = run_experiment(n=32, n_steps=500, seed=3407)
+    assert metrics["r_k_mean"].ge(0.0).all()
+    assert metrics["r_k_max"].ge(0.0).all()
+    assert metrics["g_residual_mean"].between(0.0, 1.0).all()
+
+
+def test_residual_gate_decays_after_heat_death():
+    metrics = run_experiment(n=32, n_steps=500, seed=3407)
+    hd_steps = metrics[metrics["is_heat_death"] == 1]["step"]
+    assert not hd_steps.empty
+    first_hd = int(hd_steps.iloc[0])
+    post = metrics.iloc[first_hd:]
+    assert post["g_residual_mean"].iloc[-1] <= post["g_residual_mean"].iloc[0] + 1e-6
 
 
 def test_dark_entropy_proxy_nonzero_after_initial_transient():
