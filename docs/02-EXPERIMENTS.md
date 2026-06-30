@@ -164,36 +164,63 @@ the `kl_S` weight (the semantic coupling strength analogue to the BEC barrier he
 observing whether the system produces cyclic big bang/big crunch dynamics at low coupling or
 heat death at high coupling.
 
+> **Updated from exp2/3407 observations (2026-06-30).** Five parameters and three success
+> criteria have been revised based on the exp2 seed=3407 analysis. Changes are marked ★.
+
 ### Setup
 
 **Dataset:** 4 isotropic Gaussian clusters in \(\mathbb{R}^8\), 1000 samples each, with
 inter-cluster separation controlled by a signal-to-noise ratio parameter \(\rho \in \{1, 3, 10\}\).
 The 8-D embeddings are the direct input \(x \in \mathbb{R}^{B \times 8}\).
 
-**Model:** Full ESDM with `dim=8`, `n_steps=2`. `SpectralLoadingDecoder` produces a \(8 \times 8\)
+**Model:** Full ESDM with `dim=8`, `n_steps=2`, `bright_modes=8` (= `dim`, matching the
+`bright_modes=F` convention confirmed in exp2). ★ `SpectralLoadingDecoder` produces a \(8 \times 8\)
 wiring Laplacian \(L(z)\). The `EntropicDiffusionDecoder` uses the global (non-per-mode) schedule.
 
-**Sweep:** Train 5 independent runs per (`kl_S_weight`, \(\rho\)) combination:
+**★ `kl_decay` sweep added:** exp2/3407 showed that `kl_decay=0.08` exhausts the entropy
+budget by step ~100 of 400, leaving 75 % of the run in the full-noise regime. Exp 3 therefore
+sweeps `kl_decay` jointly with `kl_S_weight` to disentangle barrier-height effects from
+schedule-collapse effects.
+
+**★ `lambda_clip` reduced:** the exp2 pump explosion (Λ hits 100 at step 257) froze the
+forcing term for the last 57 % of the run. Exp 3 uses `lambda_clip=10` as the default, with
+one sub-run at `lambda_clip=100` retained for comparison.
+
+**Sweep:** Train 5 independent runs per (`kl_S_weight`, `kl_decay`, \(\rho\)) combination:
 
 ```
-kl_S_weight in {0.001, 0.01, 0.05, 0.2, 1.0}   (5 barrier heights)
-rho         in {1, 3, 10}                         (3 cluster separations)
+kl_S_weight in {0.001, 0.01, 0.05, 0.2, 1.0}      (5 barrier heights)
+kl_decay    in {0.01, 0.03, 0.08}                   (★ 3 schedule speeds; 0.08 retained as control)
+rho         in {1, 3, 10}                            (3 cluster separations)
+lambda_clip in {10, 100}                             (★ 2 pump caps; 100 is exp2 control)
 ```
 
-Total: 15 conditions × 5 seeds = 75 runs. Each run: 2000 training steps, batch size 64.
+Total: 5 × 3 × 3 × 2 × 5 seeds = 450 runs.  
+For the primary result figure (analogous to Barontini Fig. 2) use `kl_decay=0.03`,
+`lambda_clip=10`, `rho=3` (the recommended baseline condition).
+
+Each run: 2000 training steps, batch size 64.
 
 **Metrics logged per step:**
 
 | Metric | Role |
 |--------|------|
 | `tau_n` | Entropic time trajectory — main observable (analogous to Barontini Fig. 2) |
+| `kl_tau` | Bright-sector KL (decays to zero at convergence) |
+| `dark_entropy` | ★ Dark-sector KL — must be logged; confirms dual-sector partition |
+| `conserved` | ★ Dual-sector conservation residual; must equal `kl_tau + dark_entropy` to < 1e-10 |
+| `dark_entropy_floor` | ★ Value of `dark_entropy` at convergence; expected 40–60 % of S₀ |
 | `N_active` | Mode activation curve |
-| `conserved` | Entropy conservation residual — should be \(< 0.05 S_0\) |
-| `rho_sign` | Interference ratio — tracks confidence regime |
+| `rho_sign` | Interference ratio — tracks constructive/destructive phase transitions |
+| `rho_sign_crossing_step` | ★ Step at which `rho_sign` first crosses back below 1.0 |
+| `Lambda_tau` | Pump amplitude — flag if cap is hit before step 1000 |
+| `lambda_cap_step` | ★ Step at which Λ first hits `lambda_clip`; healthy > 1500 of 2000 |
+| `g_mean` | ★ WHT gate mean activity (requires `bright_modes` gate vector to be logged) |
+| `g_entropy` | ★ WHT gate sequency entropy — monitors annealing progress |
 | `ELBO` | Total loss |
-| `kl_tau`, `kl_z`, `kl_S` | Individual ELBO terms |
+| `kl_z`, `kl_S` | Individual ELBO terms |
 
-**Expected \(\tau_n\) curves by regime:**
+**Expected \(\tau_n\) curves by regime (at `kl_decay=0.03`, `lambda_clip=10`):**
 
 | `kl_S_weight` | Predicted \(\tau_n\) shape | Analogue |
 |---------------|---------------------------|----------|
@@ -203,13 +230,30 @@ Total: 15 conditions × 5 seeds = 75 runs. Each run: 2000 training steps, batch 
 | 0.2 | Slow expansion, early plateau | Intermediate-high |
 | 1.0 | Near-flat from the start (heat death) | High barrier |
 
+**★ Expected `dark_entropy` behaviour by regime:**
+
+| `kl_S_weight` | Expected `dark_entropy` floor | Interpretation |
+|---------------|-------------------------------|----------------|
+| 0.001 | Oscillates; does not converge | Active big bang/crunch cycling |
+| 0.01–0.05 | Converges to 40–60 % of S₀ | Stable dark semantic basin |
+| 0.2–1.0 | Converges fast, > 70 % of S₀ | Premature dark dominance / heat death |
+
 ### Success Criteria
 
 - For `kl_S_weight = 0.001`, at least 2 identifiable \(\tau_n\) oscillation cycles visible in
   the trajectory plot.
 - For `kl_S_weight = 1.0`, `is_heat_death()` fires before step 500 in at least 4/5 seeds.
-- `conserved` \(< 0.1 \cdot S_0\) for all steps in all runs (weak conservation; strict criterion
-  is \(< 0.05\)).
+- ★ **Entropy conservation:** `|conserved - (kl_tau + dark_entropy)| < 1e-10` for all steps
+  in all runs (machine-precision conservation as demonstrated in exp2/3407).
+- ★ **Dark entropy floor:** at convergence, `dark_entropy` stabilises to a finite positive
+  value in the range 40–70 % of S₀ for `kl_S_weight ∈ {0.01, 0.05, 0.2}`. A floor of 0 or
+  > 90 % of S₀ indicates dark sector accounting failure.
+- ★ **`rho_sign` oscillation:** for `kl_S_weight ≤ 0.05`, `rho_sign` must exhibit at least one
+  crossing below 1.0 (constructive dominant) after an initial destructive-dominant phase.
+  The crossing step should appear before step 1500 in at least 3/5 seeds.
+- ★ **`lambda_cap_step` > 1500:** with `lambda_clip=10` and `kl_decay=0.03`, the pump should
+  not hit the cap before 75 % of training has elapsed. If `lambda_cap_step < 1000` in any run,
+  reduce `kl_decay` further or switch to `lambda_clip=5`.
 - ELBO decreases monotonically after a burn-in of 200 steps for moderate `kl_S_weight` (0.05).
 - Cluster separation \(\rho\) does not change the qualitative shape of the `tau_n` trajectory for
   a given `kl_S_weight` — only the absolute values change.
@@ -219,8 +263,21 @@ Total: 15 conditions × 5 seeds = 75 runs. Each run: 2000 training steps, batch 
 - **All runs produce heat death regardless of `kl_S_weight`:** The dark sector entropy
   `dark_entropy` is not being computed from inactive modes. Check that `SpectralLoadingDecoder`
   is correctly feeding `kl_dark` back to `clock.step()`.
+- **★ `dark_entropy` is zero throughout:** `kl_dark` is not being populated; `dark_entropy`
+  logging is missing from `clock.step()`. See exp2/3407: `dark_entropy` was 0 in the previous
+  CSV schema and was absent from the conservation check. The exp2 final run confirmed
+  `dark_entropy` must be logged explicitly.
 - **`conserved` explodes:** The entropy conservation ELBO term weight `beta` is too small.
   Try `beta = 1/S_0` as suggested in §11 of the design doc.
+- **★ `lambda_cap_step` < 500 even with `lambda_clip=10`:** The clock's `delta_tau` is
+  converging too fast — `kl_decay` is still too large for a 2000-step run. The
+  exp2/3407 run with `kl_decay=0.08` and 400 steps hit the cap at step 257 (64 % through).
+  For 2000 steps target `kl_decay ≤ 0.01` to keep the pump active past step 1500.
+- **★ `rho_sign` never oscillates (stays destructive throughout):** The system begins and
+  stays in a net-destructive interference configuration. Inspect the eigenvalue sign of the
+  initial `rho_plus/minus` ratio: if `rho_sign > 1` at step 0 for all seeds, the initial
+  `Q_{-1}` and `Q_0` conditions produce net-destructive interference. Perturb the
+  initialisation noise scale.
 - **`tau_n` is monotonically increasing without oscillation at any `kl_S_weight`:** The
   `kl_tau` signal is always positive (no mode deactivation). Check that `N_active` actually
   decreases during contraction phases and that deactivated modes contribute to `kl_dark`.
@@ -230,7 +287,8 @@ Total: 15 conditions × 5 seeds = 75 runs. Each run: 2000 training steps, batch 
 The primary experimental validation of §9 and the two-sector partition in §2. Produces the
 ESDM analogue of Barontini's Fig. 2. The `tau_n` vs. training-step curves from this experiment
 are the key evidence that the entropic clock reproduces big bang/big crunch thermodynamic
-behaviour in semantic space.
+behaviour in semantic space. The ★-marked additions connect directly to the dual-space
+hypothesis in §10.2 and the WHT spectral filter (§4.3) introduced in the 2026-06-30 doc update.
 
 ---
 
@@ -422,9 +480,9 @@ Exp 1 (Clock unit test)
 ```
 
 Experiments 1 and 2 can be run locally on CPU in under 10 minutes each. Experiment 3 requires a
-single GPU (2–4 hours for all 75 runs). Experiment 4 requires a single GPU (3–6 hours).
-Experiment 5 requires a single A100 or equivalent (estimated 12–24 hours for 50,000 steps at
-batch 256 in bfloat16).
+single GPU (2–4 hours for all 450 runs with the expanded sweep). Experiment 4 requires a single
+GPU (3–6 hours). Experiment 5 requires a single A100 or equivalent (estimated 12–24 hours for
+50,000 steps at batch 256 in bfloat16).
 
 ---
 
@@ -434,8 +492,20 @@ All experiments write per-step metrics to a CSV at `runs/<exp_id>/<seed>/metrics
 columns:
 
 ```
-step, tau_n, delta_tau, Lambda_tau, alpha_bar, N_active, conserved, rho_sign,
-elbo, kl_z, kl_S, kl_tau, recon_mse, is_heat_death
+step, seed, kl_decay, clock_eps, lambda_clip, bright_modes,
+kl_tau, dark_entropy, conserved,
+Q_t_0, rho_plus, rho_minus, rho_sign,
+dt, dt_cfl_bound, delta_tau, tau_n,
+Lambda_tau, alpha_bar, is_heat_death
+```
+
+★ Columns added from exp2/3407: `seed`, `kl_decay`, `clock_eps`, `lambda_clip`, `bright_modes`,
+`dark_entropy`. These are required from Exp 3 onward.
+
+Additional columns for Exp 3+ that require WHT gate logging:
+
+```
+g_mean, g_entropy, lambda_cap_step, rho_sign_crossing_step
 ```
 
 The `tau_n` column is the primary axis for all trajectory plots. Wall-clock step is recorded
