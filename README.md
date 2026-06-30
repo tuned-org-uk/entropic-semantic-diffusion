@@ -178,8 +178,23 @@ Using Barontini's cosmological language, a healthy training run passes through f
 ```
 enthropy-semantic-diffusion/
 ├── README.md                    ← this file
-└── docs/
-    └── 00-DESIGN.md             ← full architecture design document
+├── docs/
+│   ├── 00-DESIGN.md             ← full architecture design document
+│   ├── 01-IMPLEMENTATION-PLAN.md
+│   └── 02-EXPERIMENTS.md        ← experiment ladder (Exp 1–5)
+├── esdm/                        ← Python package
+│   ├── clock.py
+│   ├── experiments/             ← standalone experiment scripts
+│   │   └── exp1.py
+│   ├── laplacian.py
+│   ├── model.py
+│   └── ...
+├── scripts/                     ← thin CLI wrappers
+│   ├── run_exp1.py
+│   ├── train.py
+│   └── ...
+├── tests/                       ← pytest suite
+└── runs/                        ← experiment outputs (created on run)
 ```
 
 ### docs/00-DESIGN.md
@@ -198,6 +213,49 @@ The design document covers:
 10. **Thermal Time and ArrowSpace** — connections to Connes-Rovelli, dual-space hypothesis, recursive semantic search
 11. **Open Questions** — five concrete research questions
 12. **Implementation Checklist** — ten actionable tasks
+
+---
+
+## Running the Experiments
+
+The experiment ladder is described in `docs/02-EXPERIMENTS.md`.  Each experiment can be run from the repository root with `uv` or the project virtual environment.
+
+### Experiment 1 — Entropic Clock Calibration
+
+A pure unit test of `EntropicClock` on a synthetic two-community graph with a scripted four-phase KL signal:
+
+```bash
+.venv/bin/python scripts/run_exp1.py
+```
+
+This sweeps the bridge weight `w ∈ {0.0, 0.01, 0.1, 1.0}` and writes per-step metrics to:
+
+```
+runs/exp1/<seed>/w_<weight>/metrics.csv
+```
+
+The script asserts the success criteria from `docs/02-EXPERIMENTS.md` §Experiment 1:
+- `tau_n` is flat during phases A and C,
+- `tau_n` advances during phases B and D,
+- `alpha_bar(tau / tau_max_est = 0.5) = 0.5`,
+- `Lambda_tau` stays finite and clipped,
+- no NaN/Inf in buffers, and no heat death within 250 steps.
+
+Run a custom output directory or seed:
+
+```bash
+.venv/bin/python scripts/run_exp1.py --output-dir runs/exp1 --seed 42
+```
+
+### Test Suite
+
+Run all unit and experiment tests:
+
+```bash
+.venv/bin/python -m pytest
+```
+
+Experiment 1 is also covered by `tests/test_exp1.py`.
 
 ---
 
