@@ -9,6 +9,8 @@ See docs/01-IMPLEMENTATION-PLAN.md §7 for the full specification.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -19,6 +21,7 @@ from esdm.elbo  import esdm_elbo
 from esdm.spectral_decoder import SpectralLoadingDecoder
 from esdm.vibrational import VibrationalStateBlock
 from esdm._vendor.spectral import spectral_basis_kl
+from esdm.wht_filter import GraphWHTFilter
 
 
 @dataclass
@@ -46,6 +49,13 @@ class ESDM(nn.Module):
         self.n_modes = cfg["model"]["n_modes"]
         self.mode_threshold = cfg["model"].get("mode_threshold", 0.01)
         self.lam_s = cfg["model"].get("lam_s", 1.0)
+
+        # Optional Graph-WHT spectral pre-filter for the diffusion state.
+        # When provided, the vibrational state Q is filtered with heat-kernel
+        # time equal to the current clock tau_n before diffusion decoding.
+        self.wht_filter: Optional[GraphWHTFilter] = cfg["model"].get(
+            "wht_filter", None
+        )
 
         self.clock = EntropicClock(
             eps=cfg["clock"]["eps"],
@@ -215,6 +225,14 @@ class ESDM(nn.Module):
         self._last_rho_plus = rho_plus.detach().clone()
         self._last_rho_minus = rho_minus.detach().clone()
         self._last_N_active.fill_(int(spectral["N_active"].item()))
+
+        # 5. Optional timestep-aware Graph-WHT smoothing of the diffusion state.
+        if self.wht_filter is not None:
+            Q_np = Q.detach().cpu().numpy()
+            Q_np = self.wht_filter.filter_batch(
+                Q_np, t=float(self.clock.tau_n)
+            )
+            Q = torch.from_numpy(Q_np).to(device=Q.device, dtype=Q.dtype)
 
         # 5. Entropic diffusion decode: alpha_bar from clock
         x_hat = self.diffusion_decoder(Q, L_z, self.clock, noise=torch.zeros_like(Q))

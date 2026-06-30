@@ -98,6 +98,50 @@ def _iwht_sequency_inplace(x: np.ndarray) -> np.ndarray:
     # Because we normalise by 1/sqrt(N) in forward,  IWHT = WHT as well.
     return _wht_sequency_inplace(x)
 
+def _wht_matrix_inplace(X: np.ndarray) -> np.ndarray:
+    """
+    In-place sequency-ordered Walsh-Hadamard Transform along the last axis.
+    Input shape (... , P) where P is a power of 2.
+    Returns the transformed array (same object, normalised by 1/sqrt(P)).
+    """
+    P = X.shape[-1]
+    assert P & (P - 1) == 0, "WHT length must be a power of 2"
+
+    # Standard (natural-order) Fast WHT along last axis -------------------
+    h = 1
+    while h < P:
+        step = h * 2
+        for i in range(0, P, step):
+            j_slice = slice(i, i + h)
+            k_slice = slice(i + h, i + step)
+            a = X[..., j_slice]
+            b = X[..., k_slice]
+            # Materialise sums/differences before writing back, because a and
+            # b are views into X.
+            a_plus_b = a + b
+            a_minus_b = a - b
+            X[..., j_slice] = a_plus_b
+            X[..., k_slice] = a_minus_b
+        h *= 2
+
+    # Bit-reversal permutation to reach sequency order --------------------
+    log2p = int(np.log2(P))
+    perm = np.arange(P, dtype=np.int32)
+    gray = perm ^ (perm >> 1)
+    bits_reversed = np.zeros(P, dtype=np.int32)
+    for bit in range(log2p):
+        bits_reversed |= ((gray >> bit) & 1) << (log2p - 1 - bit)
+    X[..., :] = X[..., bits_reversed]
+
+    X /= np.sqrt(P)
+    return X
+
+
+def _iwht_matrix_inplace(X: np.ndarray) -> np.ndarray:
+    """Inverse sequency WHT along the last axis."""
+    return _wht_matrix_inplace(X)
+
+
 
 # ---------------------------------------------------------------------------
 # Fiedler ordering helpers
@@ -338,10 +382,49 @@ class GraphWHTFilter:
         t: float = 1.0,
     ) -> np.ndarray:
         """
-        Apply the filter to each row of matrix X  (N×F).
-        Returns filtered matrix of same shape.
+        Apply the filter to the last axis of array ``X``.
+
+        ``X`` may be any shape whose last dimension equals ``F``.  The
+        operation is vectorised over all leading axes, avoiding a Python
+        loop over rows.
         """
-        return np.vstack([self.apply(row, h, t) for row in X])
+        if not self._fitted:
+            raise RuntimeError("Call .fit() before .filter_batch()")
+
+        X = np.asarray(X, dtype=np.float64)
+        if X.shape[-1] != self.F:
+            raise ValueError(
+                f"Expected last axis of size {self.F}, got {X.shape[-1]}"
+            )
+
+        if h is None:
+            h = heat_kernel(t)
+
+        assert self.P is not None
+        assert self.wht_lambdas is not None
+        assert self.fiedler_order is not None
+        assert self.inv_order is not None
+
+        # Fiedler re-ordering + zero-padding along the last axis.
+        shape = X.shape[:-1] + (self.P,)
+        X_ordered = np.zeros(shape, dtype=np.float64)
+        X_ordered[..., : self.F] = X[..., self.fiedler_order]
+
+        # Forward WHT on all leading axes at once.
+        X_wht = _wht_matrix_inplace(X_ordered.copy())
+
+        # Spectral filter along the last axis.
+        weights = h(self.wht_lambdas)               # (P,)
+        X_filtered_wht = weights * X_wht
+
+        # Inverse WHT.
+        X_rec = _iwht_matrix_inplace(X_filtered_wht)
+
+        # Unpad + undo Fiedler order.
+        X_rec_F = X_rec[..., : self.F]
+        X_out = X_rec_F[..., self.inv_order]
+
+        return X_out
 
     def filter_matrix(
         self,

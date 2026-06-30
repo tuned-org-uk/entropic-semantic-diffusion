@@ -29,7 +29,6 @@ try:
 except ImportError:  # pragma: no cover
     _SCIPY_AVAILABLE = False
 
-from esdm.wht_filter import GraphWHTFilter
 
 
 class DualSpaceMatrix(nn.Module):
@@ -76,8 +75,6 @@ class DualSpaceMatrix(nn.Module):
         L_F: Union[Tensor, "sp.spmatrix"],  # noqa: F821
         *,
         device: Optional[torch.device] = None,
-        wht_filter: Optional[GraphWHTFilter] = None,
-        wht_t: float = 1.0,
     ) -> None:
         """
         Compute and cache M_N from corpus embeddings V and feature-space
@@ -93,13 +90,6 @@ class DualSpaceMatrix(nn.Module):
             matrix from ``.to_csr()``.
         device : torch.device, optional
             Target device.  Defaults to V.device.
-        wht_filter : GraphWHTFilter, optional
-            Graph-WHT spectral pre-filter.  If supplied, ``L_F`` is smoothed
-            in the feature space before the semantic term is built, suppressing
-            high-frequency Laplacian noise.
-        wht_t : float
-            Heat-kernel time passed to ``wht_filter.filter_matrix`` when
-            ``wht_filter`` is supplied and no custom kernel is provided.
         """
         if device is None:
             device = V.device
@@ -107,11 +97,6 @@ class DualSpaceMatrix(nn.Module):
         V = V.to(device=device, dtype=torch.float64)
         L = self._to_dense(L_F, device=device)  # (F, F)
 
-        # Optional Graph-WHT pre-filter on the feature-space Laplacian.
-        if wht_filter is not None:
-            L_np = L.detach().cpu().numpy()
-            L_np = wht_filter.filter_matrix(L_np, t=wht_t)
-            L = torch.from_numpy(L_np).to(device=device, dtype=torch.float64)
 
         N, F = V.shape
         if L.shape != (F, F):

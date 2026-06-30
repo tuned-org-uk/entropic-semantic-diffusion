@@ -1,12 +1,9 @@
 """
-Tests for the vendored Graph-WHT spectral filter and its integration into
-``DualSpaceMatrix.build()``.
+Tests for the vendored Graph-WHT spectral filter.
 """
 import numpy as np
 import pytest
-import torch
 
-from esdm.laplacian import DualSpaceMatrix
 from esdm.wht_filter import GraphWHTFilter, heat_kernel
 
 
@@ -23,20 +20,13 @@ def L_F():
 
 
 @pytest.fixture()
-def V_and_LF():
-    """Corpus embeddings and feature-space Laplacian for DualSpaceMatrix."""
-    torch.manual_seed(3407)
-    np.random.seed(3407)
-    N, F = 50, 32
-    V = torch.randn(N, F)
-    A = torch.randn(F, F)
-    L_F = A.T @ A
-    return V, L_F
+def rng():
+    return np.random.default_rng(3407)
 
 
-def test_graph_wht_filter_apply_shape(L_F):
+def test_graph_wht_filter_apply_shape(L_F, rng):
     filt = GraphWHTFilter(L_matrix=L_F).fit()
-    x = np.random.default_rng(3407).standard_normal(L_F.shape[0])
+    x = rng.standard_normal(L_F.shape[0])
     x_smooth = filt.apply(x, heat_kernel(t=1.0))
     assert x_smooth.shape == x.shape
 
@@ -56,27 +46,33 @@ def test_filter_matrix_symmetry(L_F):
     assert np.allclose(L_smooth, L_smooth.T, atol=1e-12)
 
 
-def test_dual_space_matrix_build_with_wht_filter(V_and_LF):
-    V, L_F = V_and_LF
-    filt = GraphWHTFilter(L_matrix=L_F.detach().cpu().numpy()).fit()
+def test_filter_batch_vectorised_shape(L_F, rng):
+    filt = GraphWHTFilter(L_matrix=L_F).fit()
+    N = 10
+    X = rng.standard_normal((N, L_F.shape[0]))
+    X_smooth = filt.filter_batch(X, heat_kernel(t=1.0))
+    assert X_smooth.shape == X.shape
+    # Each row should match the scalar apply() result.
+    for i in range(N):
+        assert np.allclose(X_smooth[i], filt.apply(X[i], heat_kernel(t=1.0)))
 
-    dsm = DualSpaceMatrix(alpha=0.5, beta=0.5)
-    dsm.build(V, L_F, wht_filter=filt, wht_t=1.0)
 
-    assert dsm.M is not None
-    assert torch.allclose(dsm.M, dsm.M.T, atol=1e-6)
-    assert torch.all(torch.isfinite(dsm.eigvals))
+def test_spectral_attenuation(L_F, rng):
+    """High-frequency energy must decrease after heat-kernel filtering."""
+    filt = GraphWHTFilter(L_matrix=L_F).fit()
+    x = rng.standard_normal(L_F.shape[0])
 
+    lambdas, energy_raw = filt.spectral_energy(x)
+    x_smooth = filt.apply(x, heat_kernel(t=1.0))
+    _, energy_smooth = filt.spectral_energy(x_smooth)
 
-def test_dual_space_matrix_wht_filter_changes_semantic_term(V_and_LF):
-    V, L_F = V_and_LF
-    filt = GraphWHTFilter(L_matrix=L_F.detach().cpu().numpy()).fit()
+    # Split frequencies at the median approximate WHT eigenvalue.
+    median_lambda = np.median(lambdas)
+    high_freq = lambdas > median_lambda
 
-    dsm_raw = DualSpaceMatrix(alpha=0.0, beta=1.0)
-    dsm_raw.build(V, L_F)
-
-    dsm_smooth = DualSpaceMatrix(alpha=0.0, beta=1.0)
-    dsm_smooth.build(V, L_F, wht_filter=filt, wht_t=1.0)
-
-    # The smoothed semantic term should differ from the raw one.
-    assert not torch.allclose(dsm_raw.M, dsm_smooth.M, atol=1e-6)
+    # High-frequency content must be attenuated.  Low frequencies are damped
+    # less, so the *fraction* of total energy in the high-frequency band must
+    # drop after the low-pass heat kernel.
+    high_fraction_raw = energy_raw[high_freq].sum() / energy_raw.sum()
+    high_fraction_smooth = energy_smooth[high_freq].sum() / energy_smooth.sum()
+    assert high_fraction_smooth < high_fraction_raw
