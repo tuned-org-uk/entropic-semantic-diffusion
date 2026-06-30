@@ -42,8 +42,8 @@ def main() -> None:
     parser.add_argument(
         "--lambda-clip",
         type=float,
-        default=100.0,
-        help="Entropic pump ceiling (default: 100.0)",
+        default=15.0,
+        help="Entropic pump ceiling (default: 15.0)",
     )
     parser.add_argument(
         "--bright-modes",

@@ -46,6 +46,8 @@ def test_logged_columns_match_shared_convention():
         "bright_modes",
         "kl_tau",
         "dark_entropy",
+        "g_mean",
+        "g_entropy",
         "conserved",
         "Q_t_0",
         "rho_plus",
@@ -61,7 +63,10 @@ def test_logged_columns_match_shared_convention():
     }
     assert expected.issubset(set(metrics.columns))
     assert metrics["dark_entropy"].ge(0.0).all()
+    assert metrics["g_entropy"].ge(0.0).all()
     assert metrics["rho_sign"].between(0.0, 2.0).all()
+    # Default lambda_clip should be the lowered value.
+    assert metrics["lambda_clip"].iloc[0] == 15.0
 
 
 def test_dark_entropy_proxy_nonzero_after_initial_transient():

@@ -270,11 +270,12 @@ The script asserts:
 - `rho_plus` and `rho_minus` remain finite and PSD;
 - `dark_entropy` and `conserved` are logged for the entropy-balance diagnostic.
 
-The default `kl_decay=0.08` consumes the entropy budget quickly and collapses
-`alpha_bar` by step ~100, matching the issue's heat-death timing.  Slower
-decays spread the schedule but delay heat death.  The entropic-pump ceiling
-`lambda_clip` and the bright/dark mode split for the spectral dark-entropy
-proxy are also exposed:
+The default `kl_decay=0.08` consumes the entropy budget quickly and matches the
+issue's heat-death timing.  The entropic-pump ceiling defaults to
+`lambda_clip=15.0` so that the Phase-3 pump explosion does not immediately
+saturate.  Slower decays spread the schedule but delay heat death.  The
+bright/dark mode split drives the spectral dark-entropy proxy, and the CSV
+also logs `g_mean` and `g_entropy` for the WHT-gate diagnostic convention:
 
 ```bash
 .venv/bin/python scripts/run_exp2.py --output-dir runs/exp2 --seed 42

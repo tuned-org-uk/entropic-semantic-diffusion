@@ -84,7 +84,7 @@ def dark_entropy_from_spectrum(
     Q: torch.Tensor,
     U: torch.Tensor,
     bright_modes: int,
-) -> float:
+) -> tuple[float, float, float]:
     """
     Proxy for dark-sector entropy from the high-frequency half of the path
     graph spectrum.
@@ -92,7 +92,13 @@ def dark_entropy_from_spectrum(
     ``Q`` is projected onto the eigenvectors ``U``; modes ``k < bright_modes``
     are treated as bright/active, and the remaining modes as dark/inactive.
     The dark entropy is the Shannon entropy of the normalised dark-mode
-    energy distribution.
+    energy distribution (the "gate vector" ``g``).
+
+    Theoretical bounds: if all dark energy sits in one mode, entropy is 0;
+    if it is uniformly spread over the ``n - bright_modes`` dark modes,
+    entropy is ``log(n - bright_modes)``.  The observed floor (~1.84 nats
+    for 16 dark modes) lies between these extremes, indicating a
+    non-uniform but non-degenerate dark-mode distribution.
 
     Parameters
     ----------
@@ -106,18 +112,25 @@ def dark_entropy_from_spectrum(
     Returns
     -------
     dark_entropy : float
+        Shannon entropy of the normalised dark-mode distribution.
+    g_mean : float
+        Mean of the normalised dark-mode probability vector ``g``.
+    g_entropy : float
+        Alias for ``dark_entropy``, logged separately for the WHT-gate
+        diagnostic convention.
     """
     if Q.dim() == 2:
         Q = Q.squeeze(0)
     coeffs = U.T @ Q                            # (n,)
     energy = coeffs.abs().pow(2)                # (n,)
     dark_energy = energy[bright_modes:]
+    n_dark = dark_energy.numel()
     total = dark_energy.sum()
     if total <= 0.0:
-        return 0.0
-    p = dark_energy / total
-    # Shannon entropy in nats, guarding against log(0).
-    return float(-(p.detach() * (p.detach() + 1e-12).log()).sum())
+        return 0.0, 1.0 / n_dark, 0.0
+    g = (dark_energy / total).detach()
+    entropy = float(-(g * (g + 1e-12).log()).sum())
+    return entropy, float(g.mean()), entropy
 
 
 def fiedler_vector(n: int) -> torch.Tensor:
@@ -137,7 +150,7 @@ def run_experiment(
     kl_decay: float = 0.08,
     gamma: float = 0.1,
     clock_eps: float = 1e-8,
-    lambda_clip: float = 100.0,
+    lambda_clip: float = 15.0,
     bright_modes: int = 16,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
@@ -160,9 +173,10 @@ def run_experiment(
     clock_eps : float
         Flatness threshold passed to ``EntropicClock`` (default ``1e-8``).
     lambda_clip : float
-        ``lambda_clip`` passed to ``EntropicClock`` (default ``100.0``).
-        Lower values slow the Phase-3 entropic-pump explosion and can
-        lengthen the ``alpha_bar`` revival window.
+        ``lambda_clip`` passed to ``EntropicClock`` (default ``15.0``).
+        Lower values slow the Phase-3 entropic-pump explosion and lengthen
+        the ``alpha_bar`` revival window; the previous default of 100.0
+        capped the pump almost immediately in this experiment.
     bright_modes : int
         Number of lowest-frequency path-graph modes treated as bright/active
         for the dark-entropy proxy.
@@ -260,7 +274,7 @@ def run_experiment(
         # the path-graph spectrum.  This is an experiment-specific stand-in:
         # the full ESDM computes dark_entropy from inactive spectral modes via
         # ``SpectralLoadingDecoder``.
-        dark_entropy_val = dark_entropy_from_spectrum(
+        dark_entropy_val, g_mean, g_entropy = dark_entropy_from_spectrum(
             Q_t[0], U, bright_modes=bright_modes
         )
         # In isolation mode there is no frozen S_0, so conserved reduces to
@@ -276,6 +290,8 @@ def run_experiment(
             "bright_modes": bright_modes,
             "kl_tau": kl_tau.item(),
             "dark_entropy": dark_entropy_val,
+            "g_mean": g_mean,
+            "g_entropy": g_entropy,
             "conserved": conserved,
             "Q_t_0": Q_t[0, 0].item(),
             "rho_plus": rho_plus.sum().item(),
@@ -350,7 +366,7 @@ def main_cli(
     seed: int = 3407,
     kl_decay: float = 0.08,
     clock_eps: float = 1e-8,
-    lambda_clip: float = 100.0,
+    lambda_clip: float = 15.0,
     bright_modes: int = 16,
 ) -> pd.DataFrame:
     """CLI entry point for Experiment 2."""

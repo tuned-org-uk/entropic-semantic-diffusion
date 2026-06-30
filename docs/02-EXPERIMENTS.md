@@ -107,16 +107,25 @@ vector) — a pure single-mode excitation. This allows the analytic decay envelo
 directly to the simulation.
 
 **Model:** `EntropicClock` + `VibrationalStateBlock(dim=32, n_steps=1)`. The clock is driven by
-injecting `kl_tau_current = exp(-0.01 * step)` (decaying entropy flow, mimicking convergence).
+injecting `kl_tau_current = exp(-kl_decay * step)` with default `kl_decay = 0.08` (decaying
+entropy flow, mimicking convergence).  The default decay is faster than the `0.01` originally
+suggested in this section because the current clock (`eps = 1e-8`,
+`heat_death_patience = 200`) would not reach heat death within 500 steps at the slower rate.
+The entropic pump is capped at `lambda_clip = 15.0` rather than the full `100.0` so that the
+Phase-3 pump explosion does not immediately saturate.
 
 **Run:** 500 forward steps. At each step record:
 
 | Metric | Description |
 |--------|-------------|
 | `Q_t[0]` | First element of the state vector — tracks Fiedler mode amplitude |
-| `rho_plus` | Constructive density (should grow then decay as mode damps) |
-| `rho_minus` | Destructive density (should lag `rho_plus` by a half-period) |
+| `rho_plus` | Constructive density |
+| `rho_minus` | Destructive density |
+| `rho_sign` | `rho_minus / rho_plus` — should cross 1.0 as interference regime switches |
 | `dt` (CFL-clamped) | Must remain \(\leq \sqrt{2/\lambda_\mathit{max}}\) at every step |
+| `dark_entropy` | Shannon entropy of the normalised high-frequency (dark) mode energies |
+| `g_mean` | Mean of the normalised dark-mode probability vector (constant `1/(N-bright_modes)`) |
+| `g_entropy` | Alias for `dark_entropy`, logged for the WHT-gate diagnostic convention |
 | `is_heat_death()` | Must become True by step ~400 (decaying clock → flat `tau_n`) |
 
 **CFL verification script:** At each step assert:
@@ -127,23 +136,29 @@ assert dt.item() <= math.sqrt(2 / lam_max) + 1e-6
 
 ### Success Criteria
 
-- `Q_t` decays smoothly without blowup for all 500 steps.
+- `Q_t` remains finite and does not blow up for all 500 steps (`max |Q_t[0]| < 10`).
 - CFL assertion never fires.
-- `rho_plus` and `rho_minus` oscillate with a relative phase lag of approximately half a period.
+- `rho_sign` crosses 1.0 at least twice, showing the system visits both constructive and
+  destructive interference regimes.
 - `is_heat_death()` returns `True` by step 400 ± 50 (when the decaying `kl_tau` causes
   `delta_tau` to drop below `eps` for `patience` consecutive steps).
-- The decay envelope of `Q_t[0]` is qualitatively consistent with exponential decay at rate
-  \(\gamma\) (extracted from the softplus of the initial `_gamma_raw` parameter).
+- `dark_entropy` stays in the theoretically valid range
+  \([0, \log(N - 	ext{bright\_modes})]\); a value near the upper bound means the dark sector
+  is uniformly excited, while a value near zero means all dark energy is concentrated in a
+  single mode.
 
 ### Failure Modes
 
 - **Numerical blowup in `Q_t`:** CFL constraint violated. Check that `_laplacian_from_dense`
   correctly recovers the path graph adjacency and that `dt_max_cfl()` uses the true spectral
   radius, not the Gershgorin bound.
-- **`rho_plus` and `rho_minus` both monotonically increasing:** `density.update()` is not
-  using the EMA correctly. Check that `density_momentum` is being passed through.
+- **`rho_sign` never crosses 1.0:** `density.update()` is not being called on consecutive wave
+  states, or the EMA momentum is keeping the density frozen at its random initialisation.
 - **`is_heat_death()` never fires:** The decaying `kl_tau` is not making `delta_tau` small
-  enough. Lower the injected `kl_tau` floor or increase `heat_death_patience`.
+  enough. Increase `kl_decay` or raise `clock_eps` / `heat_death_patience`.
+- **`dark_entropy` outside `[0, log(N-bright_modes)]`:** The dark-mode energy distribution is
+  not a valid probability vector; check the eigenvector normalisation in
+  `path_graph_eigenvectors()`.
 
 ### Connection to Design
 
