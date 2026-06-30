@@ -252,6 +252,8 @@ class GraphWHTFilter:
         self,
         graph_laplacian=None,
         L_matrix: Optional[np.ndarray] = None,
+        a_tau_scale: float = 5.0,
+        tau_decay_power: float = 1.0,
     ):
         """
         Parameters
@@ -265,6 +267,8 @@ class GraphWHTFilter:
         """
         self._gl = graph_laplacian
         self._L_matrix = L_matrix
+        self.a_tau_scale = float(a_tau_scale)
+        self.tau_decay_power = float(tau_decay_power)
         self.F: Optional[int] = None
         self.P: Optional[int] = None
         self.fiedler_order: Optional[np.ndarray] = None
@@ -320,11 +324,54 @@ class GraphWHTFilter:
         )
         return self
 
+    def _compute_bivariate_gate(
+        self,
+        tau: float,
+        tau_max: float,
+        r_k: Optional[np.ndarray],
+    ) -> np.ndarray:
+        """
+        Compute the Path-A bivariate gate ``g_k(tau, r_k)``.
+
+        The gate is a soft switch over WHT sequency bins.  Early in entropic
+        time the gate is open; as ``tau -> tau_max`` the clock-driven offset
+        closes it regardless of residual magnitude, preserving the heat-death
+        termination invariant.
+        """
+        assert self.P is not None
+        assert self.fiedler_order is not None
+        assert self.F is not None
+
+        norm = float(tau) / max(float(tau_max), 1e-12)
+        norm = float(np.clip(norm, 0.0, 1.0))
+
+        decay = (1.0 - norm) ** self.tau_decay_power
+        growth = norm ** self.tau_decay_power
+
+        # a(tau) weights residual influence; b(tau) provides clock-driven closure.
+        a = self.a_tau_scale * decay
+        b = self.a_tau_scale * (decay - growth)
+
+        # Map per-mode residuals into Fiedler-ordered / padded WHT positions.
+        residual = np.zeros(self.P, dtype=np.float64)
+        if r_k is not None:
+            r = np.asarray(r_k, dtype=np.float64)
+            K = min(len(r), self.F)
+            residual[:K] = r[self.fiedler_order[:K]]
+
+        # f(r) = log(1 + r); add b to close gates at heat death.
+        log_residual = np.log1p(residual)
+        gate = 1.0 / (1.0 + np.exp(-(a * log_residual + b)))
+        return gate
+
     def apply(
         self,
         x: np.ndarray,
         h: Optional[Callable[[np.ndarray], np.ndarray]] = None,
         t: float = 1.0,
+        tau: Optional[float] = None,
+        tau_max: Optional[float] = None,
+        r_k: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """
         Apply the Graph-WHT spectral filter to signal vector x.
@@ -364,6 +411,13 @@ class GraphWHTFilter:
 
         # Step 4: Spectral filter
         weights = h(self.wht_lambdas)               # (P,)
+        if r_k is not None:
+            if tau is None or tau_max is None:
+                raise ValueError(
+                    "tau and tau_max are required when r_k is provided"
+                )
+            gate = self._compute_bivariate_gate(tau, tau_max, r_k)
+            weights = weights * gate
         x_filtered_wht = weights * x_wht
 
         # Step 5: Inverse WHT
@@ -380,6 +434,9 @@ class GraphWHTFilter:
         X: np.ndarray,
         h: Optional[Callable[[np.ndarray], np.ndarray]] = None,
         t: float = 1.0,
+        tau: Optional[float] = None,
+        tau_max: Optional[float] = None,
+        r_k: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """
         Apply the filter to the last axis of array ``X``.
@@ -415,6 +472,13 @@ class GraphWHTFilter:
 
         # Spectral filter along the last axis.
         weights = h(self.wht_lambdas)               # (P,)
+        if r_k is not None:
+            if tau is None or tau_max is None:
+                raise ValueError(
+                    "tau and tau_max are required when r_k is provided"
+                )
+            gate = self._compute_bivariate_gate(tau, tau_max, r_k)
+            weights = weights * gate
         X_filtered_wht = weights * X_wht
 
         # Inverse WHT.
@@ -425,6 +489,31 @@ class GraphWHTFilter:
         X_out = X_rec_F[..., self.inv_order]
 
         return X_out
+
+    def forward(
+        self,
+        x: np.ndarray,
+        tau: Optional[float] = None,
+        tau_max: Optional[float] = None,
+        r_k: Optional[np.ndarray] = None,
+        h: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+        t: float = 1.0,
+    ) -> np.ndarray:
+        """
+        Convenience alias for the WHT filter with optional bivariate gate.
+
+        ``x`` may be 1-D ``(F,)`` or N-D ``(..., F)``.  When ``r_k`` is not
+        provided the gate is bypassed and the behaviour reduces to the
+        original heat-kernel filter.
+        """
+        x = np.asarray(x, dtype=np.float64)
+        if x.ndim == 1:
+            return self.apply(
+                x, h=h, t=t, tau=tau, tau_max=tau_max, r_k=r_k
+            )
+        return self.filter_batch(
+            x, h=h, t=t, tau=tau, tau_max=tau_max, r_k=r_k
+        )
 
     def filter_matrix(
         self,
