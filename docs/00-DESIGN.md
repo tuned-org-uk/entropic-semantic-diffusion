@@ -173,6 +173,44 @@ where $w_k$ is a learned bias, $s > 0$ is a sharpness parameter, and $\sigma$ is
 
 ---
 
+### 4.4 The Entropic Clock as Principled Collocation Strategy
+
+Physics-informed neural networks (PINNs) are typically analysed as three separate design choices stacked together: architecture (what the model can represent), loss function (what the model is pushed toward), and **collocation strategy** (where in the domain the physics residual is evaluated, and therefore where the model is actually held accountable). The collocation choice is the least-discussed of the three but arguably the most consequential for convergence.
+
+The ESDM differs from standard PINNs in a critical respect: the physics is not an external residual penalty — it *is* the forward pass. The wave recurrence is executed, not approximated. Nevertheless, the collocation framing is directly applicable, and the entropic clock provides a principled answer to it.
+
+#### 4.4.1 Temporal collocation: provided by the clock
+
+The entropic clock implements **collocation by temporal gating** through three coupled mechanisms:
+
+1. **Temporal silencing.** When $\Delta\tau \approx 0$, the recurrence term $\Delta\tau^2\,\widetilde{L_f Q_t}$ vanishes algebraically. The wave equation is not evaluated — it is silenced. The model is not held accountable to physics in that region of $\tau$. This is collocation by exclusion: the clock tells you *where not* to evaluate the physics residual.
+
+2. **Amplitude modulation via $\Lambda(\tau)$.** The entropic pump scales the stochastic forcing term $B_t$. High $\Lambda$ means the injection is large relative to the wave restoring force — the system is in a high-entropy, high-residual regime. Low $\Lambda$ (or capped) means the forcing is frozen. The pump is therefore a proxy for residual magnitude, and the clock tracks it explicitly. This is collocation by signal: the clock identifies high-residual regions of $\tau$-space by the magnitude of entropy flow.
+
+3. **Schedule-coupled noise via $\bar{\alpha}(\tau)$.** The entropic diffusion schedule $\bar{\alpha}(\tau)$ directly controls the noise level seen by the decoder. When $\bar{\alpha} \approx 1$ (early $\tau$, entropy flowing), the decoder operates near clean data — low residual, easy learning. When $\bar{\alpha} \approx 0$ (late $\tau$, entropy exhausted), the decoder operates near pure noise — maximum residual. Crucially, from exp2/3407: with `kl_decay=0.08`, $\bar{\alpha}(\tau) \to 3.75 \times 10^{-33}$ by step 100 of 400, meaning the collocation was **forced entirely into the trivial region** (pure noise, flat solution) for 75% of the run. The model was not held accountable anywhere interesting.
+
+Together, these three mechanisms mean the entropic clock is **necessary and sufficient for temporal collocation**: it solves the where-in-$\tau$ problem automatically. Explicit collocation on the $\tau$ axis would be redundant.
+
+The `kl_decay` sweep in Exp 3 is therefore not merely a hyperparameter search — it is a **collocation strategy experiment**: it tests how spreading the entropic time budget across the training trajectory changes where the wave recurrence is meaningfully evaluated. Reducing `kl_decay` from `0.08` to `{0.01, 0.03}` is analogous to switching from uniform-time collocation to a schedule that concentrates evaluation in the non-trivial part of the solution manifold.
+
+#### 4.4.2 Spectral collocation: the open gap
+
+What the clock does *not* provide is **spectral collocation** — a mechanism to concentrate the wave recurrence evaluation on the eigenmodes where the residual is currently largest. The WHT gate $g_k(\tau_k)$ does time-varying mode selection, but it anneals on a fixed sigmoid schedule, not adaptively toward high-residual modes.
+
+A residual-driven formulation would define the per-mode residual as:
+
+$$r_k(\tau) = \left\| \hat{Q}_{t,k} - \hat{Q}_{t-1,k} \right\|_2$$
+
+and drive the gate by:
+
+$$g_k \propto \sigma(r_k(\tau) - \theta_k)$$
+
+If mode $k$ is currently oscillating rapidly (large $r_k$), its gate should be open; if it has damped out (small $r_k$), its gate should close — independently of the global clock. This would make $g_k$ an **adaptive spectral collocator** rather than a scheduled annealer, concentrating the Laplacian filter on the modes with the highest current residual.
+
+The correlation between $r_k(\tau)$ and $\tau_k$ (per-mode entropic time) determines how much additional gain a residual-driven gate provides over the current sigmoid annealing. Logging $r_k$ alongside $g_k$ in Exp 3 is the minimal diagnostic needed to answer this (see Open Question Q8).
+
+---
+
 ## 5. The Entropic Diffusion Schedule
 
 ### 5.1 Problem with the current schedule
@@ -302,6 +340,9 @@ rho_sign     = rho_minus / (rho_plus + eps)           # interference ratio → c
 # WHT filter health
 g_mean       = g.mean().item()               # mean gate activation (1.0 = open, 0.0 = closed)
 g_entropy    = -(g * g.log() + (1-g) * (1-g+eps).log()).mean()  # gate uncertainty
+# Spectral collocation diagnostic (§4.4.2)
+r_k          = (Q_hat_t - Q_hat_t_prev).norm(dim=0)  # per-mode WHT residual
+r_g_corr     = corrcoef(r_k, g)              # correlation between residual and gate: → 1.0 ideal
 ```
 
 ### 8.1 Health check table
@@ -315,6 +356,7 @@ g_entropy    = -(g * g.log() + (1-g) * (1-g+eps).log()).mean()  # gate uncertain
 | `Lambda_tau` | Varies with mode transitions | Explodes ($> 100$) | NaN |
 | `g_mean` | $0.4$–$0.8$ (selective) | $< 0.1$ (over-filtered) | $> 0.99$ (WHT filter inactive) |
 | `g_entropy` | High early, low late (annealing) | Constant throughout | NaN |
+| `r_g_corr` | Increasing toward 1.0 | Flat near 0 | Negative (gate anti-correlated with residual) |
 
 ### 8.2 Regime identification
 
@@ -382,6 +424,8 @@ The ESDM optimisation is not gradient descent on a fixed landscape but a recursi
 
 7. **Relationship between WHT sequency and Laplacian eigenorder.** For sparse feature graphs, WHT sequency and $L_F$ eigenorder are correlated but not identical. Quantifying this gap determines how much the WHT proxy loses relative to exact spectral filtering.
 
+8. **Residual-driven spectral collocation.** The current WHT gate $g_k(\tau_k)$ anneals on a fixed sigmoid of per-mode entropic time. An adaptive alternative drives the gate by the per-mode WHT residual $r_k(\tau) = \|\hat{Q}_{t,k} - \hat{Q}_{t-1,k}\|_2$: open the gate where the residual is large, close it where the mode has damped. The correlation $\mathrm{corrcoef}(r_k, g_k)$ logged in Exp 3 measures how much gain a residual-driven gate would provide over the fixed schedule. If this correlation is low ($< 0.3$) throughout training, the fixed sigmoid is a poor proxy for mode activity and adaptive spectral collocation should be prioritised in Exp 4.
+
 ---
 
 ## 12. Implementation Checklist
@@ -397,10 +441,12 @@ The ESDM optimisation is not gradient descent on a fixed landscape but a recursi
 - [x] Add entropy conservation term to ELBO in `esdm/elbo.py`
 - [x] Add `rho_sign` confidence output to model forward pass (via `clock.step`)
 - [x] Add `conserved` health metric to `ESDM.health_check()`
+- [ ] Add `r_k` (per-mode WHT residual) and `r_g_corr` to step-level CSV log (§4.4.2, Q8)
 - [ ] Experiment: `kl_S` weight sweep (barrier height $V$ analogue) → produce $\tau_n$ vs. step curves
 - [ ] Experiment: verify entropy conservation law across training run
 - [ ] Experiment: Loschmidt echo reversibility test
 - [ ] Experiment: WHT gate sequency analysis — plot $g_k$ vs. eigenvalue rank of $\hat{L}_f$ at convergence
+- [ ] Experiment: residual-driven gate correlation — plot $\mathrm{corrcoef}(r_k, g_k)$ vs. $\tau$ for Exp 3 runs
 
 ---
 
