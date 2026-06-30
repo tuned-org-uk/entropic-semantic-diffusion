@@ -31,6 +31,52 @@ from esdm._vendor.laplacian import DifferentiableLaplacian
 from esdm._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
 
 
+def compute_mode_residuals(
+    Q_t: Tensor,
+    Q_prev: Tensor,
+    bright_modes: Optional[int] = None,
+) -> Tensor:
+    """
+    Per-mode residual between two vibrational states.
+
+    Returns ``r_k = ||Q_{t,k} - Q_{t-1,k}||_2`` for each feature mode ``k``
+    (L2 norm taken over the batch dimension).  The result is a 1-D tensor of
+    length ``F``; non-negative by construction.
+
+    Parameters
+    ----------
+    Q_t : Tensor, shape (B, F) or (B, F, 1)
+        Current vibrational state.
+    Q_prev : Tensor, shape matching ``Q_t``
+        Previous vibrational state.
+    bright_modes : int, optional
+        If provided, only the top-``bright_modes`` residuals are retained;
+        inactive modes are forced to zero.  This lets the residual signal match
+        the bright/dark sector split used by the entropic clock.
+    """
+    if Q_t.dim() == 3:
+        Q_t = Q_t.squeeze(-1)
+    if Q_prev.dim() == 3:
+        Q_prev = Q_prev.squeeze(-1)
+
+    if Q_t.shape != Q_prev.shape:
+        raise ValueError(
+            f"Q_t shape {tuple(Q_t.shape)} does not match Q_prev shape "
+            f"{tuple(Q_prev.shape)}"
+        )
+
+    diff = Q_t - Q_prev
+    r = diff.norm(dim=0)
+
+    if bright_modes is not None and 0 < bright_modes < r.shape[0]:
+        order = torch.argsort(r, descending=True)
+        mask = torch.zeros_like(r, dtype=torch.bool)
+        mask[order[:bright_modes]] = True
+        r = r * mask
+
+    return r
+
+
 def _laplacian_from_dense(L: Tensor, eps: float = 1e-8) -> DifferentiableLaplacian:
     """
     Build a ``DifferentiableLaplacian`` from a dense Laplacian matrix so the

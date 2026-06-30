@@ -7,7 +7,11 @@ import torch
 
 from esdm._vendor.laplacian import DifferentiableLaplacian
 from esdm._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
-from esdm.vibrational import VibrationalStateBlock, _laplacian_from_dense
+from esdm.vibrational import (
+    VibrationalStateBlock,
+    _laplacian_from_dense,
+    compute_mode_residuals,
+)
 
 
 def _random_L_f(F: int):
@@ -111,3 +115,34 @@ def test_vibrational_rho_non_negative():
     # PSD matrices have non-negative diagonals.
     assert (rho_plus.diag() >= -1e-6).all()
     assert (rho_minus.diag() >= -1e-6).all()
+
+
+# ---------------------------------------------------------------------------
+# Mode residuals for the bivariate WHT gate (Path A).
+# ---------------------------------------------------------------------------
+
+
+def test_compute_mode_residuals_zero_when_identical():
+    """Identical consecutive states produce zero residual per mode."""
+    torch.manual_seed(5)
+    F = 8
+    B = 4
+    Q_t = torch.randn(B, F)
+    r = compute_mode_residuals(Q_t, Q_t)
+    assert r.shape == (F,)
+    assert torch.allclose(r, torch.zeros(F), atol=1e-6)
+
+
+def test_compute_mode_residuals_known_difference():
+    """A pure single-mode step concentrates residual on that mode."""
+    B = 3
+    F = 8
+    Q_t = torch.zeros(B, F)
+    Q_prev = torch.zeros(B, F)
+    Q_prev[:, 3] = 1.0
+    r = compute_mode_residuals(Q_t, Q_prev)
+    expected = torch.zeros(F)
+    expected[3] = float(B) ** 0.5  # L2 norm over the batch dimension
+    assert torch.allclose(r, expected, atol=1e-6)
+    assert (r[:3] == 0).all()
+    assert (r[4:] == 0).all()
