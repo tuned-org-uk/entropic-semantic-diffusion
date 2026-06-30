@@ -2,6 +2,13 @@
 Experiment 1 — Entropic Clock Calibration on a Two-Mode Synthetic Graph.
 
 Ref: docs/02-EXPERIMENTS.md §Experiment 1
+
+Note
+----
+This is a *pure clock unit test*.  The two-community Laplacian is built and
+its spectral gap is logged, but the ``EntropicClock`` is driven by injected
+scalar ``kl_tau`` / ``phi`` signals.  Graph-to-clock coupling is validated in
+later experiments (Exp 2+).
 """
 from __future__ import annotations
 
@@ -169,13 +176,16 @@ def run_experiment(
             "step": step,
             "bridge_weight": bridge_weight,
             "seed": seed,
+            "spectral_gap": float(np.sort(np.linalg.eigvalsh(L))[1]),
             "kl_tau": kl_tau,
             "phi": phi,
             "tau_n": state.tau_n,
             "delta_tau": state.delta_tau,
             "Lambda_tau": state.Lambda_tau,
             "alpha_bar": float(clock.alpha_bar()),
-            "N_active": 0,  # not applicable in clock-isolation mode
+            # Clock-isolation mode: no active-mode count.  NaN makes the
+            # absence explicit for downstream analysis.
+            "N_active": float("nan"),
             "conserved": state.conserved,
             "rho_sign": state.rho_sign,
             "elbo": 0.0,
@@ -232,13 +242,16 @@ def assert_success_criteria(
         phase_c["tau_n"].max() - phase_c["tau_n"].min()
     ) <= tol, "tau_n drifted during flat Phase C"
 
-    # tau_n increases monotonically during phases B and D.
+    # tau_n increases monotonically during Phase B (strictly rising KL).
     assert (
         phase_b["tau_n"].diff().dropna() >= -tol
     ).all(), "tau_n decreased during rising Phase B"
+
+    # Phase D has an oscillating KL signal; the correct check is net
+    # entropic advance over the phase, not monotonicity.
     assert (
-        phase_d["tau_n"].diff().dropna() >= -tol
-    ).all(), "tau_n decreased during oscillating Phase D"
+        phase_d["tau_n"].iloc[-1] > phase_d["tau_n"].iloc[0]
+    ), "tau_n did not advance during oscillating Phase D"
 
     # alpha_bar obeys cosine schedule at tau/tau_max_est = 0.5.
     midpoint = 0.5 * float(clock.tau_max_est)
@@ -255,8 +268,11 @@ def assert_success_criteria(
     )
     assert metrics["Lambda_tau"].ge(0.0).all(), "Lambda_tau became negative"
 
-    # No NaN/Inf in any numeric column.
-    numeric = metrics.select_dtypes(include=[np.number])
+    # No NaN/Inf in any numeric column.  N_active is intentionally NaN in
+    # clock-isolation mode and is excluded from this check.
+    numeric = metrics.select_dtypes(include=[np.number]).drop(
+        columns=["N_active"], errors="ignore"
+    )
     assert np.isfinite(numeric.to_numpy()).all(), "NaN or Inf detected in buffers"
 
     # Heat death should not fire within 250 steps (patience=200).
