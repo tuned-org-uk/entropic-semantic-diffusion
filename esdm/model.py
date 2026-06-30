@@ -19,7 +19,7 @@ from esdm.clock import EntropicClock, ClockState
 from esdm.diffusion_decoder import EntropicDiffusionDecoder
 from esdm.elbo  import esdm_elbo
 from esdm.spectral_decoder import SpectralLoadingDecoder
-from esdm.vibrational import VibrationalStateBlock
+from esdm.vibrational import VibrationalStateBlock, compute_mode_residuals
 from esdm._vendor.spectral import spectral_basis_kl
 from esdm.wht_filter import GraphWHTFilter
 
@@ -67,6 +67,7 @@ class ESDM(nn.Module):
         # PyTorch >= 1.8 supports None buffers (pyproject requires >= 2.3).
         self.register_buffer("S_0", None)  # set on first forward pass
         self.register_buffer("_last_N_active", torch.tensor(0))
+        self.register_buffer("_last_Q", None)  # previous raw vibrational state
 
         # rho buffers are updated from the vibrational block after each step
         # and fed back to the clock on the next step.  Initialised as identity
@@ -227,12 +228,29 @@ class ESDM(nn.Module):
         self._last_N_active.fill_(int(spectral["N_active"].item()))
 
         # 5. Optional timestep-aware Graph-WHT smoothing of the diffusion state.
+        Q_raw = Q
         if self.wht_filter is not None:
-            Q_np = Q.detach().cpu().numpy()
-            Q_np = self.wht_filter.filter_batch(
-                Q_np, t=float(self.clock.tau_n)
+            Q_prev = (
+                self._last_Q
+                if self._last_Q is not None
+                else torch.zeros_like(Q_raw)
+            )
+            r_k = compute_mode_residuals(
+                Q_raw, Q_prev, bright_modes=self.n_modes
+            )
+            Q_np = Q_raw.detach().cpu().numpy()
+            r_k_np = r_k.detach().cpu().numpy()
+            Q_np = self.wht_filter.forward(
+                Q_np,
+                tau=float(self.clock.tau_n),
+                tau_max=float(self.clock.tau_max_est),
+                r_k=r_k_np,
+                t=float(self.clock.tau_n),
             )
             Q = torch.from_numpy(Q_np).to(device=Q.device, dtype=Q.dtype)
+
+        # Persist the raw vibrational state for the next step's residual.
+        self._last_Q = Q_raw.detach().clone()
 
         # 5. Entropic diffusion decode: alpha_bar from clock
         x_hat = self.diffusion_decoder(Q, L_z, self.clock, noise=torch.zeros_like(Q))
