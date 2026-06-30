@@ -65,6 +65,61 @@ def path_graph_eigenvalues(n: int) -> np.ndarray:
     return 2.0 - 2.0 * np.cos(np.pi * k / n)
 
 
+def path_graph_eigenvectors(n: int) -> torch.Tensor:
+    """
+    Analytic eigenvectors of the n-node path graph Laplacian.
+
+    ``U[:, k]`` is the k-th eigenvector: ``cos(π·k·(i+0.5)/n)`` for
+    ``i = 0, …, n-1``.
+    """
+    i = torch.arange(n, dtype=torch.float64).unsqueeze(1)
+    k = torch.arange(n, dtype=torch.float64).unsqueeze(0)
+    U = torch.cos(math.pi * k * (i + 0.5) / n)
+    # Normalise each eigenvector.
+    norms = U.norm(dim=0, keepdim=True)
+    return U / norms.clamp(min=1e-12)
+
+
+def dark_entropy_from_spectrum(
+    Q: torch.Tensor,
+    U: torch.Tensor,
+    bright_modes: int,
+) -> float:
+    """
+    Proxy for dark-sector entropy from the high-frequency half of the path
+    graph spectrum.
+
+    ``Q`` is projected onto the eigenvectors ``U``; modes ``k < bright_modes``
+    are treated as bright/active, and the remaining modes as dark/inactive.
+    The dark entropy is the Shannon entropy of the normalised dark-mode
+    energy distribution.
+
+    Parameters
+    ----------
+    Q : Tensor, shape (n,) or (1, n)
+        Vibrational state.
+    U : Tensor, shape (n, n)
+        Eigenvector matrix.
+    bright_modes : int
+        Number of lowest-frequency modes considered bright.
+
+    Returns
+    -------
+    dark_entropy : float
+    """
+    if Q.dim() == 2:
+        Q = Q.squeeze(0)
+    coeffs = U.T @ Q                            # (n,)
+    energy = coeffs.abs().pow(2)                # (n,)
+    dark_energy = energy[bright_modes:]
+    total = dark_energy.sum()
+    if total <= 0.0:
+        return 0.0
+    p = dark_energy / total
+    # Shannon entropy in nats, guarding against log(0).
+    return float(-(p.detach() * (p.detach() + 1e-12).log()).sum())
+
+
 def fiedler_vector(n: int) -> torch.Tensor:
     """
     k=1 eigenvector of the path graph Laplacian.
@@ -82,6 +137,8 @@ def run_experiment(
     kl_decay: float = 0.08,
     gamma: float = 0.1,
     clock_eps: float = 1e-8,
+    lambda_clip: float = 100.0,
+    bright_modes: int = 16,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
 ) -> pd.DataFrame:
@@ -102,6 +159,13 @@ def run_experiment(
         Rayleigh damping initial value.
     clock_eps : float
         Flatness threshold passed to ``EntropicClock`` (default ``1e-8``).
+    lambda_clip : float
+        ``lambda_clip`` passed to ``EntropicClock`` (default ``100.0``).
+        Lower values slow the Phase-3 entropic-pump explosion and can
+        lengthen the ``alpha_bar`` revival window.
+    bright_modes : int
+        Number of lowest-frequency path-graph modes treated as bright/active
+        for the dark-entropy proxy.
     seed : int
         Random seed for reproducibility.
     output_dir : Path or str, optional
@@ -118,12 +182,14 @@ def run_experiment(
     L_f = path_graph_laplacian(n)                     # (n, n)
     x0 = fiedler_vector(n).unsqueeze(0)               # (1, n)
 
-    # Verify analytic spectrum.
+    # Verify analytic spectrum and cache eigenvectors for the dark-entropy
+    # proxy.
     analytic_eigs = path_graph_eigenvalues(n)
     computed_eigs = torch.linalg.eigvalsh(L_f).numpy()
     assert np.allclose(
         np.sort(analytic_eigs), np.sort(computed_eigs), atol=1e-10
     ), "Path graph Laplacian eigenvalues do not match analytic formula"
+    U = path_graph_eigenvectors(n).to(dtype=torch.float64)
 
     lam_max = analytic_eigs.max()                     # k = n-1
     dt_cfl_bound = math.sqrt(2.0 / lam_max)
@@ -135,6 +201,7 @@ def run_experiment(
     clock = EntropicClock(
         eps=clock_eps,
         heat_death_patience=HEAT_DEATH_PATIENCE,
+        lambda_clip=lambda_clip,
     )
     vsb = VibrationalStateBlock(
         dim=n,
@@ -189,11 +256,15 @@ def run_experiment(
         ).item()
         dt_used = min(state.delta_tau, dt_cfl)
 
-        # In isolation mode the dark sector is not modelled, so dark_entropy
-        # is zero and conserved reduces to |kl_tau|.  They are logged so the
-        # CSV schema matches the shared convention and downstream diagnostics
-        # can still compute the conservation residual.
-        dark_entropy_val = 0.0
+        # Compute a dark-sector entropy proxy from the high-frequency half of
+        # the path-graph spectrum.  This is an experiment-specific stand-in:
+        # the full ESDM computes dark_entropy from inactive spectral modes via
+        # ``SpectralLoadingDecoder``.
+        dark_entropy_val = dark_entropy_from_spectrum(
+            Q_t[0], U, bright_modes=bright_modes
+        )
+        # In isolation mode there is no frozen S_0, so conserved reduces to
+        # |kl_tau + dark_entropy|.  Logged for schema compatibility.
         conserved = abs(kl_tau.item() + dark_entropy_val)
 
         records.append({
@@ -201,6 +272,8 @@ def run_experiment(
             "seed": seed,
             "kl_decay": kl_decay,
             "clock_eps": clock_eps,
+            "lambda_clip": lambda_clip,
+            "bright_modes": bright_modes,
             "kl_tau": kl_tau.item(),
             "dark_entropy": dark_entropy_val,
             "conserved": conserved,
@@ -277,6 +350,8 @@ def main_cli(
     seed: int = 3407,
     kl_decay: float = 0.08,
     clock_eps: float = 1e-8,
+    lambda_clip: float = 100.0,
+    bright_modes: int = 16,
 ) -> pd.DataFrame:
     """CLI entry point for Experiment 2."""
     metrics = run_experiment(
@@ -284,6 +359,8 @@ def main_cli(
         n_steps=N_STEPS,
         kl_decay=kl_decay,
         clock_eps=clock_eps,
+        lambda_clip=lambda_clip,
+        bright_modes=bright_modes,
         seed=seed,
         output_dir=output_dir,
     )

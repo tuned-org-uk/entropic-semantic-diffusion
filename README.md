@@ -272,11 +272,14 @@ The script asserts:
 
 The default `kl_decay=0.08` consumes the entropy budget quickly and collapses
 `alpha_bar` by step ~100, matching the issue's heat-death timing.  Slower
-decays spread the schedule but delay heat death:
+decays spread the schedule but delay heat death.  The entropic-pump ceiling
+`lambda_clip` and the bright/dark mode split for the spectral dark-entropy
+proxy are also exposed:
 
 ```bash
 .venv/bin/python scripts/run_exp2.py --output-dir runs/exp2 --seed 42
 .venv/bin/python scripts/run_exp2.py --kl-decay 0.02 --clock-eps 1e-4
+.venv/bin/python scripts/run_exp2.py --lambda-clip 10.0 --bright-modes 8
 ```
 
 ### Test Suite

@@ -42,6 +42,8 @@ def test_logged_columns_match_shared_convention():
         "seed",
         "kl_decay",
         "clock_eps",
+        "lambda_clip",
+        "bright_modes",
         "kl_tau",
         "dark_entropy",
         "conserved",
@@ -58,7 +60,14 @@ def test_logged_columns_match_shared_convention():
         "is_heat_death",
     }
     assert expected.issubset(set(metrics.columns))
-    assert (metrics["dark_entropy"] == 0.0).all()
-    assert (metrics["conserved"] == metrics["kl_tau"]).all()
+    assert metrics["dark_entropy"].ge(0.0).all()
     assert metrics["rho_sign"].between(0.0, 2.0).all()
+
+
+def test_dark_entropy_proxy_nonzero_after_initial_transient():
+    """The spectral dark-entropy proxy should become positive once energy
+    spreads beyond the initial Fiedler mode."""
+    metrics = run_experiment(n=32, n_steps=500, seed=3407)
+    late = metrics[metrics["step"] >= 100]["dark_entropy"]
+    assert (late > 0.0).any(), "dark_entropy proxy stayed zero after transient"
 
