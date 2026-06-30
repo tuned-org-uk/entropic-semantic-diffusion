@@ -520,7 +520,8 @@ Lambda_tau, alpha_bar, is_heat_death
 Additional columns for Exp 3+ that require WHT gate logging:
 
 ```
-g_mean, g_entropy, lambda_cap_step, rho_sign_crossing_step
+g_mean, g_entropy, lambda_cap_step, rho_sign_crossing_step,
+r_k_mean, r_k_max, g_residual_mean
 ```
 
 The `tau_n` column is the primary axis for all trajectory plots. Wall-clock step is recorded
