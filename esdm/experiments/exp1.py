@@ -247,8 +247,12 @@ def assert_success_criteria(
         phase_b["tau_n"].diff().dropna() >= -tol
     ).all(), "tau_n decreased during rising Phase B"
 
-    # Phase D has an oscillating KL signal; the correct check is net
-    # entropic advance over the phase, not monotonicity.
+    # tau_n is monotonically non-decreasing by construction (it accumulates
+    # |Δkl_tau|).  For Phase D the stronger, semantically meaningful check is
+    # net entropic advance over the oscillatory phase.
+    assert (
+        phase_d["tau_n"].diff().dropna() >= -tol
+    ).all(), "tau_n decreased during oscillating Phase D"
     assert (
         phase_d["tau_n"].iloc[-1] > phase_d["tau_n"].iloc[0]
     ), "tau_n did not advance during oscillating Phase D"
