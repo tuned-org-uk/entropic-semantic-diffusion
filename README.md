@@ -185,7 +185,8 @@ enthropy-semantic-diffusion/
 ├── esdm/                        ← Python package
 │   ├── clock.py
 │   ├── experiments/             ← standalone experiment scripts
-│   │   └── exp1.py
+│   │   ├── exp1.py
+│   │   └── exp2.py
 │   ├── laplacian.py
 │   ├── model.py
 │   └── ...
@@ -245,6 +246,31 @@ Run a custom output directory or seed:
 
 ```bash
 .venv/bin/python scripts/run_exp1.py --output-dir runs/exp1 --seed 42
+```
+
+### Experiment 2 — Vibrational Wave Recurrence on a 1-D Harmonic Chain
+
+A unit test of `VibrationalStateBlock` on a 32-node path graph, driven by a live `EntropicClock` with decaying entropy flow:
+
+```bash
+.venv/bin/python scripts/run_exp2.py
+```
+
+Outputs are written to:
+
+```
+runs/exp2/<seed>/metrics.csv
+```
+
+The script asserts:
+- the path graph Laplacian matches the analytic spectrum `λ_k = 2 - 2·cos(πk/32)`;
+- the CFL-clamped time step `dt` never exceeds `sqrt(2 / λ_max)`;
+- `Q_t[0]` stays finite and does not blow up over 500 steps;
+- `is_heat_death()` fires by step 400 ± 50;
+- `rho_plus` and `rho_minus` remain finite and PSD.
+
+```bash
+.venv/bin/python scripts/run_exp2.py --output-dir runs/exp2 --seed 42
 ```
 
 ### Test Suite

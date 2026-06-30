@@ -36,3 +36,6 @@ wandb/
 # OS
 .DS_Store
 Thumbs.db
+
+# Experiment outputs
+runs/
