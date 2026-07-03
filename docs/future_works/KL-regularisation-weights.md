@@ -1,5 +1,7 @@
 ## KL regularisation variants
 
+After the base experiments are convincing, let's start to do some parameters sweeping for weights assigned to the regularisation terms.
+
 [Likely] If you just scale all KLs with one global factor, you’ll keep the math tidy and miss most of the control you actually want.
 
 Let’s carve out useful weighting variants **specific to ESDM** and what each KL term is doing.
