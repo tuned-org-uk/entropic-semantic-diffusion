@@ -90,9 +90,9 @@ esdm = [
 # Project URLs
 # ---------------------------------------------------------------------------
 [project.urls]
-"Homepage"    = "https://github.com/tuned-org-uk/enthropic-semantic-diffusion"
-"Bug Tracker" = "https://github.com/tuned-org-uk/enthropic-semantic-diffusion/issues"
-"Source"      = "https://github.com/tuned-org-uk/enthropic-semantic-diffusion"
+"Homepage"    = "https://github.com/tuned-org-uk/entropic-semantic-diffusion"
+"Bug Tracker" = "https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues"
+"Source"      = "https://github.com/tuned-org-uk/entropic-semantic-diffusion"
 
 # ---------------------------------------------------------------------------
 # Tool configuration

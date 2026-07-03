@@ -176,7 +176,7 @@ Using Barontini's cosmological language, a healthy training run passes through f
 ## Repository Layout
 
 ```
-enthropy-semantic-diffusion/
+entropic-semantic-diffusion/
 ├── README.md                    ← this file
 ├── docs/
 │   ├── 00-DESIGN.md             ← full architecture design document
@@ -281,6 +281,36 @@ also logs `g_mean` and `g_entropy` for the WHT-gate diagnostic convention:
 .venv/bin/python scripts/run_exp2.py --output-dir runs/exp2 --seed 42
 .venv/bin/python scripts/run_exp2.py --kl-decay 0.02 --clock-eps 1e-4
 .venv/bin/python scripts/run_exp2.py --lambda-clip 10.0 --bright-modes 8
+```
+
+
+### Experiment 3 — Entropic Diffusion on the Fused Item Kernel
+
+A wiring-level integration test of the full ESDM stack on a synthetic corpus,
+combining the entropic clock, vibrational block, dual-space fused item kernel,
+and entropic diffusion decoder:
+
+```bash
+.venv/bin/python scripts/run_exp3.py
+```
+
+Outputs are written to:
+
+```
+runs/exp3/<seed>/metrics.csv
+```
+
+The script asserts:
+- the fused item-space kernel remains symmetric and numerically stable;
+- `tau_n` advances monotonically and the entropic schedule stays within `[0, 1]`;
+- `Lambda_tau`, `dark_entropy`, and `conserved` remain finite throughout the run;
+- WHT-gate diagnostics (`g_mean`, `g_entropy`) are logged alongside the core clock signals;
+- no NaN/Inf values appear in model states or metrics, and no premature heat death occurs under the default configuration.
+
+Run a custom output directory or seed:
+
+```bash
+.venv/bin/python scripts/run_exp3.py --output-dir runs/exp3 --seed 42
 ```
 
 ### Test Suite
