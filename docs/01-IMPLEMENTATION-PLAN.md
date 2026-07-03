@@ -3,7 +3,7 @@
 > **Status:** Implementation-ready design  
 > **Depends on:** `docs/00-DESIGN.md`, `docs/00-DESIGN_PREAMBLE.md`  
 > **Integrates:** ArrowSpace dual-space fusion analysis, Barontini 2026, SPIN/GW spectral indexing  
-> **Target:** PyTorch ≥ 2.3, Python ≥ 3.11
+> **Target:** PyTorch ≥ 2.3, Python ≥ 3.12
 
 ---
 
@@ -52,10 +52,27 @@ enthropy-semantic-diffusion/
 │   └── test_model.py
 ├── scripts/
 │   ├── build_laplacian.py                  # one-shot: compute and save L_F and M_N
-│   ├── train.py
-│   └── sweep_kl_s.py                       # barrier-height sweep (Section 9 of design)
-└── requirements.txt
+│   ├── train.py                            # thin wrapper; main logic in esdm._cli.train
+│   └── sweep_kl_s.py                       # thin wrapper; main logic in esdm._cli.sweep
+├── pyproject.toml                          # packaging and dependency metadata
+└── uv.lock                                 # pinned dependency lockfile (uv)
 ```
+
+The project uses `pyproject.toml` and `uv.lock` for packaging and dependency
+management; there is intentionally no `requirements.txt` in the repository.
+
+
+### CLI entrypoints
+
+Runtime CLI is exposed via `pyproject.toml`:
+
+- `esdm-train` -> `esdm._cli.train:main`
+- `esdm-build` -> `esdm._cli.build_laplacian:main`
+- `esdm-sweep` -> `esdm._cli.sweep:main`
+
+The `scripts/*.py` files are developer-facing wrappers for direct `python`
+execution and IDE integration. The package entrypoints above are the preferred
+user-facing interface; the scripts exist as thin convenience shims.
 
 ---
 
