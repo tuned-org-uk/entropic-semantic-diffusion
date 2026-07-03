@@ -219,7 +219,10 @@ when the Fiedler mode is actively oscillating, `rho_minus / rho_plus` should be 
 
 ## Experiment 3 — Barrier Height Sweep on 2-D Gaussian Clusters
 
-> **Status:** 🔜 Ready to run. Setup revised from Exp 2 seed 3407 observations (2026-06-30).
+> **Status:** 🔜 Ready to run. Setup revised from Exp 2 seed 3407 observations (2026-06-30) and
+> amended 2026-07-03 for `dim=64`, `bright_modes=32` on branch `exp3/dim64`.
+> **Consolidated amendment:** This section now reflects both the Path A bivariate-gate diagnostics
+> (issue #6, 2026-06-30) and the `dim=64` / `bright_modes=dim//2` geometry (issue #6, 2026-07-03).
 
 ### Motivation
 
@@ -236,13 +239,17 @@ correlates with `dark_entropy` **across different `kl_S_weight` barrier heights*
 
 ### Setup
 
-**Dataset:** 4 isotropic Gaussian clusters in \(\mathbb{R}^8\), 1000 samples each, with
+**Dataset:** 4 isotropic Gaussian clusters in \(\mathbb{R}^{64}\), 1000 samples each, with
 inter-cluster separation controlled by a signal-to-noise ratio parameter \(\rho \in \{1, 3, 10\}\).
-The 8-D embeddings are the direct input \(x \in \mathbb{R}^{B \times 8}\).
+The 64-D embeddings are the direct input \(x \in \mathbb{R}^{B \times 64}\). Raising the dimension
+from the original \(\mathbb{R}^8\) gives a richer spectral landscape: 64 eigenmodes vs. 8,
+making the bright/dark sector partition non-trivial even at initialisation.
 
-**Model:** Full ESDM with `dim=8`, `n_steps=2`, `bright_modes=8` (= `dim`, matching the
-`bright_modes=F` convention confirmed in Exp 2). `SpectralLoadingDecoder` produces a \(8 \times 8\)
-wiring Laplacian \(L(z)\). The `EntropicDiffusionDecoder` uses the global (non-per-mode) schedule.
+**Model:** Full ESDM with `dim=64`, `n_steps=2`, `bright_modes=32` (= `dim // 2`).
+`SpectralLoadingDecoder` produces a \(64 \times 64\) wiring Laplacian \(L(z)\). The
+`EntropicDiffusionDecoder` uses the global (non-per-mode) schedule. With `bright_modes=32`,
+there are always **32 dark modes**, so `dark_entropy` has genuine structure to reveal — the
+maximum possible dark entropy is \(\log(32) \approx 3.47\) nats.
 
 **`kl_decay` sweep (revised from Exp 2):** Exp 2/seed 3407 showed that `kl_decay=0.08` with 400
 steps exhausted the entropy budget by step ~100, leaving ~75% of the run with
@@ -260,18 +267,28 @@ with `kl_S_weight`:
 - Default: `lambda_clip=10` (tighter cap; forces the pump to spread its amplitude budget).
 - Control: `lambda_clip=100` (Exp 2 equivalent; one sub-run per barrier height for comparison).
 
+**`a_tau_scale` sweep (Path A authority):** The default `a_tau_scale=5.0` controls the
+trade-off between residual sensitivity and clock authority in the bivariate gate. Add a minimal
+2-point sweep at the primary condition only:
+
+- `a_tau_scale ∈ {2.0, 5.0}` at `kl_decay=0.03`, `lambda_clip=10`, `rho=3`.
+- This doubles 90 runs → 180 for the primary condition. Total run count increases from 450 to
+  approximately **540**.
+- Primary result figure: plot `tau_n` and `g_residual_mean` on dual y-axes for `a_tau_scale=5.0`
+  (main) and `a_tau_scale=2.0` (comparison).
+
 **Sweep:**
 
 ```
-kl_S_weight in {0.001, 0.01, 0.05, 0.2, 1.0}      (5 barrier heights)
-kl_decay    in {0.01, 0.03, 0.08}                   (3 schedule speeds; 0.08 is control)
-rho         in {1, 3, 10}                            (3 cluster separations)
-lambda_clip in {10, 100}                             (2 pump caps; 100 is Exp 2 control)
+kl_S_weight  in {0.001, 0.01, 0.05, 0.2, 1.0}      (5 barrier heights)
+kl_decay     in {0.01, 0.03, 0.08}                   (3 schedule speeds; 0.08 is control)
+rho          in {1, 3, 10}                            (3 cluster separations)
+lambda_clip  in {10, 100}                             (2 pump caps; 100 is Exp 2 control)
+a_tau_scale  in {2.0, 5.0}                            (Path A authority; primary condition only)
 ```
 
-Total: 5 × 3 × 3 × 2 × 5 seeds = 450 runs.  
 For the primary result figure (analogous to Barontini Fig. 2) use `kl_decay=0.03`,
-`lambda_clip=10`, `rho=3` (the recommended baseline condition).
+`lambda_clip=10`, `rho=3`, `a_tau_scale=5.0` (the recommended baseline condition).
 
 Each run: 2000 training steps, batch size 64.
 
@@ -283,7 +300,7 @@ Each run: 2000 training steps, batch size 64.
 | `kl_tau` | Bright-sector KL (decays to zero at convergence) |
 | `dark_entropy` | Dark-sector KL — must be logged; confirms dual-sector partition |
 | `conserved` | Dual-sector conservation residual; target `= kl_tau + dark_entropy` to < 1e-10 |
-| `dark_entropy_floor` | Value of `dark_entropy` at convergence; expected 40–60% of S₀ |
+| `dark_entropy_floor` | Value of `dark_entropy` at convergence; expected 40–70% of S₀ |
 | `N_active` | Mode activation curve |
 | `rho_sign` | Interference ratio — tracks constructive/destructive phase transitions |
 | `rho_sign_crossing_step` | Step at which `rho_sign` first crosses back below 1.0 |
@@ -296,6 +313,7 @@ Each run: 2000 training steps, batch size 64.
 | `g_residual_mean` | Mean of bivariate gate vector \(g_k(\tau, r_k)\) — Path A gate health |
 | `a_tau` | Residual weight coefficient \(a(\tau)\) — must decrease monotonically |
 | `r_g_corr` | Spearman corrcoef\((r_k, g_k)\) — Path A independent correlation (new, not in Exp 2) |
+| `norm_tau` | `tau_n / tau_max_est` — clock normalisation for gate diagnostics |
 | `ELBO` | Total loss |
 | `kl_z`, `kl_S` | Individual ELBO terms |
 
@@ -317,10 +335,14 @@ Each run: 2000 training steps, batch size 64.
 | 0.01–0.05 | Converges to 40–60% of S₀ | Stable dark semantic basin |
 | 0.2–1.0 | Converges fast, > 70% of S₀ | Premature dark dominance / heat death |
 
-**Path A diagnostic — `r_g_corr` across barrier heights (primary Exp 3 collocation test):**
+**Path A diagnostic — bivariate gate correlation tests (primary Exp 3 collocation test):**
 
-This is the correlation test that Exp 2 cannot perform (because `g_entropy` and `dark_entropy`
-share the same energy vector in the synthetic setup). In Exp 3:
+This is the diagnostic that Exp 2 cannot perform (because `g_entropy` and `dark_entropy` share
+the same energy vector in the synthetic setup). Exp 3 exercises the bivariate gate
+`g_k(τ, r_k)` on real data with a meaningful bright/dark split (`bright_modes=32` bright,
+32 dark).
+
+*Per-step residual–gate correlation:*
 
 - Compute Spearman corrcoef\((r_k, g_k)\) at each step — log as `r_g_corr`.
 - Compare `r_g_corr` trajectories across `kl_S_weight` values.
@@ -332,6 +354,35 @@ share the same energy vector in the synthetic setup). In Exp 3:
 - **Decision gate for Path C:** if `r_g_corr` is negative (gate anti-correlated with residual)
   in ≥ 2/5 seeds at any barrier height, the sigmoid `b(τ)` bias term is dominating and a
   gradient-based collocation penalty (Path C, issue #10) should be considered before Exp 5.
+
+*Per-run gate–dark-entropy correlation (new Path A signal):*
+
+- Compute Spearman correlation between `g_residual_mean` and `dark_entropy` across steps, per
+  run. Expected pattern:
+  - Low barrier (`kl_S_weight ≤ 0.01`): **positive correlation** — gates stay open while dark
+    entropy stays high in the cyclic regime.
+  - High barrier (`kl_S_weight ≥ 0.2`): **negative correlation** after the heat-death onset step
+    — as `dark_entropy` drains, residuals drop and gates close in tandem with the clock.
+- Require Spearman `|ρ| > 0.4` in ≥ 3/5 seeds for both extreme conditions to validate that Path A
+  is doing useful work rather than being dominated by the τ-only term.
+
+*Heat-death closure invariant:*
+
+- For every run, `g_residual_mean` at `is_heat_death() == True` must be `< 0.05`. This is the
+  mathematical guarantee from the gate formula; a failure here means `tau_max_est` is being
+  mis-estimated by the clock and should be investigated.
+
+*`a(τ)` monotonicity:*
+
+- Assert `a_tau[t+1] <= a_tau[t] + 1e-6` for all steps in all runs. Any violation means `tau_n`
+  is decreasing (illegal under the entropic clock accumulation rule) and should be caught as a
+  clock bug, not a gate bug.
+
+*Residual decay after heat death:*
+
+- Assert `r_k_mean` at `step = is_heat_death_step + 100` is `< r_k_mean` at
+  `step = is_heat_death_step`. Residuals should continue to shrink once the system has no
+  entropic pump driving oscillation.
 
 ### Success Criteria
 
@@ -351,8 +402,16 @@ share the same energy vector in the synthetic setup). In Exp 3:
   switch to `kl_decay=0.01` for that `kl_S_weight` condition.
 - **`g_residual_mean` < 0.5 before heat death** (unlike Exp 2, where real `r_k` activity should
   push the bivariate gate below the `r_k = 0` saturation floor of 0.5 before `τ̄ → 1`).
+- **`g_residual_mean` < 0.05 at heat death** — the heat-death closure invariant of the
+  bivariate gate.
 - **`r_g_corr` ≥ 0.3** in at least 3/5 seeds for `kl_S_weight ≤ 0.05` (Path A correlation
   threshold; lower values trigger Path B prioritisation — see above).
+- **Gate–dark-entropy correlation:** Spearman `|ρ(g_residual_mean, dark_entropy)| > 0.4` in
+  ≥ 3/5 seeds for `kl_S_weight ∈ {0.001, 1.0}` (both cyclic and heat-death extremes), with the
+  expected sign (positive at low barrier, negative at high barrier after heat-death onset).
+- **`a_tau` monotone decreasing** — `a_tau[t+1] <= a_tau[t] + 1e-6` for all steps in all runs.
+- **Residual decay after heat death** — `r_k_mean` at `is_heat_death_step + 100` is strictly
+  lower than at `is_heat_death_step`.
 - ELBO decreases monotonically after a burn-in of 200 steps for moderate `kl_S_weight` (0.05).
 - Cluster separation \(\rho\) does not change the qualitative shape of the `tau_n` trajectory for
   a given `kl_S_weight` — only the absolute values change.
@@ -380,20 +439,37 @@ share the same energy vector in the synthetic setup). In Exp 3:
 - **`g_residual_mean` stays at 0.5 throughout (Exp 3-specific):** The bivariate gate
   is not receiving non-trivial `r_k` input from real data. Check that `_last_Q` buffer
   in `ESDM` is updated at every forward pass before the WHT filter is called.
+- **`g_residual_mean` ≥ 0.05 at `is_heat_death()`:** The heat-death closure invariant is
+  violated. Verify that `tau_max_est` is correctly estimated by the clock and that
+  `norm = tau_n / tau_max_est` approaches 1.0 at heat death.
 - **`r_g_corr` is negative throughout:** The `b(τ)` bias term dominates the logit over the
   residual term `a(τ)·log(1+r_k)`. Either increase `a_tau_scale` (default 5.0) or reduce
   `tau_decay_power` to slow the `a(τ) → 0` decay. Log the raw logit components separately
   to diagnose.
+- **Spearman `|ρ(g_residual_mean, dark_entropy)| < 0.2` across all barrier heights:** Path A is
+  not producing a usable residual signal. The residual magnitude may need normalising by the
+  Laplacian eigenvalue range before the `log1p` transform; this is Path B territory (band-wise
+  spectral temperature) and should be filed as a follow-up, not patched into Exp 3.
+- **`a_tau` increases at any step:** `tau_n` is decreasing, violating the entropic clock
+  accumulation rule. Check the clock's `delta_tau` sign handling and ensure `tau_n` is only
+  ever incremented.
+- **`r_k_mean` does not decay after heat death:** The system is still being driven despite the
+  clock declaring heat death. Check that `is_heat_death()` is not firing prematurely or that
+  the diffusion decoder is injecting hidden noise.
 
 ### Connection to Design
 
 The primary experimental validation of §9 and the two-sector partition in §2. Produces the
 ESDM analogue of Barontini's Fig. 2. The `tau_n` vs. training-step curves from this experiment
 are the key evidence that the entropic clock reproduces big bang/big crunch thermodynamic
-behaviour in semantic space. The `r_g_corr` diagnostic connects directly to the dual-space
-hypothesis in §10.2 and the Path A implementation in §4.4.2 (introduced 2026-06-30): if the
-correlation is high, the bivariate gate is genuinely tracking geometric mode activity (item-space
-residuals) rather than merely applying a fixed clock schedule.
+behaviour in semantic space. The `dim=64` / `bright_modes=32` geometry ensures the dark sector
+has genuine structure (`log(32)` nats maximum entropy), so the bright/dark partition is
+non-trivial from initialisation. The Path A diagnostics (`r_g_corr`, the
+`g_residual_mean`–`dark_entropy` correlation, the heat-death closure invariant, and `a_tau`
+monotonicity) connect directly to the dual-space hypothesis in §10.2 and the Path A
+implementation in §4.4.2 (introduced 2026-06-30): if the correlations are high, the bivariate
+gate is genuinely tracking geometric mode activity (item-space residuals) rather than merely
+applying a fixed clock schedule.
 
 ---
 
@@ -591,9 +667,9 @@ Exp 1 ✅ (Clock unit test)
 ```
 
 Experiments 1 and 2 can be run locally on CPU in under 10 minutes each. Experiment 3 requires a
-single GPU (2–4 hours for all 450 runs with the expanded sweep). Experiment 4 requires a single
-GPU (3–6 hours). Experiment 5 requires a single A100 or equivalent (estimated 12–24 hours for
-50,000 steps at batch 256 in bfloat16).
+single GPU (2–5 hours for all ~540 runs with the expanded sweep and `a_tau_scale` axis).
+Experiment 4 requires a single GPU (3–6 hours). Experiment 5 requires a single A100 or
+equivalent (estimated 12–24 hours for 50,000 steps at batch 256 in bfloat16).
 
 ---
 
@@ -603,10 +679,10 @@ All experiments write per-step metrics to a CSV at `runs/<exp_id>/<seed>/metrics
 
 **Core columns (Exp 1–5):**
 ```
-step, seed, kl_decay, clock_eps, lambda_clip, bright_modes,
+step, seed, kl_decay, clock_eps, lambda_clip, bright_modes, a_tau_scale,
 kl_tau, dark_entropy, conserved,
 Q_t_0, rho_plus, rho_minus, rho_sign,
-dt, dt_cfl_bound, delta_tau, tau_n,
+dt, dt_cfl_bound, delta_tau, tau_n, norm_tau,
 Lambda_tau, alpha_bar, is_heat_death
 ```
 
