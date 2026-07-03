@@ -18,7 +18,7 @@ Usage examples
 import argparse
 import logging
 
-from esdm.experiments.exp3 import DIM, BRIGHT_MODES, main_cli, run_sweep
+from esdm.experiments.exp3 import DIM, BRIGHT_MODES, A_TAU_SCALES, main_cli, run_sweep
 
 
 def main() -> None:
@@ -79,6 +79,15 @@ def main() -> None:
         help="Inter-cluster SNR (default: 3.0 — primary result condition)",
     )
     parser.add_argument(
+        "--a-tau-scale",
+        type=float,
+        default=A_TAU_SCALES[-1],
+        help=(
+            f"Path A gate authority a_tau_scale (default: {A_TAU_SCALES[-1]}; "
+            f"sweep uses {A_TAU_SCALES})"
+        ),
+    )
+    parser.add_argument(
         "--dim",
         type=int,
         default=DIM,
@@ -99,8 +108,8 @@ def main() -> None:
         "--sweep",
         action="store_true",
         help=(
-            "Run the full 450-run sweep instead of a single run. "
-            "Ignores --seed, --kl-s-weight, --kl-decay, --rho, --lambda-clip."
+            "Run the full sweep (~540 runs) instead of a single run. "
+            "Ignores --seed, --kl-s-weight, --kl-decay, --rho, --lambda-clip, --a-tau-scale."
         ),
     )
     parser.add_argument(
@@ -128,6 +137,7 @@ def main() -> None:
             lambda_clip=args.lambda_clip,
             kl_S_weight=args.kl_s_weight,
             rho=args.rho,
+            a_tau_scale=args.a_tau_scale,
             dim=args.dim,
             bright_modes=args.bright_modes,
         )
