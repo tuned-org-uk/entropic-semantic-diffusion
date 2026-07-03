@@ -217,20 +217,33 @@ when the Fiedler mode is actively oscillating, `rho_minus / rho_plus` should be 
 
 ---
 
-## Experiment 3 — Barrier Height Sweep on 2-D Gaussian Clusters
+## Experiment 3 — Barrier Height Sweep on 2-D Gaussian Clusters (Pipeline Integration Test)
 
-> **Status:** 🔜 Ready to run. Setup revised from Exp 2 seed 3407 observations (2026-06-30) and
-> amended 2026-07-03 for `dim=64`, `bright_modes=32` on branch `exp3/dim64`.
+> **Status:** ✅ Complete as a pipeline integration test. **Not** a validation of learned
+> Barontini-regime thermodynamics — see the warning below.
+> Setup revised from Exp 2 seed 3407 observations (2026-06-30) and amended 2026-07-03 for
+> `dim=64`, `bright_modes=32` on branch `exp3/dim64`.
 > **Consolidated amendment:** This section now reflects both the Path A bivariate-gate diagnostics
 > (issue #6, 2026-06-30) and the `dim=64` / `bright_modes=dim//2` geometry (issue #6, 2026-07-03).
 
+### ⚠️ Scientific scope warning
+
+> The clock in this experiment is driven by a **synthetic signal**
+> `kl_tau_signal = kl_S_weight * exp(-kl_decay * step)`, not by the actual ELBO `kl_tau`.
+> Consequently, `tau_n` is a deterministic integral of an externally imposed schedule, `r_g_corr`
+> is degenerate, and no learned thermodynamic phase transitions are observed.  This sweep is best
+> understood as a **large-scale integration test** of the ESDM pipeline (clock + vibrational block +
+> spectral split + WHT gate + logging), not as evidence for the Barontini-regime predictions in
+> §9 of `00-DESIGN.md`.  Exp 4 is the first experiment that drives the clock from a real learned
+> `kl_tau` signal.
+
 ### Motivation
 
-This is the primary validation experiment specified in §9 of `00-DESIGN.md`. It directly
-replicates Barontini's barrier height sweep (Fig. 2 of Phys. Rev. Research 8, L022047): varying
-the `kl_S` weight (the semantic coupling strength analogue to the BEC barrier height \(V\)) and
-observing whether the system produces cyclic big bang/big crunch dynamics at low coupling or
-heat death at high coupling.
+This experiment exercises the full ESDM pipeline on structured synthetic data and produces the
+infrastructure (sweep runner, metrics schema, Path A diagnostics) needed for later experiments.
+It is specified in §9 of `00-DESIGN.md` as the barrier-height sweep analogue to Barontini's
+Fig. 2, but the synthetic clock driver means the observed `tau_n` trajectories should be treated
+as integration artefacts, not as learned entropic-time dynamics.
 
 This experiment also provides the **first independent Path A diagnostic**: unlike Exp 2 where
 `g_entropy` and `dark_entropy` are tautologically correlated (same energy vector), Exp 3 tests
@@ -492,7 +505,14 @@ early while stable modes persist — producing sharper reconstructions than the 
 retaining the top 16 principal components (capturing ~95% of variance for standard MNIST). Each
 sample \(x \in \mathbb{R}^{16}\) is L2-normalised before training.
 
-**Model:** Full ESDM with `dim=16`, `n_steps=4`, `use_per_mode=True`.
+**Model:** Full ESDM with `dim=16`, `n_steps=2` (scaffold; increase to 4 once baseline is stable), `use_per_mode=True`.
+
+> **Note on per-mode tau indexing:** `SpectralLoadingDecoder` produces `dim_latent=16`
+> spectral modes, matching the 16 PCA features, so no dark-node pooling is required in this
+> experiment.  In geometries where `dim_latent < n_nodes`, the ESDM implementation pools the
+> dark-entropy mass uniformly across the remaining feature dimensions.  This is a pragmatic
+> approximation that forces all dark nodes to evolve at the same rate; a fully principled
+> per-dark-eigenvector schedule is left as future work.
 
 **Ablation:** Train two model variants side by side:
 - **ESDM-global**: `use_per_mode=False` — single scalar `alpha_bar(tau_n)` for all 16 modes.

@@ -105,3 +105,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "slow: tests that take more than a few seconds",
+    "network: tests that require internet access",
+]

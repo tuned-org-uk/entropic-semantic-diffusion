@@ -146,9 +146,12 @@ def empirical_laplacian(
 
     Because the sample-space Laplacian has size ``B x B`` with ``B = dim = 64``,
     it has at most ``B - 1 = 63`` non-zero eigenvalues.  The projected operator
-    is therefore rank-deficient by construction, which is a benign signature
-    of the batch-level proxy and should be kept in mind when interpreting
-    ``dark_entropy``.
+    is therefore rank-deficient by construction.  When ``bright_modes = dim // 2 = 32``,
+    the lower half of the spectrum is partially zeroed by this rank deficiency,
+    not purely by genuine dark-sector dynamics.  The ``dark_entropy`` signal is
+    consequently a mixture of semantic structure and numerical rank-deficiency
+    and should be interpreted as a pipeline diagnostic, not as a clean
+    dark-sector measurement.
 
     Parameters
     ----------
@@ -389,8 +392,10 @@ def run_single(
 
         # Initial entropy budget for the dark-sector floor assertion.
         # Use the *observed* initial dark entropy, not the theoretical maximum,
-        # so the floor assertion is relative to the actual run.
-        if S_0 is None and step == 0:
+        # so the floor assertion is relative to the actual run.  We wait for
+        # the first non-zero dark entropy to avoid S_0 = 0 when the initial
+        # vibrational state happens to place all energy in bright modes.
+        if S_0 is None and dark_entropy_val > 1e-8:
             S_0 = dark_entropy_val
 
         # Logged conservation term (schema-compatible with issue #6).

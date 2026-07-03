@@ -122,7 +122,7 @@ def load_mnist_pca(
         torch.tensor(X_test_pca, dtype=torch.float32),
         torch.tensor(y_train, dtype=torch.int64),
         torch.tensor(y_test, dtype=torch.int64),
-        mnist.target[train_size:],
+        mnist.target[:train_size],
         mnist.target[train_size:],
         pca,
         scaler,
@@ -212,12 +212,26 @@ def latent_knn_accuracy(
     y_test: torch.Tensor,
     n_neighbors: int = 10,
     max_train: int = 10000,
+    batch_size: int = 512,
 ) -> float:
     """10-NN classification accuracy in the ESDM latent ``z`` space."""
     model.eval()
     with torch.no_grad():
-        z_train = model._encoder(X_train[:max_train]).detach().cpu().numpy()
-        z_test = model._encoder(X_test).detach().cpu().numpy()
+        z_train_parts = []
+        n_encoded = 0
+        for i in range(0, min(len(X_train), max_train), batch_size):
+            if n_encoded >= max_train:
+                break
+            out = model(X_train[i:i + batch_size])
+            z_train_parts.append(out.z.detach().cpu().numpy())
+            n_encoded += out.z.shape[0]
+        z_train = np.concatenate(z_train_parts, axis=0)[:max_train]
+
+        z_test_parts = []
+        for i in range(0, len(X_test), batch_size):
+            out = model(X_test[i:i + batch_size])
+            z_test_parts.append(out.z.detach().cpu().numpy())
+        z_test = np.concatenate(z_test_parts, axis=0)
     model.train()
     clf = KNeighborsClassifier(n_neighbors=n_neighbors, n_jobs=1)
     clf.fit(z_train, y_train[:max_train].numpy())
@@ -444,6 +458,11 @@ def assert_success_criteria(
     if not late.empty:
         results["conserved_small"] = bool((late["conserved"] < 0.05 * (late["kl_S"] + late["kl_tau"] + late["dark_entropy"] + 1e-8)).mean() > 0.8)
     else:
+        # Short smoke runs never reach step 5000; this criterion is N/A.
+        logger.warning(
+            "conserved_small criterion skipped: max_steps=%d < 5000",
+            int(metrics["step"].max()) + 1,
+        )
         results["conserved_small"] = False
 
     if require_per_mode_better:

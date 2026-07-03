@@ -27,6 +27,7 @@ from esdm.wht_filter import GraphWHTFilter
 @dataclass
 class ESDMOutput:
     x_hat:   Tensor
+    z:       Tensor
     loss:    Tensor
     clock:   ClockState
     metrics: dict[str, Tensor]
@@ -119,6 +120,20 @@ class ESDM(nn.Module):
         """
         Compute real spectral KLs and bright/dark sector diagnostics.
 
+        Per-mode tau driver
+        -------------------
+        ``kl_per_mode`` contains per-spectral-mode KL values for the
+        ``dim_latent`` modes produced by ``SpectralLoadingDecoder``.  When the
+        diffusion decoder is configured with ``use_per_mode=True``, the clock
+        needs a tau value for every input feature dimension (``n_nodes``).  If
+        ``dim_latent < n_nodes``, the remaining dark-node positions are filled
+        with a uniform pool of the dark-entropy mass.  This is a pragmatic
+        approximation: all dark nodes evolve at the same rate under the per-mode
+        schedule, which limits the schedule's ability to differentiate individual
+        dark eigenvectors.  For a fully principled per-dark-mode schedule, a
+        spectral projection of the dark entropy onto individual eigenvectors
+        would be required.
+
         Parameters
         ----------
         W, omega, S, L_z, log_var_S
@@ -128,7 +143,8 @@ class ESDM(nn.Module):
 
         Returns
         -------
-        dict with keys: kl_S, kl_tau, dark_entropy, N_active, log_lam_s.
+        dict with keys: kl_S, kl_tau, kl_per_mode, dark_entropy, N_active,
+        log_lam_s.
         """
         # Spectral-basis KL for the S posterior.
         kl_S = spectral_basis_kl(S, log_var_S, self.eigvals_q, lam_s=self.lam_s)
@@ -216,6 +232,7 @@ class ESDM(nn.Module):
         z = self._encoder(x)
         W, omega, S, L_z, log_var_S = self.spectral_decoder(z, self.U_q, self.L_base)
         spectral = self._compute_spectral_metrics(W, omega, S, L_z, log_var_S)
+        # z is returned in ESDMOutput for downstream latent-space evaluators.
 
         # 2. First-batch S_0 initialisation
         if self.S_0 is None:
@@ -291,7 +308,7 @@ class ESDM(nn.Module):
             S_0=self.S_0,
         )
 
-        return ESDMOutput(x_hat=x_hat, loss=loss, clock=clock_state, metrics=metrics)
+        return ESDMOutput(x_hat=x_hat, z=z, loss=loss, clock=clock_state, metrics=metrics)
 
     # ------------------------------------------------------------------ #
 

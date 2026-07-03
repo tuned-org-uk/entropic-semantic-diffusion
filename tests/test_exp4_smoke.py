@@ -31,15 +31,33 @@ from esdm.model import ESDM
 # Dataset tests
 # ---------------------------------------------------------------------------
 
+def _mnist_available() -> bool:
+    """Probe whether MNIST can be loaded without network access."""
+    try:
+        from sklearn.datasets import fetch_openml
+        fetch_openml("mnist_784", version=1, parser="auto", as_frame=False)
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_load_mnist_pca_shape():
-    X_train, X_test, y_train, y_test, _, _, pca, _ = load_mnist_pca(dim=PCA_DIM)
+    X_train, X_test, y_train, y_test, labels_train, labels_test, pca, _ = load_mnist_pca(dim=PCA_DIM)
     assert X_train.shape == (60000, PCA_DIM)
     assert X_test.shape == (10000, PCA_DIM)
     assert y_train.shape == (60000,)
     assert y_test.shape == (10000,)
+    assert labels_train.shape == (60000,)
+    assert labels_test.shape == (10000,)
     assert pca.n_components_ == PCA_DIM
 
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_load_mnist_pca_unit_norm():
     X_train, X_test, _, _, _, _, _, _ = load_mnist_pca(dim=PCA_DIM)
     train_norms = torch.linalg.norm(X_train, dim=1)
@@ -67,9 +85,12 @@ def test_esdm_per_mode_instantiates():
 
 
 # ---------------------------------------------------------------------------
-# Training-loop structural tests (fast)
+# Training-loop structural tests (fast, require MNIST)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_run_single_global_returns_expected_columns():
     metrics = run_single(
         dim=16,
@@ -90,6 +111,9 @@ def test_run_single_global_returns_expected_columns():
     assert expected.issubset(set(metrics.columns))
 
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_run_single_per_mode_accumulates_tau_vector():
     metrics = run_single(
         dim=16,
@@ -106,6 +130,9 @@ def test_run_single_per_mode_accumulates_tau_vector():
     assert np.all(tau_k > 0), "per_mode_tau must be strictly positive"
 
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_run_single_no_nan_or_inf():
     metrics = run_single(
         dim=16,
@@ -118,6 +145,9 @@ def test_run_single_no_nan_or_inf():
     assert np.isfinite(numeric.to_numpy()).all()
 
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_run_single_tau_n_increases():
     metrics = run_single(
         dim=16,
@@ -131,9 +161,12 @@ def test_run_single_tau_n_increases():
 
 
 # ---------------------------------------------------------------------------
-# Evaluator tests
+# Evaluator tests (require MNIST)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_reconstruction_mse_finite():
     cfg = make_esdm_cfg(dim=16, use_per_mode=False)
     model = ESDM(cfg)
@@ -143,6 +176,9 @@ def test_reconstruction_mse_finite():
     assert mse >= 0.0
 
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_latent_knn_accuracy_runs():
     cfg = make_esdm_cfg(dim=16, use_per_mode=False)
     model = ESDM(cfg)
@@ -158,9 +194,12 @@ def test_latent_knn_accuracy_runs():
 
 
 # ---------------------------------------------------------------------------
-# Success-criteria tests
+# Success-criteria tests (require MNIST)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_assert_success_criteria_passes_for_valid_short_run():
     metrics = run_single(
         dim=16,
@@ -176,6 +215,9 @@ def test_assert_success_criteria_passes_for_valid_short_run():
     assert verdict["all_tau_positive"] is True
 
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_assert_success_criteria_detects_nan():
     metrics = run_single(
         dim=16,
@@ -190,9 +232,12 @@ def test_assert_success_criteria_detects_nan():
 
 
 # ---------------------------------------------------------------------------
-# Sweep structural tests
+# Sweep structural tests (require MNIST)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
 def test_run_sweep_limited_grid():
     df = run_sweep(
         dims=[16],
