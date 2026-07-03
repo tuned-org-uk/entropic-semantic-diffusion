@@ -86,8 +86,10 @@ class ESDM(nn.Module):
             n_steps=cfg["model"]["n_vibrational_steps"],
             gamma=cfg["model"]["gamma"],
         )
+        self.use_per_mode = cfg["model"].get("use_per_mode", False)
         self.diffusion_decoder = EntropicDiffusionDecoder(
             dim=self.dim_input,
+            use_per_mode=self.use_per_mode,
         )
 
         # Minimal encoder: x -> z for the spectral decoder.
@@ -144,6 +146,20 @@ class ESDM(nn.Module):
         kl_tau = (kl_per_mode * active.float()).sum(dim=-1).mean()
         dark_entropy = (kl_per_mode * inactive.float()).sum(dim=-1).mean()
 
+        # Per-mode tau for the entropic diffusion schedule.  We assign bright
+        # modes their own KL and pool dark-mode KL evenly across inactive modes
+        # so that every feature dimension has a tau value.
+        kl_per_feature = torch.zeros(
+            kl_per_mode.shape[0], self.n_nodes,
+            device=kl_per_mode.device, dtype=kl_per_mode.dtype
+        )
+        kl_per_feature[:, :self.dim_latent] = kl_per_mode
+        # Dark modes (if any) are pooled as a constant per remaining dimension.
+        n_dark_nodes = self.n_nodes - self.dim_latent
+        if n_dark_nodes > 0:
+            dark_pool = dark_entropy.detach() / max(n_dark_nodes, 1)
+            kl_per_feature[:, self.dim_latent:] = dark_pool
+
         # Clock field: log spectral scale derived from mean mode weight.
         log_lam_s = torch.log(omega.mean().clamp(min=1e-8))
 
@@ -153,6 +169,7 @@ class ESDM(nn.Module):
         return {
             "kl_S": kl_S,
             "kl_tau": kl_tau,
+            "kl_per_mode": kl_per_feature.mean(dim=0),  # (n_nodes,) per-feature tau driver
             "dark_entropy": dark_entropy,
             "N_active": N_active,
             "log_lam_s": log_lam_s,
@@ -207,8 +224,17 @@ class ESDM(nn.Module):
             ).detach()
 
         # 3. Entropic clock: update tau, Lambda, delta_tau
+        # When use_per_mode is enabled, drive the clock with per-feature KLs so
+        # the diffusion schedule can vary by mode.  Scalar tau_n is still the
+        # sum of absolute changes, preserving the monotonic entropic-time
+        # invariant.
+        kl_tau_driver = (
+            spectral["kl_per_mode"]
+            if self.use_per_mode
+            else spectral["kl_tau"]
+        )
         clock_state = self.clock.step(
-            kl_tau_current=spectral["kl_tau"],
+            kl_tau_current=kl_tau_driver,
             phi_current=spectral["log_lam_s"],
             rho_plus=self._last_rho_plus,
             rho_minus=self._last_rho_minus,

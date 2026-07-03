@@ -1,6 +1,6 @@
 # 02 — ESDM Experiment Suite
 
-> **Status:** Exp 1–2 complete. Exp 3 ready to run.  
+> **Status:** Exp 1–3 complete. Exp 4 in progress.  
 > **Relates to:** `docs/00-DESIGN.md` §9 (barrier height sweep), §11 (open questions), §12 (experiment checklist)  
 > **Covers:** Five experiments of increasing complexity from unit-level sanity checks to full 32×32 image diffusion
 
@@ -473,7 +473,10 @@ applying a fixed clock schedule.
 
 ---
 
-## Experiment 4 — Per-Mode Entropic Schedule on MNIST (8-D PCA Embeddings)
+## Experiment 4 — Per-Mode Entropic Schedule on MNIST (16-D PCA Embeddings)
+
+> **Status:** 🚧 In progress. Scaffold implemented (`esdm/experiments/exp4.py`, `scripts/run_exp4.py`, `tests/test_exp4_smoke.py`).
+> **Note:** Dimension raised from 8 to 16 to match the natural ESDM geometry (`dim_input = dim_latent = n_nodes = n_modes`) and simplify per-mode schedule indexing.
 
 ### Motivation
 
@@ -661,8 +664,8 @@ provides a genuine efficiency advantage.
 ```
 Exp 1 ✅ (Clock unit test)
   └─► Exp 2 ✅ (Wave recurrence unit test)
-        └─► Exp 3 🔜 (Barrier sweep, synthetic) ← Path A r_g_corr decision gate
-              └─► Exp 4 (Per-mode schedule, MNIST) ← Path B conditional
+        └─► Exp 3 ✅ (Barrier sweep, synthetic) ← Path A r_g_corr decision gate
+              └─► Exp 4 🚧 (Per-mode schedule, MNIST) ← Path B conditional
                     └─► Exp 5 (Full diffusion, CIFAR-10) ← Path C conditional
 ```
 
