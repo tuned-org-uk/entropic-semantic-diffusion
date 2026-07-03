@@ -32,6 +32,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 
 from esdm.model import ESDM
+from esdm.vibrational import compute_mode_residuals
+from esdm.wht_filter import GraphWHTFilter
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,7 @@ RANDOM_STATE: int = 42
 
 # Sweep grid
 KL_S_WEIGHTS = [0.001, 0.01, 0.05]
+A_TAU_SCALES = [2.0, 5.0]  # Path A gate authority; primary condition only
 SEEDS = [0, 1]
 
 
@@ -122,8 +125,8 @@ def load_mnist_pca(
         torch.tensor(X_test_pca, dtype=torch.float32),
         torch.tensor(y_train, dtype=torch.int64),
         torch.tensor(y_test, dtype=torch.int64),
-        mnist.target[:train_size],
-        mnist.target[train_size:],
+        y_train,
+        y_test,
         pca,
         scaler,
     )
@@ -141,9 +144,10 @@ def make_esdm_cfg(
     lambda_clip: float = 100.0,
     heat_death_patience: int = 1000,
     n_vibrational_steps: int = N_VIBRATIONAL_STEPS,
+    a_tau_scale: Optional[float] = None,
 ) -> dict:
     """Build an ESDM config dict for MNIST-PCA."""
-    return {
+    cfg = {
         "model": {
             "dim_input": dim,
             "dim_latent": dim,
@@ -184,6 +188,19 @@ def make_esdm_cfg(
         },
     }
 
+    # Optional Path A Graph-WHT filter.  The filter needs a feature-space
+    # Laplacian; we use the identity as a neutral placeholder because MNIST-PCA
+    # features are already uncorrelated.  The filter is only created when an
+    # a_tau_scale is requested, so the default Exp 4 ablation remains unchanged.
+    if a_tau_scale is not None:
+        L_F = np.eye(dim, dtype=np.float64)
+        cfg["model"]["wht_filter"] = GraphWHTFilter(
+            L_matrix=L_F,
+            a_tau_scale=a_tau_scale,
+        ).fit()
+
+    return cfg
+
 
 # ---------------------------------------------------------------------------
 # Evaluators
@@ -202,6 +219,62 @@ def reconstruction_mse(model: ESDM, X: torch.Tensor, batch_size: int = 512) -> f
             n += xb.numel()
     model.train()
     return mse / n
+
+
+def _path_a_diagnostics(
+    Q: torch.Tensor,
+    prev_Q: Optional[torch.Tensor],
+    wht_filter: Optional[GraphWHTFilter],
+    clock,
+    dim: int,
+) -> dict[str, float]:
+    """Compute Path A bivariate-gate diagnostics for a single training step."""
+    if wht_filter is None or prev_Q is None:
+        return {
+            "r_k_mean": 0.0,
+            "r_k_max": 0.0,
+            "g_residual_mean": 0.0,
+            "a_tau": 0.0,
+            "r_g_corr": 0.0,
+        }
+
+    bright_modes = dim  # MNIST-PCA: all feature dims are bright for the gate
+    r_k = compute_mode_residuals(Q.detach(), prev_Q, bright_modes=bright_modes)
+    r_k_np = r_k.detach().cpu().numpy()
+    r_k_mean = float(r_k.mean())
+    r_k_max = float(r_k.max())
+
+    tau_n = float(clock.tau_n)
+    tau_max = float(clock.tau_max_est)
+    norm_tau = tau_n / max(tau_max, 1e-12)
+    norm_tau = float(np.clip(norm_tau, 0.0, 1.0))
+
+    a_tau_scale = wht_filter.a_tau_scale
+    tau_decay_power = wht_filter.tau_decay_power
+    decay = (1.0 - norm_tau) ** tau_decay_power
+    a_tau = a_tau_scale * decay
+    b_tau = a_tau_scale * (decay - norm_tau ** tau_decay_power)
+
+    gate_logit = np.zeros(dim, dtype=np.float64)
+    if wht_filter.fiedler_order is not None:
+        K = min(dim, len(wht_filter.fiedler_order))
+        gate_logit[:K] = r_k_np[wht_filter.fiedler_order[:K]]
+    gate_logit = a_tau * np.log1p(gate_logit) + b_tau
+    g_residual = 1.0 / (1.0 + np.exp(-gate_logit))
+    g_residual_mean = float(g_residual.mean())
+
+    if r_k.numel() > 1 and r_k.std().item() > 1e-15 and float(np.std(g_residual)) > 1e-15:
+        r_g_corr = float(spearmanr(r_k_np, g_residual).statistic)
+    else:
+        r_g_corr = 0.0
+
+    return {
+        "r_k_mean": r_k_mean,
+        "r_k_max": r_k_max,
+        "g_residual_mean": g_residual_mean,
+        "a_tau": a_tau,
+        "r_g_corr": r_g_corr,
+    }
 
 
 def latent_knn_accuracy(
@@ -248,6 +321,7 @@ def run_single(
     use_per_mode: bool = False,
     kl_S_weight: float = 0.01,
     lambda_clip: float = 100.0,
+    a_tau_scale: Optional[float] = None,
     max_steps: int = MAX_STEPS,
     eval_every: int = EVAL_EVERY,
     batch_size: int = BATCH_SIZE,
@@ -265,6 +339,9 @@ def run_single(
     ----------
     use_per_mode :
         If ``True``, use per-mode entropic schedule; otherwise scalar schedule.
+    a_tau_scale :
+        Path A gate authority.  If ``None`` no Graph-WHT filter is attached and
+        Path A diagnostics are logged as zeros.
     output_dir :
         If given, write ``metrics.csv`` to this directory.
     """
@@ -282,8 +359,10 @@ def run_single(
         kl_S_weight=kl_S_weight,
         lambda_clip=lambda_clip,
         n_vibrational_steps=n_vibrational_steps,
+        a_tau_scale=a_tau_scale,
     )
     model = ESDM(cfg)
+    wht_filter = cfg["model"].get("wht_filter")
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=lr, weight_decay=weight_decay
     )
@@ -295,12 +374,15 @@ def run_single(
 
     logger.info(
         "Exp4: dim=%d, use_per_mode=%s, kl_S_weight=%.3f, lambda_clip=%.1f, "
-        "max_steps=%d, seed=%d",
-        dim, use_per_mode, kl_S_weight, lambda_clip, max_steps, seed,
+        "a_tau_scale=%s, max_steps=%d, seed=%d",
+        dim, use_per_mode, kl_S_weight, lambda_clip,
+        a_tau_scale if a_tau_scale is not None else "none",
+        max_steps, seed,
     )
 
     records: list[dict] = []
     best_test_mse = float("inf")
+    prev_Q: Optional[torch.Tensor] = None
 
     for step in range(max_steps):
         idx = torch.randint(0, N_train, (batch_size,))
@@ -314,6 +396,12 @@ def run_single(
         scheduler.step()
 
         # Per-step core metrics.
+        recon_mse = float(F.mse_loss(out.x_hat, xb, reduction="mean").detach())
+        path_a = _path_a_diagnostics(
+            out.Q, prev_Q, wht_filter, model.clock, dim=dim
+        )
+        prev_Q = out.Q.detach().clone()
+
         record = {
             "step": step,
             "seed": seed,
@@ -321,9 +409,11 @@ def run_single(
             "use_per_mode": int(use_per_mode),
             "kl_S_weight": kl_S_weight,
             "lambda_clip": lambda_clip,
+            "a_tau_scale": a_tau_scale if a_tau_scale is not None else 0.0,
             "lr": scheduler.get_last_lr()[0],
             "train_loss": float(out.loss.detach()),
             "train_recon": float(out.metrics["recon"]),
+            "recon_mse": recon_mse,
             "kl_S": float(out.metrics["kl_S"]),
             "kl_tau": float(out.metrics["kl_tau"]),
             "dark_entropy": float(out.metrics["dark_entropy"]),
@@ -334,6 +424,7 @@ def run_single(
             "rho_sign": out.clock.rho_sign,
             "is_heat_death": int(model.clock.is_heat_death()),
             "N_active": int(model._last_N_active.item()),
+            **path_a,
         }
 
         # Periodic evaluation on the full test set.
@@ -436,11 +527,11 @@ def assert_success_criteria(
 
     # 3. Latent kNN accuracy threshold.
     knn = eval_rows["latent_knn_acc"].dropna()
-    results["knn_acc_high"] = bool(not knn.empty and float(knn.iloc[-1]) >= 0.70)
+    results["knn_acc_high"] = bool(not knn.empty and float(knn.iloc[-1]) >= 0.85)
 
     # 4. Negative correlation between tau_k and explained variance.
     corr = final.get("final_tau_var_corr", 0.0)
-    results["tau_var_negative_corr"] = bool(float(corr) < -0.1)
+    results["tau_var_negative_corr"] = bool(float(corr) < -0.3)
 
     # 5. All per-mode tau values positive (no mode collapse).
     # For scalar/global schedule this criterion is not applicable and passes.
@@ -481,6 +572,7 @@ def run_sweep(
     kl_s_weights: list[float] = KL_S_WEIGHTS,
     seeds: list[int] = SEEDS,
     use_per_modes: list[bool] = [False, True],
+    a_tau_scales: list[Optional[float]] = [None],
     max_steps: int = MAX_STEPS,
     output_root: str = "runs/exp4",
     cache_dir: Optional[Path | str] = None,
@@ -491,21 +583,24 @@ def run_sweep(
     for dim in dims:
         for kl_s in kl_s_weights:
             for use_per_mode in use_per_modes:
-                for seed in seeds:
-                    out_dir = (
-                        f"{output_root}/dim{dim}_kls{kl_s}"
-                        f"_permode{int(use_per_mode)}/seed{seed}"
-                    )
-                    df = run_single(
-                        dim=dim,
-                        use_per_mode=use_per_mode,
-                        kl_S_weight=kl_s,
-                        seed=seed,
-                        max_steps=max_steps,
-                        output_dir=out_dir,
-                        cache_dir=cache_dir,
-                    )
-                    all_frames.append(df)
+                for a_ts in a_tau_scales:
+                    for seed in seeds:
+                        ats_str = f"ats{a_ts}" if a_ts is not None else "atsnone"
+                        out_dir = (
+                            f"{output_root}/dim{dim}_kls{kl_s}"
+                            f"_permode{int(use_per_mode)}_{ats_str}/seed{seed}"
+                        )
+                        df = run_single(
+                            dim=dim,
+                            use_per_mode=use_per_mode,
+                            kl_S_weight=kl_s,
+                            a_tau_scale=a_ts,
+                            seed=seed,
+                            max_steps=max_steps,
+                            output_dir=out_dir,
+                            cache_dir=cache_dir,
+                        )
+                        all_frames.append(df)
 
     all_metrics = pd.concat(all_frames, ignore_index=True)
     root = Path(output_root)

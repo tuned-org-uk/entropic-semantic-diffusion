@@ -17,7 +17,7 @@ Usage examples
 import argparse
 import logging
 
-from esdm.experiments.exp4 import PCA_DIM, run_single, run_sweep
+from esdm.experiments.exp4 import PCA_DIM, A_TAU_SCALES, run_single, run_sweep
 
 
 def main() -> None:
@@ -49,6 +49,15 @@ def main() -> None:
         help="Semantic coupling / barrier height (default: 0.01).",
     )
     parser.add_argument("--lambda-clip", type=float, default=100.0)
+    parser.add_argument(
+        "--a-tau-scale",
+        type=float,
+        default=None,
+        help=(
+            "Path A gate authority a_tau_scale (default: None). "
+            f"Full sweep uses {A_TAU_SCALES}."
+        ),
+    )
     parser.add_argument("--max-steps", type=int, default=10000)
     parser.add_argument("--eval-every", type=int, default=500)
     parser.add_argument("--batch-size", type=int, default=128)
@@ -77,6 +86,7 @@ def main() -> None:
             kl_s_weights=[0.001, 0.01, 0.05],
             seeds=[0, 1],
             use_per_modes=[False, True],
+            a_tau_scales=[None] + A_TAU_SCALES,
             max_steps=200,
             output_root=args.output_dir,
         )
@@ -84,6 +94,7 @@ def main() -> None:
     elif args.sweep:
         run_sweep(
             dims=[args.dim],
+            a_tau_scales=[None] + A_TAU_SCALES,
             output_root=args.output_dir,
         )
         print("Experiment 4 full sweep complete.")
@@ -93,6 +104,7 @@ def main() -> None:
             use_per_mode=args.use_per_mode,
             kl_S_weight=args.kl_s_weight,
             lambda_clip=args.lambda_clip,
+            a_tau_scale=args.a_tau_scale,
             max_steps=args.max_steps,
             eval_every=args.eval_every,
             batch_size=args.batch_size,

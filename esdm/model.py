@@ -28,6 +28,7 @@ from esdm.wht_filter import GraphWHTFilter
 class ESDMOutput:
     x_hat:   Tensor
     z:       Tensor
+    Q:       Tensor
     loss:    Tensor
     clock:   ClockState
     metrics: dict[str, Tensor]
@@ -273,11 +274,15 @@ class ESDM(nn.Module):
         # 5. Optional timestep-aware Graph-WHT smoothing of the diffusion state.
         Q_raw = Q
         if self.wht_filter is not None:
-            Q_prev = (
-                self._last_Q
-                if self._last_Q is not None
-                else torch.zeros_like(Q_raw)
-            )
+            # If the batch size changed (e.g. train -> eval), reset the
+            # previous-state buffer for this step so residual computation
+            # does not fail on shape mismatch.
+            if self._last_Q is not None and self._last_Q.shape[0] != Q_raw.shape[0]:
+                Q_prev = torch.zeros_like(Q_raw)
+            elif self._last_Q is not None:
+                Q_prev = self._last_Q
+            else:
+                Q_prev = torch.zeros_like(Q_raw)
             r_k = compute_mode_residuals(
                 Q_raw, Q_prev, bright_modes=self.n_modes
             )
@@ -308,7 +313,7 @@ class ESDM(nn.Module):
             S_0=self.S_0,
         )
 
-        return ESDMOutput(x_hat=x_hat, z=z, loss=loss, clock=clock_state, metrics=metrics)
+        return ESDMOutput(x_hat=x_hat, z=z, Q=Q, loss=loss, clock=clock_state, metrics=metrics)
 
     # ------------------------------------------------------------------ #
 

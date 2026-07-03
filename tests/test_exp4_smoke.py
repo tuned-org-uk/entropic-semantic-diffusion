@@ -102,9 +102,10 @@ def test_run_single_global_returns_expected_columns():
     assert isinstance(metrics, pd.DataFrame)
     assert len(metrics) == 50
     expected = {
-        "step", "seed", "dim", "use_per_mode", "kl_S_weight",
-        "train_loss", "train_recon", "kl_S", "kl_tau", "dark_entropy",
+        "step", "seed", "dim", "use_per_mode", "kl_S_weight", "a_tau_scale",
+        "train_loss", "train_recon", "recon_mse", "kl_S", "kl_tau", "dark_entropy",
         "conserved", "tau_n", "alpha_bar", "Lambda_tau", "rho_sign",
+        "r_k_mean", "r_k_max", "g_residual_mean", "a_tau", "r_g_corr",
         "test_mse", "train_mse", "latent_knn_acc",
         "best_test_mse", "final_tau_var_corr",
     }
@@ -128,6 +129,23 @@ def test_run_single_per_mode_accumulates_tau_vector():
     tau_k = np.asarray(tau_k, dtype=float)
     assert tau_k.shape == (16,)
     assert np.all(tau_k > 0), "per_mode_tau must be strictly positive"
+
+
+@pytest.mark.slow
+@pytest.mark.network
+@pytest.mark.skipif(not _mnist_available(), reason="MNIST not available (no network/cache)")
+def test_run_single_with_a_tau_scale_logs_path_a_diagnostics():
+    metrics = run_single(
+        dim=16,
+        use_per_mode=True,
+        a_tau_scale=2.0,
+        max_steps=50,
+        eval_every=25,
+        seed=0,
+    )
+    assert metrics["a_tau_scale"].iloc[0] == 2.0
+    assert (metrics["r_k_mean"] >= 0).all()
+    assert metrics["r_g_corr"].abs().max() > 0.0, "expected some non-zero residual-gate correlation"
 
 
 @pytest.mark.slow
@@ -244,8 +262,10 @@ def test_run_sweep_limited_grid():
         kl_s_weights=[0.01],
         seeds=[0],
         use_per_modes=[False, True],
+        a_tau_scales=[None, 2.0],
         max_steps=20,
-        output_root="runs/exp4_test_sweep",
+        output_root="runs/exp4_test_sweep2",
     )
-    assert len(df) == 2 * 20  # 2 variants * 20 steps
+    assert len(df) == 2 * 2 * 20  # 2 variants * 2 a_tau_scales * 20 steps
     assert set(df["use_per_mode"].unique()) == {0, 1}
+    assert set(df["a_tau_scale"].unique()) == {0.0, 2.0}
