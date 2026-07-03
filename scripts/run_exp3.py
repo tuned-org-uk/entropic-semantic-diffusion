@@ -1,7 +1,7 @@
 """
-Run Experiment 3 — Barrier Height Sweep on High-Dimensional Gaussian Clusters.
+Run Experiment 3 - Barrier Height Sweep on High-Dimensional Gaussian Clusters.
 
-Ref: docs/02-EXPERIMENTS.md §Experiment 3
+Ref: docs/02-EXPERIMENTS.md section Experiment 3
     issue #6 (updated 2026-07-03): dim=64, bright_modes=dim//2=32
 
 Usage examples
@@ -12,7 +12,10 @@ Usage examples
 # Single run with custom barrier height and decay:
     python scripts/run_exp3.py --kl-s-weight 0.001 --kl-decay 0.01 --seed 42
 
-# Full 450-run sweep (all grid combinations, parallel-friendly via xargs):
+# Limited sweep for testing (recommended; ~18 runs, a few minutes):
+    python scripts/run_exp3.py --limited-sweep
+
+# Full production sweep (~540 runs, several hours):
     python scripts/run_exp3.py --sweep
 """
 import argparse
@@ -24,7 +27,7 @@ from esdm.experiments.exp3 import DIM, BRIGHT_MODES, A_TAU_SCALES, main_cli, run
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
     )
 
     parser = argparse.ArgumentParser(
@@ -52,7 +55,7 @@ def main() -> None:
         "--kl-decay",
         type=float,
         default=0.03,
-        help="KL decay rate (default: 0.03 — primary baseline; 0.08 is Exp-2 control)",
+        help="KL decay rate (default: 0.03 - primary baseline; 0.08 is Exp-2 control)",
     )
     parser.add_argument(
         "--clock-eps",
@@ -70,13 +73,13 @@ def main() -> None:
         "--kl-s-weight",
         type=float,
         default=0.05,
-        help="Semantic coupling / barrier height (default: 0.05 — intermediate regime)",
+        help="Semantic coupling / barrier height (default: 0.05 - intermediate regime)",
     )
     parser.add_argument(
         "--rho",
         type=float,
         default=3.0,
-        help="Inter-cluster SNR (default: 3.0 — primary result condition)",
+        help="Inter-cluster SNR (default: 3.0 - primary result condition)",
     )
     parser.add_argument(
         "--a-tau-scale",
@@ -108,8 +111,17 @@ def main() -> None:
         "--sweep",
         action="store_true",
         help=(
-            "Run the full sweep (~540 runs) instead of a single run. "
+            "Run the full production sweep (~540 runs, several hours). "
+            "For testing use --limited-sweep instead. "
             "Ignores --seed, --kl-s-weight, --kl-decay, --rho, --lambda-clip, --a-tau-scale."
+        ),
+    )
+    parser.add_argument(
+        "--limited-sweep",
+        action="store_true",
+        help=(
+            "Run a small test sweep (~18 runs, a few minutes). "
+            "Recommended for CI/development; ignores single-run parameters."
         ),
     )
     parser.add_argument(
@@ -120,6 +132,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    if args.sweep and args.limited_sweep:
+        parser.error("--sweep and --limited-sweep are mutually exclusive.")
+
     if args.sweep:
         run_sweep(
             dim=args.dim,
@@ -127,7 +142,22 @@ def main() -> None:
             output_root=args.output_dir,
             assert_each=args.assert_each,
         )
-        print("Experiment 3 sweep complete.")
+        print("Experiment 3 full sweep complete.")
+    elif args.limited_sweep:
+        run_sweep(
+            dim=args.dim,
+            bright_modes=args.bright_modes,
+            kl_s_weights=[0.001, 0.05, 1.0],
+            kl_decays=[0.03, 0.08],
+            rho_snrs=[3.0],
+            lambda_clips=[10.0],
+            a_tau_scales=A_TAU_SCALES,
+            seeds=[0, 1],
+            n_steps=200,
+            output_root=args.output_dir,
+            assert_each=args.assert_each,
+        )
+        print("Experiment 3 limited sweep complete.")
     else:
         main_cli(
             output_dir=f"{args.output_dir}/{args.seed}",
@@ -141,7 +171,7 @@ def main() -> None:
             dim=args.dim,
             bright_modes=args.bright_modes,
         )
-        print("Experiment 3 single run complete — all assertions passed.")
+        print("Experiment 3 single run complete - all assertions passed.")
 
 
 if __name__ == "__main__":
