@@ -212,7 +212,7 @@ The autoresearch loop is an autonomous iteration cycle that modifies model/exper
 
 ### Fitness metric
 
-The composite fitness score (higher is better; unbounded in the current implementation but with individual criteria capped) is defined in `esdm/eval/fitness.py` and computed from a single `run_single` call in `esdm/experiments/exp3.py`. It measures 10 health criteria from docs/00-DESIGN.md §8.1:
+The composite fitness score (higher is better; criterion weights sum to 123) is defined in `esdm/eval/fitness.py` and computed from a single `run_single` call in `esdm/experiments/exp3.py`. It measures health criteria from docs/00-DESIGN.md §8.1. See `docs/03-FITNESS-CRITERIA.md` for the full design-to-fitness mapping and improvement pathways. The `r_g_corr` criteria are scoped to the pre-heat-death active phase, matching the design's expectation that residuals are flat after heat death:
 
 | Criterion | Max pts | What it measures |
 |---|---|---|
@@ -227,8 +227,8 @@ The composite fitness score (higher is better; unbounded in the current implemen
 | `g_residual_final_bonus` | 5 | Final gate residual near 0.05 |
 | `a_tau_monotone` | 5 | $$a_\tau$$ monotonically decreasing |
 | `a_tau_final_bonus` | 3 | $$a_\tau$$ reaches near 0 |
-| `r_g_corr_positive` | 10 | Residual-gate correlation positive |
-| `r_g_corr_increasing` | 5 | Correlation increasing over time |
+| `r_g_corr_positive` | 10 | Residual-gate correlation positive (active phase mean) |
+| `r_g_corr_increasing` | 5 | Correlation increasing over active phase |
 | `rho_sign_stabilizing` | 10 | $$\rho_-/\rho_+$$ variance decreasing |
 | `dark_entropy_floor` | 10 | Floor in [35%, 85%] of $$S_0$$ |
 
