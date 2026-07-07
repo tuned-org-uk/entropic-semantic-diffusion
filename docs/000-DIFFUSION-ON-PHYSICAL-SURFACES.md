@@ -57,7 +57,7 @@ The score function itself can be redefined as the gradient of the λτ energy ra
 
 Your Graph Wiring paper is explicit that the "Dirichlet ⇒ minimal surface" chain is rigorous only under conformal-gauge assumptions, and that this gauge condition is currently *imposed* rather than *derived* from the discrete wiring pipeline [^2]. For ESDM to inherit "the same quality of output" as a full 3D diffusion model, you'll need to show empirically (per your own validation protocol: spectral stability under subsampling, λτ tail-quality metrics) that the dual-space diffusion trajectory preserves the same low-frequency geometry that a volumetric diffusion model would recover, since that is exactly the open gap your paper flags between "structured assumption" and "unconditional theorem" [^2].
 
-Let's sketch the concrete update equations for a coupled item-space/feature-space diffusion step (i.e., the discrete-time algorithm you'd actually implement in ArrowSpace/ESDM), or focus first on how to define and validate the "2.5-D" score function empirically?
+Let's sketch the concrete update equations for a coupled item-space/feature-space diffusion step (i.e., the discrete-time algorithm you'd actually implement in ArrowSpace/ESDM), and also focus first on how to define and validate the "2.5-D" score function empirically.
 <span style="display:none">[^10][^11][^12][^13][^14][^15][^16][^4][^5][^6][^7][^8][^9]</span>
 
 <div align="center">⁂</div>
