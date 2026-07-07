@@ -344,6 +344,19 @@ Fitness breakdown:
 | `r_g_corr_positive` | 0.00 | 10 |
 | **Total** | **103.95** | **123** |
 
+### Macro-phase roadmap to image and sound generation
+
+The following macro-issues track the path from the current synthetic-diagnostic state to a model that produces images and sounds:
+
+| Phase | Issue | Goal | Depends on |
+|---|---|---|---|
+| A — Complete entropic-clock track | [#20](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/20) | Full ESDM forward pass, WHT wired into recurrence, fitness gaps closed | #19 |
+| B — Real data loaders | [#21](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/21) | MNIST PCA-16, CIFAR-10 DINO-256, audio embeddings | independent |
+| C — Full training on real embeddings | [#22](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/22) | Exp 4 (MNIST) + Exp 5 (CIFAR-10), latent evaluation | A, B |
+| D — Generation and sampling | [#23](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/23) | Reverse-SDE sampler, pixel/audio decoder, FID/FAD evaluation | C |
+| E — 2.5-D dual-space track | [#24](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/24) | score3d vs score25d on minimal surfaces, ablation, spectral stability | A (for Phase 2 integration) |
+| F — Audio generation | [#25](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/25) | Audio data loader, waveform/spectrogram diffusion, audible samples | B, D |
+
 ### Next phases
 
 Track these as GitHub issues in the repository:
