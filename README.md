@@ -347,6 +347,37 @@ The driver writes a timestamped TSV to `autoresearch/loop-YYMMDD-HHMM/results.ts
 `handoff.json` for downstream chaining.  It only commits to git when a change improves the
 fitness score; unsuccessful changes are reverted automatically.
 
+#### Current baseline
+
+The latest kept baseline scores **90.68 / 100** and is reproduced by `scripts/verify_fitness.py`:
+
+```bash
+.venv/bin/python scripts/verify_fitness.py
+# 90.68
+```
+
+The baseline parameters are:
+
+| Parameter | Value |
+|---|---|
+| `n_steps` | 800 |
+| `kl_S_weight` | 0.5 |
+| `kl_decay` | 0.03 |
+| `wht_filter` | `basic` |
+| `a_tau_scale` | 2.62 |
+| `lambda_clip` | 10.0 |
+| `rho` | 3.0 |
+| `seed` | 3407 |
+
+To replicate it explicitly:
+
+```bash
+.venv/bin/python -m esdm.eval.fitness --n-steps 800 --kl-s-weight 0.5 --kl-decay 0.03
+```
+
+(The verify script hard-codes the same parameters.)  See `AGENTS.md` for the full fitness
+criteria breakdown and the roadmap for the next phases.
+
 ---
 
 ## Related Repositories

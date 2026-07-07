@@ -245,16 +245,18 @@ The autoresearch loop optimizes parameters against the `none` baseline first. On
 ### Running the loop
 
 ```bash
-# Establish baseline (iteration 0)
+# Establish baseline (iteration 0) -- current kept baseline
 .venv/bin/python scripts/verify_fitness.py
 
-# Run a single fitness evaluation with specific parameters
-.venv/bin/python -m esdm.eval.fitness --n-steps 300 --kl-s-weight 0.5 --kl-decay 0.03 --wht-filter none
+# Replicate the current kept baseline explicitly
+.venv/bin/python -m esdm.eval.fitness --n-steps 800 --kl-s-weight 0.5 --kl-decay 0.03 --wht-filter basic --a-tau-scale 2.62
 
-# Compare filter modes
-.venv/bin/python -m esdm.eval.fitness --wht-filter basic
-.venv/bin/python -m esdm.eval.fitness --wht-filter bivariate
+# Compare filter modes at the optimized run length
+.venv/bin/python -m esdm.eval.fitness --n-steps 800 --kl-s-weight 0.5 --kl-decay 0.03 --wht-filter basic --a-tau-scale 2.62
+.venv/bin/python -m esdm.eval.fitness --n-steps 800 --kl-s-weight 0.5 --kl-decay 0.03 --wht-filter bivariate --a-tau-scale 2.62
 ```
+
+Note: the `esdm-fitness` CLI does not expose `--wht-filter`; use the `run_single` API or `scripts/verify_fitness.py` for filter-mode comparisons.
 
 ### Loop configuration
 
@@ -285,7 +287,7 @@ Each iteration:
 
 ### Baseline conditions
 
-The baseline uses the moderate-barrier condition:
+The current kept baseline uses the moderate-barrier condition with an extended run length and the basic WHT filter:
 
 | Parameter | Value | Rationale |
 |---|---|---|
@@ -293,12 +295,58 @@ The baseline uses the moderate-barrier condition:
 | `kl_decay` | 0.03 | Slow decay -- signal persists, entropic time spreads across the run |
 | `lambda_clip` | 10.0 | Standard pump ceiling |
 | `rho` | 3.0 | Primary SNR condition |
-| `wht_filter` | `none` | Control condition (no filter) |
-| `n_steps` | 300 | Short enough for pytest (~2s), long enough for heat death |
+| `wht_filter` | `basic` | Heat-kernel WHT filter; unlocks Path-A diagnostics |
+| `a_tau_scale` | 2.62 | Tuned authority for the highest partial gate-mean score |
+| `n_steps` | 800 | Extended run so heat death fires around the patience window |
 | `seed` | 3407 | Project-wide seed |
 
-### Known weak spots (as of baseline)
+The historical `none` control used `n_steps=300` and scored 55.00; extending to 800 steps raised it to 68.58. Switching to `basic` and tuning `a_tau_scale` raised it to 90.68.
 
-- **conservation** (0/15): spectral energy grows unboundedly in the synthetic setup; the conservation term in the ELBO is not enforced because exp3 uses a synthetic clock signal, not the full ESDM forward pass.
-- **heat_death** (0/10): does not fire within 300 steps at moderate barrier; needs faster decay or longer runs.
-- **r_g_corr** (0/10): residual-gate correlation is negative or NaN in the `none` mode (no gate to correlate with).
+### Known weak spots (as of current baseline)
+### Current baseline result
+
+Latest kept baseline (commit `7bb22c1`):
+
+```bash
+.venv/bin/python scripts/verify_fitness.py
+# 90.68
+```
+
+Fitness breakdown:
+
+| Criterion | Score | Max |
+|---|---|---|
+| `tau_monotone` | 10.00 | 10 |
+| `tau_range_bonus` | 5.00 | 5 |
+| `alpha_bar_decrease` | 10.00 | 10 |
+| `heat_death` | 10.00 | 10 |
+| `heat_death_timing` | 3.57 | 5 |
+| `g_residual_decrease` | 10.00 | 10 |
+| `g_residual_final_bonus` | 4.11 | 5 |
+| `g_mean_selective` | 5.00 | 10 |
+| `a_tau_monotone` | 5.00 | 5 |
+| `a_tau_final_bonus` | 3.00 | 3 |
+| `r_g_corr_increasing` | 5.00 | 5 |
+| `rho_sign_stabilizing` | 10.00 | 10 |
+| `dark_entropy_floor` | 10.00 | 10 |
+| `conservation` | 0.00 | 15 |
+| `r_g_corr_positive` | 0.00 | 10 |
+| **Total** | **90.68** | **100** |
+
+### Next phases
+
+1. **Close the conservation gap** (0/15). The most direct route is to drive `exp3` with the full ESDM forward pass so the ELBO conservation term is active, rather than a synthetic clock signal.
+2. **Align residual-gate correlation** (0/10). Investigate whether `GraphWHTFilter.fiedler_order` or the residual mapping in `exp3` needs to weight bright/dark modes differently so that larger residuals receive consistently larger gates.
+3. **Compare `basic` vs `bivariate`** at the optimized run length (`n_steps=800`, `a_tau_scale=2.62`). If `bivariate` matches or exceeds `basic`, it becomes the new baseline.
+4. **Tune heat-death timing** to ~70% by adjusting `kl_decay`, `kl_S_weight`, or the clock's `heat_death_patience`.
+
+
+| Criterion | Score | Gap | Diagnosis |
+|---|---|---|---|
+| `conservation` | 0/15 | 15 | The synthetic clock signal in `exp3` does not enforce the ELBO conservation term; bright-sector energy grows unboundedly. Needs full ESDM forward pass or a conservation-aware synthetic driver. |
+| `g_mean_selective` | 5/10 | 5 | Gate mean is ~0.10, below the [0.4, 0.8] window. Lower `a_tau_scale` can push it into the window but currently trades off against other criteria. |
+| `r_g_corr_positive` | 0/10 | 10 | Spearman correlation between residuals and gate is weakly negative (~-0.03). The gate is not yet strongly aligned with per-mode residual structure. |
+| `heat_death_timing` | 3.57/5 | 1.43 | Heat death fires at ~84% of the run; closer to 70% would give full points. Faster decay or adjusted patience could help. |
+| `g_residual_final_bonus` | 4.11/5 | 0.89 | Final residual gate is close to but not exactly 0.05. Fine-tuning the heat-death closure should close this. |
+
+Heat death is now captured (10/10) after extending `n_steps` to 800.
