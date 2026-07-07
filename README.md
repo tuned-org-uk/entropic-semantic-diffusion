@@ -4,6 +4,23 @@
 
 > **Note:** the repository slug retains the historical spelling `enthropic-semantic-diffusion`; the Python package name is `esdm`.
 
+## Quick Start — Autoresearch Loop
+
+Run the self-contained autoresearch driver to reproduce and improve the current baseline:
+
+```bash
+.venv/bin/python scripts/autoresearch_loop.py
+```
+
+Check the current baseline fitness and the test guard:
+
+```bash
+.venv/bin/python scripts/verify_fitness.py   # 90.68
+.venv/bin/python -m pytest tests/ -q         # 101 passed
+```
+
+See the [Autoresearch Loop](#autoresearch-loop) section below and `AGENTS.md` for the full protocol, parameter values, and open research issues.
+
 ---
 
 ## Background: The ArrowSpace Dual-Space Hypothesis
