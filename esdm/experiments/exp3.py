@@ -262,6 +262,7 @@ def run_single(
     sigma: Optional[float] = None,
     a_tau_scale: float = 5.0,
     tau_decay_power: float = 1.0,
+    wht_filter: str = "none",
     seed: int = 0,
     output_dir: Optional[Path | str] = None,
 ) -> pd.DataFrame:
@@ -275,8 +276,13 @@ def run_single(
     ``dark_entropy`` are derived from the spectral split of the vibrational
     state so that the two-sector conservation law can be asserted.
 
-    Path A diagnostics are computed with a GraphWHTFilter configured with
-    ``a_tau_scale`` and ``tau_decay_power``.
+    Parameters
+    ----------
+    wht_filter : str
+        "none" -- no WHT filter; Path A gate columns are NaN (baseline control).
+        "basic" -- heat-kernel-only WHT filter.
+        "bivariate" -- Path A bivariate gate g_k(tau, r_k) with a_tau_scale
+        and tau_decay_power.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -299,9 +305,9 @@ def run_single(
 
     logger.info(
         "Exp3: dim=%d, bright_modes=%d, kl_S_weight=%.3f, kl_decay=%.3f, "
-        "lambda_clip=%.1f, rho=%.1f, a_tau_scale=%.1f, seed=%d",
+        "lambda_clip=%.1f, rho=%.1f, a_tau_scale=%.1f, wht_filter=%s, seed=%d",
         dim, bright_modes, kl_S_weight, kl_decay, lambda_clip, rho,
-        a_tau_scale, seed,
+        a_tau_scale, wht_filter, seed,
     )
 
     # --- Model components ---
@@ -318,11 +324,17 @@ def run_single(
     ).to(dtype=torch.float64)
 
     # WHT filter for Path A diagnostics.
-    wht = GraphWHTFilter(
-        L_matrix=L_init.numpy(),
-        a_tau_scale=a_tau_scale,
-        tau_decay_power=tau_decay_power,
-    ).fit()
+    # "none" = baseline control (no filter); "basic" = heat kernel only;
+    # "bivariate" = Path A gate g_k(tau, r_k).
+    use_wht = wht_filter in ("basic", "bivariate")
+    if use_wht:
+        wht = GraphWHTFilter(
+            L_matrix=L_init.numpy(),
+            a_tau_scale=a_tau_scale,
+            tau_decay_power=tau_decay_power,
+        ).fit()
+    else:
+        wht = None
 
     Q_t = torch.zeros(1, dim, dtype=torch.float64)
     L_batch = L_init
@@ -422,39 +434,43 @@ def run_single(
             gate_norm_tau = 1.0 - min(state.delta_tau / initial_delta, 1.0)
             gate_norm_tau = float(np.clip(gate_norm_tau, 0.0, 1.0))
 
-        # Bivariate gate from the WHT filter.
-        decay = (1.0 - gate_norm_tau) ** tau_decay_power
-        a_tau = a_tau_scale * decay
-        b_tau = a_tau_scale * (decay - (gate_norm_tau ** tau_decay_power))
-
-        # Map residuals into WHT positions; non-bright positions are zero.
-        gate_logit = np.zeros(dim, dtype=np.float64)
+        # Bivariate gate from the WHT filter (only when wht is active).
         r_k_np = r_k.detach().numpy()
-        K = min(bright_modes, dim)
-        if wht.fiedler_order is None:
-            logger.warning(
-                "GraphWHTFilter.fiedler_order is None after .fit() - "
-                "Path A gate has no spectral ordering and defaults to a "
-                "pure clock-driven gate."
-            )
-        else:
-            gate_logit[:K] = r_k_np[wht.fiedler_order[:K]]
-        gate_logit = a_tau * np.log1p(gate_logit) + b_tau
-        g_residual = 1.0 / (1.0 + np.exp(-gate_logit))
-        g_residual_mean = float(g_residual.mean())
+        if wht is not None:
+            decay = (1.0 - gate_norm_tau) ** tau_decay_power
+            a_tau = a_tau_scale * decay
+            b_tau = a_tau_scale * (decay - (gate_norm_tau ** tau_decay_power))
 
-        # Per-step residual-gate correlation.
-        if (
-            r_k.numel() > 1
-            and r_k.std().item() > 1e-15
-            and float(np.std(g_residual)) > 1e-15
-        ):
-            r_g_corr = float(spearmanr(r_k_np, g_residual).statistic)
+            # Map residuals into WHT positions; non-bright positions are zero.
+            gate_logit = np.zeros(dim, dtype=np.float64)
+            K = min(bright_modes, dim)
+            if wht.fiedler_order is None:
+                logger.warning(
+                    "GraphWHTFilter.fiedler_order is None after .fit() - "
+                    "Path A gate has no spectral ordering and defaults to a "
+                    "pure clock-driven gate."
+                )
+                gate_logit[:K] = r_k_np[:K]
+            else:
+                gate_logit[:K] = r_k_np[wht.fiedler_order[:K]]
+            gate_logit = a_tau * np.log1p(gate_logit) + b_tau
+            g_residual = 1.0 / (1.0 + np.exp(-gate_logit))
+            g_residual_mean = float(g_residual.mean())
+
+            # Per-step residual-gate correlation.
+            if (
+                r_k.numel() > 1
+                and r_k.std().item() > 1e-15
+                and float(np.std(g_residual)) > 1e-15
+            ):
+                r_g_corr = float(spearmanr(r_k_np, g_residual).statistic)
+            else:
+                r_g_corr = 0.0
         else:
-            # Undefined correlation (e.g. flat residuals at early steps or at
-            # heat death).  Log 0.0 so the column stays finite; downstream
-            # analysis should treat near-zero variance windows as missing.
-            r_g_corr = 0.0
+            # No WHT filter: Path A gate columns are NaN (baseline control).
+            g_residual = np.full(dim, np.nan)
+            g_residual_mean = float("nan")
+            r_g_corr = float("nan")
 
         # CFL-clamped dt diagnostic.
         L_prebuilt = _laplacian_from_dense(L_batch)
@@ -508,11 +524,11 @@ def run_single(
             "r_k_mean":               r_k_mean,
             "r_k_max":                r_k_max,
             "g_residual_mean":        g_residual_mean,
-            "a_tau":                  a_tau,
+            "a_tau":                  float(a_tau) if wht is not None else float("nan"),
             # --- Path A correlation (first independent measure, new in Exp 3) ---
             "r_g_corr":               r_g_corr,
             # --- WHT gate columns ---
-            "g_mean":                 float(g_dark.detach().mean()),
+            "g_mean":                 float(g_residual.mean()) if wht is not None else float("nan"),
             # g_entropy is intentionally aliased to dark_entropy for
             # backwards-compatibility with the Exp 2 schema.
             "g_entropy":              dark_entropy_val,
@@ -660,6 +676,7 @@ def run_sweep(
     seeds: list[int] = SEEDS,
     n_steps: int = N_STEPS,
     batch_size: int = BATCH_SIZE,
+    wht_filter: str = "none",
     output_root: str = "runs/exp3",
     assert_each: bool = False,
 ) -> pd.DataFrame:
@@ -703,6 +720,7 @@ def run_sweep(
                                 lambda_clip=lc,
                                 rho=rho,
                                 a_tau_scale=a_ts,
+                                wht_filter=wht_filter,
                                 seed=s,
                                 output_dir=out_dir,
                             )
@@ -740,6 +758,7 @@ def main_cli(
     bright_modes: int = BRIGHT_MODES,
     n_steps: int = N_STEPS,
     batch_size: int = BATCH_SIZE,
+    wht_filter: str = "none",
 ) -> pd.DataFrame:
     """
     CLI entry point for a single Exp-3 run.
@@ -758,6 +777,7 @@ def main_cli(
         lambda_clip=lambda_clip,
         rho=rho,
         a_tau_scale=a_tau_scale,
+        wht_filter=wht_filter,
         seed=seed,
         output_dir=output_dir,
     )

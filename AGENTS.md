@@ -205,3 +205,100 @@ All experiments are synthetic. **Phase 3**: image/sound data loaders and experim
 # CLI smoke test
 .venv/bin/python -m pytest tests/test_cli.py -q
 ```
+
+## Autoresearch loop
+
+The autoresearch loop is an autonomous iteration cycle that modifies model/experiment parameters, measures a composite fitness score, and keeps or discards each change. It runs the ESDM model on synthetic data, scores the run against the design doc's health criteria (§8.1), and iterates to maximize the score.
+
+### Fitness metric
+
+The composite fitness score (0--100, higher is better) is defined in `esdm/eval/fitness.py` and computed from a single `run_single` call in `esdm/experiments/exp3.py`. It measures 10 health criteria from docs/00-DESIGN.md §8.1:
+
+| Criterion | Max pts | What it measures |
+|---|---|---|
+| `tau_monotone` | 10 | $$\tau_n$$ strictly increasing |
+| `tau_range_bonus` | 5 | Total $$\tau_n$$ accumulation (larger range = better) |
+| `alpha_bar_decrease` | 10 | $$\bar{\alpha}(\tau)$$ drops from ~1 toward ~0 |
+| `conservation` | 15 | $$\|S_\mathit{total} - S_0\| / S_0 \to 0$$ |
+| `heat_death` | 10 | Heat death fires within the run |
+| `heat_death_timing` | 5 | Fires around 70% through (not too early/late) |
+| `g_mean_selective` | 10 | WHT gate mean in [0.4, 0.8] |
+| `g_residual_decrease` | 10 | Bivariate gate closes toward 0.05 |
+| `g_residual_final_bonus` | 5 | Final gate residual near 0.05 |
+| `a_tau_monotone` | 5 | $$a_\tau$$ monotonically decreasing |
+| `a_tau_final_bonus` | 3 | $$a_\tau$$ reaches near 0 |
+| `r_g_corr_positive` | 10 | Residual-gate correlation positive |
+| `r_g_corr_increasing` | 5 | Correlation increasing over time |
+| `rho_sign_stabilizing` | 10 | $$\rho_-/\rho_+$$ variance decreasing |
+| `dark_entropy_floor` | 10 | Floor in [35%, 85%] of $$S_0$$ |
+
+### WHT filter modes
+
+The fitness baseline is established with `wht_filter="none"` (control condition). The WHT filter modes are:
+
+- `none` -- no filter; Path A gate columns (`g_mean`, `g_residual_mean`, `r_g_corr`, `a_tau`) are NaN. This is the **baseline control** against which filter treatments are compared.
+- `basic` -- heat-kernel-only WHT filter (no bivariate gate).
+- `bivariate` -- Path A bivariate gate $$g_k(\tau, r_k)$$ with heat-death closure invariant.
+
+The autoresearch loop optimizes parameters against the `none` baseline first. Once the control fitness is maximized, a separate loop compares `basic` and `bivariate` modes to determine whether the WHT filter improves fitness over the control -- this is the core research question.
+
+### Running the loop
+
+```bash
+# Establish baseline (iteration 0)
+.venv/bin/python scripts/verify_fitness.py
+
+# Run a single fitness evaluation with specific parameters
+.venv/bin/python -m esdm.eval.fitness --n-steps 300 --kl-s-weight 0.5 --kl-decay 0.03 --wht-filter none
+
+# Compare filter modes
+.venv/bin/python -m esdm.eval.fitness --wht-filter basic
+.venv/bin/python -m esdm.eval.fitness --wht-filter bivariate
+```
+
+### Loop configuration
+
+| Parameter | Value |
+|---|---|
+| Goal | Maximize ESDM composite fitness score |
+| Scope | `esdm/experiments/`, `esdm/models/`, `esdm/eval/fitness.py`, `scripts/verify_fitness.py` |
+| Metric | Fitness score (higher is better) |
+| Verify | `.venv/bin/python scripts/verify_fitness.py` |
+| Guard | `.venv/bin/python -m pytest tests/ -q --tb=no` (all tests must pass) |
+| Direction | `higher_is_better` |
+| Iterations | 25 (bounded) |
+| Results | `autoresearch/loop-{YYMMDD}-{HHMM}/results.tsv` |
+
+### Decision protocol
+
+Each iteration:
+1. **Review** -- read the results TSV and `git log` to see what worked/failed
+2. **Modify** -- one focused atomic change to a parameter, success criterion, or model component
+3. **Commit** -- `experiment: {description}` prefix
+4. **Verify** -- run `scripts/verify_fitness.py`, extract numeric score
+5. **Guard** -- run full test suite; if any test fails, revert regardless of score
+6. **Decide**:
+   - `keep` -- score improved, guard passed
+   - `discard` -- score worsened or unchanged -- `git revert HEAD --no-edit`
+   - `crash` -- verify/guard failed -- `git revert HEAD --no-edit`
+7. **Log** -- append row to `results.tsv`
+
+### Baseline conditions
+
+The baseline uses the moderate-barrier condition:
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| `kl_S_weight` | 0.5 | Moderate barrier -- $$\tau_n$$ accumulates gradually, $$\bar{\alpha}$$ drops from ~1 to ~0.5 |
+| `kl_decay` | 0.03 | Slow decay -- signal persists, entropic time spreads across the run |
+| `lambda_clip` | 10.0 | Standard pump ceiling |
+| `rho` | 3.0 | Primary SNR condition |
+| `wht_filter` | `none` | Control condition (no filter) |
+| `n_steps` | 300 | Short enough for pytest (~2s), long enough for heat death |
+| `seed` | 3407 | Project-wide seed |
+
+### Known weak spots (as of baseline)
+
+- **conservation** (0/15): spectral energy grows unboundedly in the synthetic setup; the conservation term in the ELBO is not enforced because exp3 uses a synthetic clock signal, not the full ESDM forward pass.
+- **heat_death** (0/10): does not fire within 300 steps at moderate barrier; needs faster decay or longer runs.
+- **r_g_corr** (0/10): residual-gate correlation is negative or NaN in the `none` mode (no gate to correlate with).

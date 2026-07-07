@@ -9,7 +9,6 @@ the full 540-run production sweep belongs in a separate CI stage.
 Ref: docs/legacy/02-EXPERIMENTS.md, issue #6
 """
 import pandas as pd
-import pytest
 
 from esdm.experiments.exp1 import run_bridge_sweep
 from esdm.experiments.exp2 import main_cli as exp2_main_cli
@@ -40,7 +39,6 @@ def test_exp1_bridge_sweep_with_output_dir(tmp_path):
 
 def test_exp1_bridge_sweep_all_weights_pass_criteria(tmp_path):
     """Every bridge weight in the sweep must pass success criteria."""
-    from esdm.experiments.exp1 import assert_success_criteria
 
     results = run_bridge_sweep(
         bridge_weights=(0.0, 0.01, 0.1, 1.0),
@@ -108,6 +106,7 @@ def test_exp3_main_cli_single_run(tmp_path):
         rho=3.0,
         a_tau_scale=5.0,
         n_steps=300,
+        wht_filter="bivariate",
     )
     assert isinstance(metrics, pd.DataFrame)
     assert len(metrics) == 300
@@ -122,6 +121,7 @@ def test_exp3_main_cli_low_barrier(tmp_path):
         kl_S_weight=0.001,
         kl_decay=0.03,
         n_steps=300,
+        wht_filter="bivariate",
     )
     n_crossings = int((metrics["rho_sign"] < 1.0).sum())
     assert n_crossings >= 5
@@ -135,6 +135,7 @@ def test_exp3_main_cli_high_barrier_heat_death(tmp_path):
         kl_S_weight=1.0,
         kl_decay=0.08,
         n_steps=400,
+        wht_filter="bivariate",
     )
     hd = metrics[metrics["is_heat_death"] == 1]
     assert not hd.empty

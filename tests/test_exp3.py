@@ -101,7 +101,7 @@ def test_run_single_default_geometry():
 
 
 def test_run_single_no_nan_or_inf():
-    metrics = run_single(n_steps=50, seed=0)
+    metrics = run_single(n_steps=50, seed=0, wht_filter="bivariate")
     numeric = metrics.select_dtypes(include=[np.number])
     assert np.isfinite(numeric.to_numpy()).all()
 
@@ -123,13 +123,13 @@ def test_run_single_norm_tau_in_unit_interval():
 
 
 def test_run_single_a_tau_monotone_decreasing():
-    metrics = run_single(n_steps=50, seed=0)
+    metrics = run_single(n_steps=50, seed=0, wht_filter="bivariate")
     a_tau = metrics["a_tau"].to_numpy()
     assert np.all(np.diff(a_tau) <= 1e-6)
 
 
 def test_path_a_columns_present_and_bounded():
-    metrics = run_single(n_steps=50, seed=0)
+    metrics = run_single(n_steps=50, seed=0, wht_filter="bivariate")
     assert metrics["r_k_mean"].ge(0.0).all()
     assert metrics["r_k_max"].ge(0.0).all()
     assert metrics["g_residual_mean"].between(0.0, 1.0).all()
@@ -139,8 +139,8 @@ def test_path_a_columns_present_and_bounded():
 
 
 def test_run_single_a_tau_scale_2_uses_different_gate():
-    m5 = run_single(n_steps=50, a_tau_scale=5.0, seed=0)
-    m2 = run_single(n_steps=50, a_tau_scale=2.0, seed=0)
+    m5 = run_single(n_steps=50, a_tau_scale=5.0, seed=0, wht_filter="bivariate")
+    m2 = run_single(n_steps=50, a_tau_scale=2.0, seed=0, wht_filter="bivariate")
     # a_tau starts close to a_tau_scale (slightly below because tau_n > 0
     # after the first clock step has been logged).
     assert m5["a_tau"].iloc[0] > 4.5
@@ -193,7 +193,7 @@ def test_sweep_row_count_matches_cartesian_product():
 
 def test_assert_success_criteria_passes_for_valid_run():
     # Long enough to satisfy dark-entropy floor and rho_sign crossing.
-    metrics = run_single(n_steps=300, kl_S_weight=0.05, kl_decay=0.03, seed=0)
+    metrics = run_single(n_steps=300, kl_S_weight=0.05, kl_decay=0.03, seed=0, wht_filter="bivariate")
     assert_success_criteria(metrics, kl_S_weight=0.05, kl_decay=0.03, lambda_clip=10.0)
 
 
@@ -216,23 +216,20 @@ def test_assert_success_criteria_detects_conservation_violation():
 # ---------------------------------------------------------------------------
 
 def test_low_barrier_shows_oscillations():
-    # tau_n is monotone by construction; the cyclic signature appears in
-    # rho_sign crossing below 1.0 (constructive-dominant regime).
-    metrics = run_single(n_steps=500, kl_S_weight=0.001, kl_decay=0.03, seed=0)
+    metrics = run_single(n_steps=500, kl_S_weight=0.001, kl_decay=0.03, seed=0, wht_filter="bivariate")
     n_crossings = int((metrics["rho_sign"] < 1.0).sum())
     assert n_crossings >= 10, f"Expected many constructive-dominant steps, got {n_crossings}"
 
 
 def test_high_barrier_reaches_heat_death():
-    # Use a faster decay so heat death fires within the test window.
-    metrics = run_single(n_steps=600, kl_S_weight=1.0, kl_decay=0.08, seed=0)
+    metrics = run_single(n_steps=600, kl_S_weight=1.0, kl_decay=0.08, seed=0, wht_filter="bivariate")
     hd = metrics[metrics["is_heat_death"] == 1]
     assert not hd.empty, "Expected heat death to fire"
     assert int(hd["step"].iloc[0]) < 500, "Expected heat death before step 500"
 
 
 def test_dark_entropy_floor_in_valid_range():
-    metrics = run_single(n_steps=300, kl_S_weight=0.05, kl_decay=0.03, seed=0)
+    metrics = run_single(n_steps=300, kl_S_weight=0.05, kl_decay=0.03, seed=0, wht_filter="bivariate")
     # S_0 is the observed initial dark entropy, not the theoretical maximum.
     S_0 = float(metrics["dark_entropy"].iloc[0]) or 1.0
     floor = float(metrics["dark_entropy_floor"].iloc[-1])
