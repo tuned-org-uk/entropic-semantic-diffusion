@@ -349,7 +349,7 @@ fitness score; unsuccessful changes are reverted automatically.
 
 #### Current baseline
 
-The latest kept baseline scores **90.68 / 100** and is reproduced by `scripts/verify_fitness.py`:
+The latest kept baseline scores **90.68 / 100** (code commit `7bb22c1`, results saved at `af64577`) and is reproduced by `scripts/verify_fitness.py`:
 
 ```bash
 .venv/bin/python scripts/verify_fitness.py
@@ -375,8 +375,9 @@ To replicate it explicitly:
 .venv/bin/python -m esdm.eval.fitness --n-steps 800 --kl-s-weight 0.5 --kl-decay 0.03
 ```
 
-(The verify script hard-codes the same parameters.)  See `AGENTS.md` for the full fitness
-criteria breakdown and the roadmap for the next phases.
+(The verify script hard-codes the same parameters.)  The baseline log is saved at
+`autoresearch/loop-260707-1801/results.tsv`.  See `AGENTS.md` for the full fitness criteria
+breakdown, the open-issue roadmap, and the next phases.
 
 ---
 
