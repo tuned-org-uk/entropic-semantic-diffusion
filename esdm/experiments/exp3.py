@@ -209,7 +209,7 @@ def spectral_split(
     U : Tensor, shape (F, F)
         Eigenvector matrix of ``L`` (columns ascending by eigenvalue).
     kl_tau : Tensor, scalar
-        Total bright-sector energy (sum over bright modes).
+        Shannon entropy of the normalised bright-mode energy distribution.
     dark_entropy : Tensor, scalar
         Shannon entropy of the normalised dark-mode energy distribution.
     g : Tensor, shape (F - bright_modes,)
@@ -230,7 +230,17 @@ def spectral_split(
     bright_energy = energy[:bright_modes]
     dark_energy = energy[bright_modes:]
 
-    kl_tau = bright_energy.sum()
+    # Treat the spectral energy distribution as a probability mass and compute
+    # per-sector entropies.  This makes the logged ``kl_tau`` an entropy-like
+    # quantity commensurable with ``dark_entropy``, so ``conserved`` reflects
+    # the two-sector entropy budget rather than unbounded bright-sector energy.
+    bright_total = bright_energy.sum()
+    if bright_total.item() <= 0.0:
+        kl_tau = torch.tensor(0.0, dtype=torch.float64)
+    else:
+        p_bright = bright_energy / bright_total
+        p_bright = p_bright.clamp(min=1e-12)
+        kl_tau = -(p_bright * p_bright.log()).sum()
 
     n_dark = dark_energy.numel()
     dark_total = dark_energy.sum()
