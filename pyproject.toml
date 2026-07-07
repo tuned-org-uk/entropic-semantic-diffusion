@@ -67,24 +67,23 @@ all = [
 # ---------------------------------------------------------------------------
 # Console entry points
 # ---------------------------------------------------------------------------
+# Console entry points
+# ---------------------------------------------------------------------------
+# None yet for the new 2.5-D track. Legacy CLIs (esdm-train / esdm-build /
+# esdm-sweep) were removed when esdm_legacy was archived out of the install
+# surface; reinstating them belongs to the new-track CLI sub-issue.
 [project.scripts]
-"esdm-train"  = "esdm._cli.train:main"
-"esdm-build"  = "esdm._cli.build_laplacian:main"
-"esdm-sweep"  = "esdm._cli.sweep:main"
 
 # ---------------------------------------------------------------------------
 # Package discovery
 # ---------------------------------------------------------------------------
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["esdm*"]
-exclude = ["tests*", "docs*", "scripts*"]
+include = ["esdm"]
+exclude = ["tests*", "docs*", "scripts*", "esdm_legacy*"]
 
 [tool.setuptools.package-data]
-esdm = [
-    "_configs/*.yaml",
-    "py.typed",
-]
+esdm = ["py.typed"]
 
 # ---------------------------------------------------------------------------
 # Project URLs

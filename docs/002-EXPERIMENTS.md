@@ -3,6 +3,13 @@
 > Replaces previous experiment plans. All spectral/graph computation uses
 > `arrowspace` (`pip install arrowspace`); test conventions follow
 > `pyarrowspace/tests/`.
+>
+> **API correction (2026-07-07):** the `arrowspace==0.26.2` Rust bindings do
+> not expose `build_graph`, `graph.laplacian()`, or `graph.taumode_score()`.
+> All such calls below are routed through the adapter in
+> `esdm/graphs/wiring.py` (see `001-IMPLEMENTATION-PLAN.md` §3.1–3.2). The
+> Rayleigh/λτ score is computed locally in the adapter until a native
+> `taumode_score` lands upstream.
 
 ## Goal
 

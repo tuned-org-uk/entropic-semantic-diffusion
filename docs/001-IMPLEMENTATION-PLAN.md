@@ -53,24 +53,71 @@ Out of scope (future tracks):
 All graph construction and spectral computation in this repo goes through
 `arrowspace`. Concretely:
 
+### 3.1 Real `arrowspace` API (verified against `arrowspace==0.26.2`)
+
+The installed Rust bindings expose **three** top-level types — none of which
+match the convenience surface assumed in earlier drafts of this plan
+(`build_graph`, `graph.laplacian()`, `graph.taumode_score()` do **not**
+exist). The migration must therefore go through a thin adapter in
+`esdm/graphs/wiring.py` that maps the intended interface below onto the real
+API:
+
 ```python
 import arrowspace as asp
 
-# Graph construction from a point set / feature matrix (mirrors pyarrowspace/tests)
-graph = asp.build_graph(features, k=k_neighbors, sampler="simple_random")
+# --- Graph construction (real API) ---
+builder = (asp.ArrowSpaceBuilder()
+           .with_seed(seed)
+           .with_sampling("simple_random")        # TEMPORARY: verify sampler name upstream
+           .with_cluster_max_clusters(k))         # k-NN analogue; verify mapping upstream
+space: asp.ArrowSpace = builder.build_full(features)   # or .build / .build_and_store
 
-# Graph Laplacian (sparse) — never hand-rolled
-L = graph.laplacian(normalized=True)
+# --- Sparse graph Laplacian (real API) ---
+gl: asp.GraphLaplacian = space._graph_laplacian()       # TEMPORARY: access path to confirm
+L_csr = gl.to_csr()                                     # scipy-style CSR; no `normalized=` flag
+L_dense = gl.to_dense()
+nnodes, shape = gl.nnodes, gl.shape
 
-# Rayleigh quotient / taumode (λτ) score per item or signal
-score = graph.taumode_score(signal, tau=tau)
+# --- Spectral / retrieval primitives that DO exist ---
+lambdas_sorted = space.lambdas_sorted()                 # sorted eigenvalue-like spectrum
+items = space.search(query, k=k)                        # k-NN retrieval (item-space)
+motives = space.spot_motives_eigen(...)                 # eigen-mode motif spotting
+```
+
+**Primitives the plan needs but `arrowspace` does not expose** (each filed
+upstream against `pyarrowspace` and locally implemented in `graphs/wiring.py`
+with a `# TEMPORARY: upstream issue #<n>` marker, per rule 3 below):
+
+| Intended primitive | Real-API status | Adapter action |
+| :-- | :-- | :-- |
+| `build_graph(features, k, sampler)` | missing | wrap `ArrowSpaceBuilder().with_*(...).build_full(...)` |
+| `graph.laplacian(normalized=True)` | partial — `GraphLaplacian.to_csr()` exists, no normalised form | normalise in the adapter: $L_{sym} = D^{-1/2} L D^{-1/2}$ from the CSR |
+| `graph.taumode_score(signal, tau)` | **missing** — no Rayleigh/λτ score primitive | compute $R(f) = f^\top L f / f^\top f$ locally in the adapter (this is the core 2.5-D score); file upstream issue for a native, differentiable implementation |
+| leading Laplacian eigenvectors (for $z$ embedding) | `lambdas_sorted()` exists; eigenvector accessor not confirmed | eigendecompose `to_dense()` with `torch.linalg.eigh` in the adapter until an upstream accessor lands |
+
+### 3.2 Intended interface (adapter contract)
+
+The rest of this plan codes against the following surface, which
+`esdm/graphs/wiring.py` is responsible for providing on top of §3.1:
+
+```python
+from esdm.graphs.wiring import WireGraph   # the adapter
+
+g = WireGraph.build(features, k=k_neighbors, seed=3407)   # wraps ArrowSpaceBuilder
+L_torch = g.laplacian(normalized=True)                    # -> torch.sparse_coo_tensor, cached
+score = g.rayleigh_quotient(f)                            # -> Tensor; the λτ / Dirichlet energy proxy
+z = g.spectral_embedding(n_components=2)                  # -> leading non-trivial eigenvectors
 ```
 
 Rules for this track:
 
 1. Any place the implementation plan below says "graph Laplacian" or
-"Rayleigh quotient," it means the corresponding `arrowspace` call, not a
-local NumPy/PyTorch reimplementation.
+"Rayleigh quotient," it means the corresponding **adapter** call in
+`esdm/graphs/wiring.py` (§3.2), which itself wraps the real `arrowspace`
+API (§3.1). Only primitives that genuinely do not exist upstream
+(currently: the Rayleigh/λτ `taumode_score` and a normalised-Laplacian
+flag) are implemented in the adapter, and each carries a
+`# TEMPORARY: upstream issue #<n>` marker.
 2. Sparse matrix outputs from `arrowspace` are converted to
 `torch.sparse_coo_tensor` (or CSR) once per graph build, then reused across
 training steps — no per-step re-wiring.

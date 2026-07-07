@@ -229,7 +229,7 @@ class GraphWHTFilter:
     Usage
     -----
     >>> from arrowspace import ArrowSpaceBuilder
-    >>> from esdm.wht_filter import GraphWHTFilter, heat_kernel
+    >>> from esdm_legacy.wht_filter import GraphWHTFilter, heat_kernel
     >>>
     >>> aspace, gl = ArrowSpaceBuilder().build_and_store(graph_params, items)
     >>> filt = GraphWHTFilter(gl)          # pass the GraphLaplacian object

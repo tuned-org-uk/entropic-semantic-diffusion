@@ -32,14 +32,14 @@ import pandas as pd
 import torch
 from scipy.stats import spearmanr
 
-from esdm.clock import EntropicClock
-from esdm.vibrational import (
+from ..clock import EntropicClock
+from ..vibrational import (
     VibrationalStateBlock,
     _cfl_dt,
     _laplacian_from_dense,
     compute_mode_residuals,
 )
-from esdm.wht_filter import GraphWHTFilter
+from ..wht_filter import GraphWHTFilter
 
 logger = logging.getLogger(__name__)
 

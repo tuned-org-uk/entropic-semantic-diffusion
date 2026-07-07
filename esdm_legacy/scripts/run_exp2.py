@@ -6,7 +6,7 @@ Ref: docs/02-EXPERIMENTS.md §Experiment 2
 import argparse
 import logging
 
-from esdm.experiments.exp2 import main_cli
+from esdm_legacy.experiments.exp2 import main_cli
 
 
 def main() -> None:

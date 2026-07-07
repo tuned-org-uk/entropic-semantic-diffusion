@@ -29,7 +29,7 @@ def main() -> None:
 
     # Stub: uncomment as phases are implemented
     # import torch
-    # from esdm.model import ESDM
+    # from ..model import ESDM
     # model = ESDM(cfg)
     # ... training loop ...
     logger.info("esdm-train: model not yet instantiated. Implement esdm/model.py first.")

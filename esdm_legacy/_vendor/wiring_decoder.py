@@ -53,7 +53,7 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 from typing import Optional, Tuple
-from esdm._vendor.laplacian import DifferentiableLaplacian
+from .laplacian import DifferentiableLaplacian
 
 
 # ---------------------------------------------------------------------------

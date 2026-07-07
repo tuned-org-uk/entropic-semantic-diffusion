@@ -7,7 +7,7 @@ import torch
 
 
 def test_tau_n_monotone():
-    from esdm.clock import EntropicClock
+    from esdm_legacy.clock import EntropicClock
     clock = EntropicClock(eps=1e-8, heat_death_patience=200)
     torch.manual_seed(42)
     tau_prev = 0.0
@@ -23,7 +23,7 @@ def test_tau_n_monotone():
 
 
 def test_alpha_bar_bounds():
-    from esdm.clock import EntropicClock
+    from esdm_legacy.clock import EntropicClock
     clock = EntropicClock()
     clock.tau_n.fill_(0.0)
     clock.tau_max_est.fill_(100.0)
@@ -34,7 +34,7 @@ def test_alpha_bar_bounds():
 
 
 def test_heat_death_triggers():
-    from esdm.clock import EntropicClock
+    from esdm_legacy.clock import EntropicClock
     patience = 10
     clock = EntropicClock(heat_death_patience=patience)
     clock._flat_steps.fill_(patience)
@@ -43,7 +43,7 @@ def test_heat_death_triggers():
 
 def test_lambda_clipped():
     """Lambda_tau is clipped when d_kl is near zero (stable mode)."""
-    from esdm.clock import EntropicClock
+    from esdm_legacy.clock import EntropicClock
     clock = EntropicClock(lambda_clip=100.0, eps=1e-8)
     # First step establishes prev state.
     clock.step(
@@ -67,7 +67,7 @@ def test_lambda_clipped():
 
 def test_lambda_small_when_entropy_flows():
     """Lambda_tau is small when entropy flows rapidly (large d_kl / d_phi)."""
-    from esdm.clock import EntropicClock
+    from esdm_legacy.clock import EntropicClock
     clock = EntropicClock(lambda_clip=100.0, eps=1e-8)
     clock.step(
         kl_tau_current=torch.tensor(0.0),
@@ -89,7 +89,7 @@ def test_lambda_small_when_entropy_flows():
 
 def test_per_mode_tau_accumulates_delta():
     """per_mode_tau accumulates |Delta kl_tau|, not |kl_tau|."""
-    from esdm.clock import EntropicClock
+    from esdm_legacy.clock import EntropicClock
     clock = EntropicClock()
     sequence = [
         torch.tensor([1.0, 2.0]),

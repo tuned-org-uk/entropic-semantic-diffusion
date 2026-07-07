@@ -6,7 +6,7 @@ Ref: docs/02-EXPERIMENTS.md §Experiment 1
 import argparse
 import logging
 
-from esdm.experiments.exp1 import run_bridge_sweep
+from esdm_legacy.experiments.exp1 import run_bridge_sweep
 
 
 def main() -> None:

@@ -93,8 +93,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from esdm._vendor.density import SignedDensityMatrix
-from esdm._vendor.laplacian import DifferentiableLaplacian
+from .density import SignedDensityMatrix
+from .laplacian import DifferentiableLaplacian
 
 
 # ---------------------------------------------------------------------------

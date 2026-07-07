@@ -27,7 +27,7 @@ def main() -> None:
 
     import torch
     # DualSpaceMatrix import (uncomment when Phase 1 is implemented)
-    # from esdm.laplacian import DualSpaceMatrix
+    # from ..laplacian import DualSpaceMatrix
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)

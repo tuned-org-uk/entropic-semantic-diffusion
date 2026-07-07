@@ -21,7 +21,7 @@ Usage examples
 import argparse
 import logging
 
-from esdm.experiments.exp3 import DIM, BRIGHT_MODES, A_TAU_SCALES, main_cli, run_sweep
+from esdm_legacy.experiments.exp3 import DIM, BRIGHT_MODES, A_TAU_SCALES, main_cli, run_sweep
 
 
 def main() -> None:

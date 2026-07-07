@@ -15,13 +15,13 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from esdm.clock import EntropicClock, ClockState
-from esdm.diffusion_decoder import EntropicDiffusionDecoder
-from esdm.elbo  import esdm_elbo
-from esdm.spectral_decoder import SpectralLoadingDecoder
-from esdm.vibrational import VibrationalStateBlock, compute_mode_residuals
-from esdm._vendor.spectral import spectral_basis_kl
-from esdm.wht_filter import GraphWHTFilter
+from .clock import EntropicClock, ClockState
+from .diffusion_decoder import EntropicDiffusionDecoder
+from .elbo  import esdm_elbo
+from .spectral_decoder import SpectralLoadingDecoder
+from .vibrational import VibrationalStateBlock, compute_mode_residuals
+from ._vendor.spectral import spectral_basis_kl
+from .wht_filter import GraphWHTFilter
 
 
 @dataclass

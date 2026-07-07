@@ -78,7 +78,7 @@ for the full module description.
 from __future__ import annotations
 import torch
 import torch.nn as nn
-from esdm._vendor.spectral import TauModeDiffusion
+from .spectral import TauModeDiffusion
 from typing import Optional, Tuple
 
 

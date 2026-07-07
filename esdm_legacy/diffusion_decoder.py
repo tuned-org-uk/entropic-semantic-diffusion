@@ -25,7 +25,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from esdm.clock import EntropicClock
+from .clock import EntropicClock
 
 
 class EntropicDiffusionDecoder(nn.Module):

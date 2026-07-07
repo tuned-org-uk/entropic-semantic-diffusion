@@ -31,8 +31,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from esdm.clock import EntropicClock
-from esdm.vibrational import (
+from ..clock import EntropicClock
+from ..vibrational import (
     VibrationalStateBlock,
     _cfl_dt,
     _laplacian_from_dense,
