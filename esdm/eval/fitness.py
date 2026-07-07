@@ -24,7 +24,8 @@ def compute_fitness(metrics: pd.DataFrame, bright_modes: int = 32) -> dict:
     """
     Compute the ESDM composite fitness score from exp3 metrics.
 
-    Returns a dict with the total score (0-100) and per-criterion breakdown.
+    Returns a dict with the total score and per-criterion breakdown.
+    Criterion weights sum to 123; higher is better.
     """
     scores = {}
     n = len(metrics)
@@ -91,23 +92,34 @@ def compute_fitness(metrics: pd.DataFrame, bright_modes: int = 32) -> dict:
         # bonus: reaches near 0
         scores["a_tau_final_bonus"] = max(0.0, 3.0 * (1.0 - float(at[-1]) / (float(at[0]) + 1e-8)))
 
-    # 8. r_g_corr positive and increasing (10 pts)
+    # 8. r_g_corr positive and increasing (15 pts)
+    # Design doc §8.1: residuals are expected to be flat after heat death,
+    # so correlation is only meaningful during the active phase (pre-heat-death
+    # steps).  Scoring the full run penalises a system that behaves as designed.
     if "r_g_corr" in metrics.columns:
         rgc = metrics["r_g_corr"].to_numpy()
-        rgc_mean = float(rgc.mean())
-        rgc_final = float(rgc[-1])
-        if rgc_final > 0:
-            scores["r_g_corr_positive"] = min(10.0, rgc_final * 10.0)
-        elif rgc_mean > 0:
-            scores["r_g_corr_positive"] = 3.0  # partial credit
+        # Active phase: steps before first heat-death event, or full run.
+        hd_mask = metrics["is_heat_death"].to_numpy() if "is_heat_death" in metrics.columns else np.zeros(n, dtype=int)
+        hd_steps = np.where(hd_mask == 1)[0]
+        active_end = int(hd_steps[0]) if len(hd_steps) > 0 else n
+        active_end = max(active_end, 2)  # need at least 2 steps
+        rgc_active = rgc[:active_end]
+        rgc_active_mean = float(rgc_active.mean()) if len(rgc_active) > 0 else 0.0
+        # Positive: mean correlation over active phase should be > 0.
+        if rgc_active_mean > 0:
+            scores["r_g_corr_positive"] = min(10.0, rgc_active_mean * 10.0)
         else:
             scores["r_g_corr_positive"] = 0.0
-        # bonus: increasing trend
-        if n > 10:
-            first_half = float(rgc[:n // 2].mean())
-            second_half = float(rgc[n // 2:].mean())
-            if second_half > first_half:
+        # Increasing: last-third mean > first-third mean over active phase.
+        if active_end > 10:
+            third = max(1, active_end // 3)
+            first_third = float(rgc_active[:third].mean())
+            last_third = float(rgc_active[-third:].mean())
+            if last_third > first_third:
                 scores["r_g_corr_increasing"] = 5.0
+            else:
+                # Partial credit if correlation is non-decreasing.
+                scores["r_g_corr_increasing"] = 2.5 if last_third >= first_third else 0.0
 
     # 9. rho_sign stabilization (10 pts) -- variance should decrease over time
     rs = metrics["rho_sign"].to_numpy()
