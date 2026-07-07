@@ -323,6 +323,30 @@ Run all unit and experiment tests:
 
 Experiment 1 is also covered by `tests/test_exp1.py`.
 
+### Autoresearch Loop
+
+The repository includes a self-contained autoresearch driver (`scripts/autoresearch_loop.py`)
+that iteratively tweaks ESDM hyperparameters, measures the composite fitness score, and
+keeps only changes that improve it.  The loop is configured from `AGENTS.md`.
+
+Run the loop with the project virtual environment:
+
+```bash
+.venv/bin/python scripts/autoresearch_loop.py
+```
+
+By default it performs 25 bounded iterations.  Override the iteration count or enable
+mid-loop eval checkpoints:
+
+```bash
+.venv/bin/python scripts/autoresearch_loop.py --iterations 50
+.venv/bin/python scripts/autoresearch_loop.py --evals --evals-interval 5
+```
+
+The driver writes a timestamped TSV to `autoresearch/loop-YYMMDD-HHMM/results.tsv` and a
+`handoff.json` for downstream chaining.  It only commits to git when a change improves the
+fitness score; unsuccessful changes are reverted automatically.
+
 ---
 
 ## Related Repositories
