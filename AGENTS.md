@@ -304,21 +304,23 @@ The historical `none` control used `n_steps=300` and scored 55.00; extending to 
 
 ### Known weak spots (as of current baseline)
 
+| Criterion | Score | Gap | Diagnosis |
+|---|---|---|---|
 | `conservation` | 13.27/15 | 1.73 | Fixed by computing bright-sector entropy in `spectral_split` instead of unbounded bright-sector energy. Remaining gap comes from residual drift in `S_total` around `S_0`. |
-| `g_mean_selective` | 5/10 | 5 | Gate mean is ~0.10, below the [0.4, 0.8] window. Lower `a_tau_scale` can push it into the window but currently trades off against other criteria. |
-| `r_g_corr_positive` | 0/10 | 10 | Spearman correlation between residuals and gate is weakly negative (~-0.03). The gate is not yet strongly aligned with per-mode residual structure. |
+| `r_g_corr_positive` | 7.17/10 | 2.83 | Spearman correlation is now positive after pairing residuals through `fiedler_order`, but drops once residuals fall below numerical precision late in the active phase. |
+| `r_g_corr_increasing` | 0/5 | 5 | Correlation is +1.0 early in the active phase and undefined/0 once residuals vanish, so last-third mean < first-third mean. |
 | `heat_death_timing` | 3.57/5 | 1.43 | Heat death fires at ~84% of the run; closer to 70% would give full points. Faster decay or adjusted patience could help. |
-| `g_residual_final_bonus` | 4.11/5 | 0.89 | Final residual gate is close to but not exactly 0.05. Fine-tuning the heat-death closure should close this. |
+| `g_residual_final_bonus` | 4.87/5 | 0.13 | Final residual gate is 0.047; within bonus range and essentially closed. |
 
-Heat death is now captured (10/10) after extending `n_steps` to 800.
+`g_mean_selective` is now at 10/10 after switching `b_tau` to a heat-death-aware two-state offset. Heat death is captured (10/10) after extending `n_steps` to 800.
 
 ### Current baseline result
 
-Latest kept baseline (code commit `2e2a866`):
+Latest kept baseline (code commit `c824cf4`):
 
 ```bash
 .venv/bin/python scripts/verify_fitness.py
-# 103.95
+# 111.88
 ```
 
 The baseline log lives at `autoresearch/loop-260707-1801/results.tsv`.
@@ -333,16 +335,16 @@ Fitness breakdown:
 | `heat_death` | 10.00 | 10 |
 | `heat_death_timing` | 3.57 | 5 |
 | `g_residual_decrease` | 10.00 | 10 |
-| `g_residual_final_bonus` | 4.11 | 5 |
-| `g_mean_selective` | 5.00 | 10 |
+| `g_residual_final_bonus` | 4.87 | 5 |
+| `g_mean_selective` | 10.00 | 10 |
 | `a_tau_monotone` | 5.00 | 5 |
 | `a_tau_final_bonus` | 3.00 | 3 |
-| `r_g_corr_increasing` | 5.00 | 5 |
+| `r_g_corr_increasing` | 0.00 | 5 |
 | `rho_sign_stabilizing` | 10.00 | 10 |
 | `dark_entropy_floor` | 10.00 | 10 |
 | `conservation` | 13.27 | 15 |
-| `r_g_corr_positive` | 0.00 | 10 |
-| **Total** | **103.95** | **123** |
+| `r_g_corr_positive` | 7.17 | 10 |
+| **Total** | **111.88** | **123** |
 
 ### Macro-phase roadmap to image and sound generation
 
@@ -363,17 +365,8 @@ Track these as GitHub issues in the repository:
 
 1. **~~Close the conservation gap~~** (13.27/15) — [#16](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/16) fixed by `2e2a866`. Drive `exp3` with the full ESDM forward pass so the ELBO conservation term is active, rather than a synthetic clock signal.
 2. **Align residual-gate correlation** (0/10) — [#17](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/17). Investigate whether `GraphWHTFilter.fiedler_order` or the residual mapping in `exp3` needs to weight bright/dark modes differently so that larger residuals receive consistently larger gates.
-3. **Push gate mean into the selective window** (5/10) — [#18](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/18). `g_mean` is ~0.10; the [0.4, 0.8] window gives full `g_mean_selective` points. This likely requires rethinking the gate offset (`b_tau`) or the residual-to-logit mapping.
+3. **~~Align residual-gate correlation~~** (7.17/10) — [#17](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/17) fixed by `c824cf4`. The correlation is now positive after pairing residuals through `fiedler_order` and keeping `a_tau` high during the active phase. The `r_g_corr_increasing` sub-criterion remains at 0/5 because residuals fall below numerical precision late in the active phase; see issue #17 for follow-up.
+4. **~~Push gate mean into the selective window~~** (10/10) — [#18](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/18) fixed by `333f967`. `b_tau` now switches between `+0.5` during the active phase and `-3.0` after heat death, giving `g_mean ≈ 0.53` and full selective points.
 4. **Compare `basic` vs `bivariate`** at the optimized run length (`n_steps=800`, `a_tau_scale=2.62`). If `bivariate` matches or exceeds `basic`, it becomes the new baseline.
 5. **Tune heat-death timing** to ~70% by adjusting `kl_decay`, `kl_S_weight`, or the clock's `heat_death_patience`.
 
-
-| Criterion | Score | Gap | Diagnosis |
-|---|---|---|---|
-| `conservation` | 13.27/15 | 1.73 | Fixed by computing bright-sector entropy in `spectral_split` instead of unbounded bright-sector energy. Remaining gap comes from residual drift in `S_total` around `S_0`. |
-| `g_mean_selective` | 5/10 | 5 | Gate mean is ~0.10, below the [0.4, 0.8] window. Lower `a_tau_scale` can push it into the window but currently trades off against other criteria. |
-| `r_g_corr_positive` | 0/10 | 10 | Spearman correlation between residuals and gate is weakly negative (~-0.03). The gate is not yet strongly aligned with per-mode residual structure. |
-| `heat_death_timing` | 3.57/5 | 1.43 | Heat death fires at ~84% of the run; closer to 70% would give full points. Faster decay or adjusted patience could help. |
-| `g_residual_final_bonus` | 4.11/5 | 0.89 | Final residual gate is close to but not exactly 0.05. Fine-tuning the heat-death closure should close this. |
-
-Heat death is now captured (10/10) after extending `n_steps` to 800.
