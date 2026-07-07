@@ -149,7 +149,7 @@ def main(argv: Optional[list] = None) -> None:
     parser.add_argument("--seed", type=int, default=3407)
     parser.add_argument("--n-steps", type=int, default=300)
     parser.add_argument("--kl-s-weight", type=float, default=0.05)
-    parser.add_argument("--kl-decay", type=float, default=0.03)
+    parser.add_argument("--kl-decay", type=float, default=0.08)
     parser.add_argument("--lambda-clip", type=float, default=10.0)
     parser.add_argument("--rho", type=float, default=3.0)
     parser.add_argument("--a-tau-scale", type=float, default=5.0)
