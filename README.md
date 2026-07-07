@@ -377,7 +377,7 @@ To replicate it explicitly:
 
 (The verify script hard-codes the same parameters.)  The baseline log is saved at
 `autoresearch/loop-260707-1801/results.tsv`.  See `AGENTS.md` for the full fitness criteria
-breakdown, the open-issue roadmap, and the next phases.
+breakdown and the open-issue roadmap (#16, #17, #18).
 
 ---
 
