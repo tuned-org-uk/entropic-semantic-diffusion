@@ -449,7 +449,14 @@ def run_single(
         if wht is not None:
             decay = (1.0 - gate_norm_tau) ** tau_decay_power
             a_tau = a_tau_scale * decay
-            b_tau = a_tau_scale * (decay - (gate_norm_tau ** tau_decay_power))
+            # Heat-death-aware b_tau: keep the gate in the selective mean
+            # window during the active phase, then snap to a strongly negative
+            # offset once the clock declares heat death so the residual gate
+            # closes toward the design target (0.05).
+            if clock.is_heat_death():
+                b_tau = -3.0
+            else:
+                b_tau = 0.5
 
             # Map residuals into WHT positions; non-bright positions are zero.
             gate_logit = np.zeros(dim, dtype=np.float64)
