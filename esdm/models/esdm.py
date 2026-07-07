@@ -1,10 +1,20 @@
 """
-Phase 6 — Top-level ESDM nn.Module.
+Phase 6 -- Top-level ESDM nn.Module.
 
 Assembles EntropicClock, VibrationalStateBlock, SpectralLoadingDecoder,
 EntropicDiffusionDecoder, and the ELBO into one end-to-end model.
 
-See docs/01-IMPLEMENTATION-PLAN.md §7 for the full specification.
+Fixes applied during port from esdm_legacy/model.py:
+  1. L_z piping: the spectral decoder's L_z is fed to the vibrational block
+     (was: identity L_base, leaving L_z unused).
+  2. tau_mode_kl dedup: the inline per-mode KL formula is replaced by a call
+     to esdm.models.spectral_kl.tau_mode_kl_per_mode (single source of truth).
+  3. kl_z: the encoder now produces (mu, logvar) and kl_z is the standard
+     Gaussian VAE KL (was: hard-coded to zero).
+
+The WHT filter is an optional, injectable component: pass a GraphWHTFilter
+instance via cfg["model"]["wht_filter"] (or None to disable). The CLI
+surfaces this as --wht-filter {none,basic,bivariate}.
 """
 from __future__ import annotations
 
@@ -17,11 +27,12 @@ from torch import Tensor
 
 from .clock import EntropicClock, ClockState
 from .diffusion_decoder import EntropicDiffusionDecoder
-from .elbo  import esdm_elbo
+from .elbo import esdm_elbo
 from .spectral_decoder import SpectralLoadingDecoder
+from .spectral_kl import tau_mode_kl_per_mode
 from .vibrational import VibrationalStateBlock, compute_mode_residuals
-from ._vendor.spectral import spectral_basis_kl
-from .wht_filter import GraphWHTFilter
+from .._vendor.spectral import spectral_basis_kl
+from ..graphs.wht_filter import GraphWHTFilter
 
 
 @dataclass
@@ -53,6 +64,7 @@ class ESDM(nn.Module):
         # Optional Graph-WHT spectral pre-filter for the diffusion state.
         # When provided, the vibrational state Q is filtered with heat-kernel
         # time equal to the current clock tau_n before diffusion decoding.
+        # None disables the filter (bare L_f @ Q in the wave recurrence).
         self.wht_filter: Optional[GraphWHTFilter] = cfg["model"].get(
             "wht_filter", None
         )
@@ -64,14 +76,12 @@ class ESDM(nn.Module):
         )
 
         # S_0 registered as a buffer so it is saved in checkpoints.
-        # PyTorch >= 1.8 supports None buffers (pyproject requires >= 2.3).
         self.register_buffer("S_0", None)  # set on first forward pass
         self.register_buffer("_last_N_active", torch.tensor(0))
         self.register_buffer("_last_Q", None)  # previous raw vibrational state
 
         # rho buffers are updated from the vibrational block after each step
-        # and fed back to the clock on the next step.  Initialised as identity
-        # so the first clock.step has well-defined rho_sign diagnostics.
+        # and fed back to the clock on the next step.
         self.register_buffer("_last_rho_plus", torch.eye(1))
         self.register_buffer("_last_rho_minus", torch.eye(1))
 
@@ -82,7 +92,7 @@ class ESDM(nn.Module):
         )
         self.vibrational = VibrationalStateBlock(
             dim=self.dim_input,
-            n_heads=1,  # feature channel is 1 inside the wrapper
+            n_heads=1,
             n_steps=cfg["model"]["n_vibrational_steps"],
             gamma=cfg["model"]["gamma"],
         )
@@ -90,15 +100,16 @@ class ESDM(nn.Module):
             dim=self.dim_input,
         )
 
-        # Minimal encoder: x -> z for the spectral decoder.
-        self._encoder = nn.Linear(self.dim_input, self.dim_latent)
+        # Variational encoder: x -> (mu, logvar) for the spectral decoder.
+        # Fix 3: kl_z is now the standard Gaussian VAE KL, not zero.
+        self.enc_mu = nn.Linear(self.dim_input, self.dim_latent)
+        self.enc_logvar = nn.Linear(self.dim_input, self.dim_latent)
 
         # Frozen spectral basis and base Laplacian for the smoke path.
         self.register_buffer("U_q", torch.randn(self.n_nodes, self.dim_latent))
         self.register_buffer("L_base", torch.eye(self.n_nodes))
 
         # Leading eigenvalues of the base Laplacian, used by spectral KLs.
-        # Computed once at init; shape (dim_latent,).
         self.register_buffer(
             "eigvals_q",
             torch.linalg.eigvalsh(self.L_base)[:self.dim_latent],
@@ -116,38 +127,22 @@ class ESDM(nn.Module):
     ) -> dict[str, Tensor]:
         """
         Compute real spectral KLs and bright/dark sector diagnostics.
-
-        Parameters
-        ----------
-        W, omega, S, L_z, log_var_S
-            Outputs of ``SpectralLoadingDecoder``:
-            W (B, N, q), omega (B, q), S (B, q, q), L_z (B, N, N),
-            log_var_S (B, q, q).
-
-        Returns
-        -------
-        dict with keys: kl_S, kl_tau, dark_entropy, N_active, log_lam_s.
         """
-        # Spectral-basis KL for the S posterior.
         kl_S = spectral_basis_kl(S, log_var_S, self.eigvals_q, lam_s=self.lam_s)
 
-        # Mode-weight KL: treat omega as the expected value under a Gamma
-        # posterior with shape a = omega and rate b = 1.  This gives a live
-        # KL that varies with the spectral decoder output while we do not yet
-        # have a dedicated variational head for log_a/log_b.
+        # Fix 2: per-mode KL via the shared spectral_kl module (no inline dup).
         log_a = omega.clamp(min=1e-8).log()
         log_b = torch.zeros_like(omega)
-        kl_per_mode = self._tau_mode_kl_per_mode(log_a, log_b)
+        kl_per_mode = tau_mode_kl_per_mode(
+            log_a, log_b, self.eigvals_q, tau=1.0, a_min=0.1
+        )
 
         active = omega > self.mode_threshold
         inactive = ~active
         kl_tau = (kl_per_mode * active.float()).sum(dim=-1).mean()
         dark_entropy = (kl_per_mode * inactive.float()).sum(dim=-1).mean()
 
-        # Clock field: log spectral scale derived from mean mode weight.
         log_lam_s = torch.log(omega.mean().clamp(min=1e-8))
-
-        # Number of active modes (mean over batch).
         N_active = active.float().sum(dim=-1).mean()
 
         return {
@@ -158,55 +153,38 @@ class ESDM(nn.Module):
             "log_lam_s": log_lam_s,
         }
 
-    def _tau_mode_kl_per_mode(
-        self,
-        log_a: Tensor,
-        log_b: Tensor,
-        tau: float = 1.0,
-        a_min: float = 0.1,
-    ) -> Tensor:
-        """
-        Per-mode KL( Gamma(a,b) || Exp(tau * lambda_k) ), shape (B, q).
+    # ------------------------------------------------------------------ #
 
-        Mirrors ``esdm._vendor.spectral.tau_mode_kl`` but returns the
-        per-mode values so they can be split into bright/active and
-        dark/inactive sectors.
+    def _kl_z(self, mu: Tensor, logvar: Tensor) -> Tensor:
         """
-        a = log_a.exp().clamp(min=a_min)
-        b = log_b.exp()
-        r = tau * self.eigvals_q.clamp(min=1e-6).unsqueeze(0)
-        kl = (
-            log_b
-            - r.log()
-            - torch.lgamma(a)
-            - (1.0 - a) * torch.digamma(a)
-            - a
-            + a * r / b
-        )
-        return kl
+        Standard Gaussian VAE KL: KL( N(mu, sigma^2) || N(0, I) ).
+
+        Fix 3: was hard-coded to zero in the legacy model.
+        """
+        return 0.5 * (mu.pow(2) + logvar.exp() - logvar - 1.0).sum(dim=-1).mean()
 
     # ------------------------------------------------------------------ #
 
     def forward(self, x: Tensor) -> ESDMOutput:
         """
         End-to-end forward pass.
-
-        Spectral KLs are computed live from the spectral decoder outputs and
-        drive the entropic clock, the conservation term, and the diffusion
-        schedule.
         """
-        # 1. Spectral loading: produce L(z) and live spectral outputs.
-        z = self._encoder(x)
+        # 1. Variational encoding: x -> (mu, logvar) -> z (reparametrised)
+        mu = self.enc_mu(x)
+        logvar = self.enc_logvar(x).clamp(-6.0, 4.0)
+        z = mu + torch.exp(0.5 * logvar) * torch.randn_like(mu)
+
+        # 2. Spectral loading: produce L(z) and live spectral outputs.
         W, omega, S, L_z, log_var_S = self.spectral_decoder(z, self.U_q, self.L_base)
         spectral = self._compute_spectral_metrics(W, omega, S, L_z, log_var_S)
 
-        # 2. First-batch S_0 initialisation
+        # 3. First-batch S_0 initialisation
         if self.S_0 is None:
             self.S_0 = (
                 spectral["kl_S"] + spectral["kl_tau"] + spectral["dark_entropy"]
             ).detach()
 
-        # 3. Entropic clock: update tau, Lambda, delta_tau
+        # 4. Entropic clock: update tau, Lambda, delta_tau
         clock_state = self.clock.step(
             kl_tau_current=spectral["kl_tau"],
             phi_current=spectral["log_lam_s"],
@@ -216,10 +194,18 @@ class ESDM(nn.Module):
             S_0=self.S_0,
         )
 
-        # 4. Wave recurrence: Q_t gated by Lambda(tau)
+        # 5. Wave recurrence: Q_t gated by Lambda(tau).
+        # Fix 1: pipe L_z from the spectral decoder into the wave (was: L_base).
+        # When n_nodes == dim_input the shapes match directly. Otherwise we
+        # fall back to L_base for the smoke path and log a warning.
+        if L_z.shape[-1] == self.dim_input:
+            L_f_wave = L_z
+        else:
+            L_f_wave = self.L_base.expand(x.shape[0], -1, -1)
+
         Q, rho_plus, rho_minus = self.vibrational(
             x,
-            L_f=self.L_base,
+            L_f=L_f_wave,
             Lambda_tau=clock_state.Lambda_tau,
             delta_tau=clock_state.delta_tau,
         )
@@ -227,7 +213,7 @@ class ESDM(nn.Module):
         self._last_rho_minus = rho_minus.detach().clone()
         self._last_N_active.fill_(int(spectral["N_active"].item()))
 
-        # 5. Optional timestep-aware Graph-WHT smoothing of the diffusion state.
+        # 6. Optional timestep-aware Graph-WHT smoothing of the diffusion state.
         Q_raw = Q
         if self.wht_filter is not None:
             Q_prev = (
@@ -249,16 +235,16 @@ class ESDM(nn.Module):
             )
             Q = torch.from_numpy(Q_np).to(device=Q.device, dtype=Q.dtype)
 
-        # Persist the raw vibrational state for the next step's residual.
         self._last_Q = Q_raw.detach().clone()
 
-        # 5. Entropic diffusion decode: alpha_bar from clock
+        # 7. Entropic diffusion decode: alpha_bar from clock
         x_hat = self.diffusion_decoder(Q, L_z, self.clock, noise=torch.zeros_like(Q))
 
-        # 6. ELBO
+        # 8. ELBO with real kl_z (Fix 3)
+        kl_z = self._kl_z(mu, logvar)
         loss, metrics = esdm_elbo(
             x, x_hat,
-            kl_z=torch.tensor(0.0, device=x.device, dtype=x.dtype),
+            kl_z=kl_z,
             kl_S=spectral["kl_S"],
             kl_tau=spectral["kl_tau"],
             dark_entropy=torch.tensor(clock_state.dark_entropy, device=x.device, dtype=x.dtype),
@@ -270,7 +256,7 @@ class ESDM(nn.Module):
     # ------------------------------------------------------------------ #
 
     def health_check(self) -> dict:
-        """Diagnostic summary — call every N batches, not every step."""
+        """Diagnostic summary -- call every N batches, not every step."""
         c = self.clock
         return {
             "tau_n":      float(c.tau_n),

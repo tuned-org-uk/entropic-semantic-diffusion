@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ..clock import EntropicClock
+from ..models.clock import EntropicClock
 
 logger = logging.getLogger(__name__)
 

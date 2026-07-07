@@ -8,19 +8,19 @@ from pathlib import Path
 
 
 def _default_cfg():
-    p = Path("esdm_legacy/_configs/default.yaml")
+    p = Path("esdm/_configs/default.yaml")
     with p.open() as f:
         return yaml.safe_load(f)
 
 
 def test_esdm_instantiates():
-    from esdm_legacy.model import ESDM
+    from esdm.models.esdm import ESDM
     model = ESDM(_default_cfg())
     assert model is not None
 
 
 def test_health_check_runs():
-    from esdm_legacy.model import ESDM
+    from esdm.models.esdm import ESDM
     model = ESDM(_default_cfg())
     hc = model.health_check()
     assert "tau_n" in hc
@@ -29,7 +29,7 @@ def test_health_check_runs():
 
 def test_forward_pass():
     import torch
-    from esdm_legacy.model import ESDM
+    from esdm.models.esdm import ESDM
     cfg = _default_cfg()
     cfg["model"]["dim_input"] = 32
     cfg["model"]["dim_latent"] = 8
@@ -48,8 +48,8 @@ def test_forward_pass():
 def test_forward_pass_with_wht_filter():
     """Forward pass with a timestep-aware Graph-WHT filter remains stable."""
     import torch
-    from esdm_legacy.model import ESDM
-    from esdm_legacy.wht_filter import GraphWHTFilter
+    from esdm.models.esdm import ESDM
+    from esdm.graphs.wht_filter import GraphWHTFilter
 
     cfg = _default_cfg()
     F = 32
@@ -78,7 +78,7 @@ def test_forward_pass_with_wht_filter():
 def test_training_loop_advances_entropic_time():
     """A short training loop must increase tau_n and decrease alpha_bar."""
     import torch
-    from esdm_legacy.model import ESDM
+    from esdm.models.esdm import ESDM
 
     cfg = _default_cfg()
     cfg["model"]["dim_input"] = 32

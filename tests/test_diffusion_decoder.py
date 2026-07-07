@@ -2,11 +2,10 @@
 Phase 4 test — EntropicDiffusionDecoder.
 All assertions from 01-IMPLEMENTATION-PLAN.md §5.3.
 """
-import pytest
 import torch
 
-from esdm_legacy.clock import EntropicClock
-from esdm_legacy.diffusion_decoder import EntropicDiffusionDecoder
+from esdm.models.clock import EntropicClock
+from esdm.models.diffusion_decoder import EntropicDiffusionDecoder
 
 
 def test_alpha_bar_monotone_decreasing():

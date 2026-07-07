@@ -7,11 +7,9 @@ This is a skeleton: the full training loop is a sub-issue of the migration.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import torch
-from torch import Tensor
 
 from esdm.data.minimal_surfaces import sample_surface
 from esdm.graphs.wiring import WireGraph

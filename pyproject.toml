@@ -69,18 +69,20 @@ all = [
 # ---------------------------------------------------------------------------
 # Console entry points
 # ---------------------------------------------------------------------------
-# None yet for the new 2.5-D track. Legacy CLIs (esdm-train / esdm-build /
-# esdm-sweep) were removed when esdm_legacy was archived out of the install
-# surface; reinstating them belongs to the new-track CLI sub-issue.
+# CLI entry points registered after the migration completes.
+# The esdm.cli module exposes --wht-filter {none,basic,bivariate} etc.
 [project.scripts]
+esdm-train = "esdm.cli.train:main"
+esdm-sweep = "esdm.cli.sweep:main"
+esdm-build = "esdm.cli.build_laplacian:main"
 
 # ---------------------------------------------------------------------------
 # Package discovery
 # ---------------------------------------------------------------------------
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["esdm"]
-exclude = ["tests*", "docs*", "scripts*", "esdm_legacy*"]
+include = ["esdm", "esdm._vendor", "esdm.experiments"]
+exclude = ["tests*", "docs*", "scripts*"]
 
 [tool.setuptools.package-data]
 esdm = ["py.typed"]
@@ -98,6 +100,10 @@ esdm = ["py.typed"]
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
+extend-exclude = ["esdm/_vendor"]
+
+[tool.ruff.lint]
+ignore = ["E741"]
 
 [tool.mypy]
 ignore_missing_imports = true

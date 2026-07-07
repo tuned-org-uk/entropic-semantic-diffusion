@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 import torch
 
-from esdm_legacy.experiments.exp3 import (
+from esdm.experiments.exp3 import (
     DIM,
     BRIGHT_MODES,
     make_gaussian_clusters,

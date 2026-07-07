@@ -6,7 +6,6 @@ from esdm.graphs.wiring import WireGraph
 from esdm.models.score3d import ScoreNet, dsm_loss
 from esdm.models.score25d import ScoreNet25D, dsm_loss_25d, graph_diffusion_step
 from esdm.sampling.euler_maruyama import euler_maruyama
-from esdm.eval.metrics import chamfer_distance
 from esdm.eval.harness import run, HarnessConfig
 
 

@@ -18,6 +18,6 @@ derived from these tensors in the top-level ``ESDM`` model.
 """
 from __future__ import annotations
 
-from ._vendor.wiring_decoder import SpectralLoadingDecoder
+from .._vendor.wiring_decoder import SpectralLoadingDecoder
 
 __all__ = ["SpectralLoadingDecoder"]

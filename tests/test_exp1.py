@@ -1,7 +1,7 @@
 """
 Phase 1 experiment test — Entropic Clock calibration (Experiment 1).
 """
-from esdm_legacy.experiments.exp1 import (
+from esdm.experiments.exp1 import (
     assert_success_criteria,
     build_two_community_laplacian,
     run_bridge_sweep,

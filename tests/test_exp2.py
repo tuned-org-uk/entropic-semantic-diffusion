@@ -4,7 +4,7 @@ Phase 2 experiment test — Vibrational Wave Recurrence on a 1-D Harmonic Chain.
 import numpy as np
 import torch
 
-from esdm_legacy.experiments.exp2 import (
+from esdm.experiments.exp2 import (
     assert_success_criteria,
     fiedler_vector,
     path_graph_eigenvalues,

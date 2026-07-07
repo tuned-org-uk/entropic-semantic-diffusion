@@ -16,7 +16,6 @@ Intended interface (§3.2):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
@@ -49,7 +48,6 @@ class WireGraph:
     @classmethod
     def build(cls, features: Tensor, k: int = 16, seed: int = 3407) -> "WireGraph":
         features = features.detach().cpu().float()
-        n = features.shape[0]
         L = cls._knn_laplacian(features, k=k, seed=seed)  # TEMPORARY: upstream issue —
         # arrowspace exposes no `build_graph(features, k)`; until pyarrowspace
         # exposes one, the adapter builds a symmetric k-NN graph Laplacian
@@ -70,7 +68,6 @@ class WireGraph:
         A.scatter_(1, idx, weights)
         A = (A + A.t()) * 0.5
         D = A.sum(dim=-1)
-        Dinv = torch.where(D > 0, 1.0 / D, torch.zeros_like(D))
         L = torch.diag(D) - A
         return L
 

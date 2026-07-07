@@ -24,11 +24,10 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
-from ._vendor.laplacian import DifferentiableLaplacian
-from ._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
+from .._vendor.laplacian import DifferentiableLaplacian
+from .._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
 
 
 def compute_mode_residuals(

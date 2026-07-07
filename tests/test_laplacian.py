@@ -18,7 +18,7 @@ def V_and_LF():
 
 
 def test_M_is_symmetric(V_and_LF):
-    from esdm_legacy.laplacian import DualSpaceMatrix
+    from esdm.graphs.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF
     dsm = DualSpaceMatrix(alpha=0.5, beta=0.5)
     dsm.build(V, L_F)
@@ -26,7 +26,7 @@ def test_M_is_symmetric(V_and_LF):
 
 
 def test_eigvals_finite(V_and_LF):
-    from esdm_legacy.laplacian import DualSpaceMatrix
+    from esdm.graphs.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF
     dsm = DualSpaceMatrix()
     dsm.build(V, L_F)
@@ -35,7 +35,7 @@ def test_eigvals_finite(V_and_LF):
 
 
 def test_rayleigh_finite(V_and_LF):
-    from esdm_legacy.laplacian import DualSpaceMatrix
+    from esdm.graphs.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF
     dsm = DualSpaceMatrix()
     dsm.build(V, L_F)
@@ -46,7 +46,7 @@ def test_rayleigh_finite(V_and_LF):
 
 
 def test_project_shape(V_and_LF):
-    from esdm_legacy.laplacian import DualSpaceMatrix
+    from esdm.graphs.laplacian import DualSpaceMatrix
     V, L_F = V_and_LF
     dsm = DualSpaceMatrix()
     dsm.build(V, L_F)

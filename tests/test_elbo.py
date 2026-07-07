@@ -3,7 +3,7 @@ Phase 5 test — esdm_elbo.
 All assertions from 01-IMPLEMENTATION-PLAN.md §6.3.
 """
 import torch
-from esdm_legacy.elbo import esdm_elbo
+from esdm.models.elbo import esdm_elbo
 
 
 def _make_tensors(B: int = 8, F: int = 32):

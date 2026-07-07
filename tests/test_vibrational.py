@@ -2,12 +2,10 @@
 Phase 3 test — VibrationalStateBlock.
 All assertions from 01-IMPLEMENTATION-PLAN.md §4.4.
 """
-import pytest
 import torch
 
-from esdm_legacy._vendor.laplacian import DifferentiableLaplacian
-from esdm_legacy._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
-from esdm_legacy.vibrational import (
+from esdm._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
+from esdm.models.vibrational import (
     VibrationalStateBlock,
     _laplacian_from_dense,
     compute_mode_residuals,
@@ -69,7 +67,6 @@ def test_vibrational_forcing_vanishes_when_lambda_zero():
     F = 8
     x = torch.randn(2, F)
     L_f = _random_L_f(F)
-    lap = _laplacian_from_dense(L_f)
 
     block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=1, gamma=0.1, dropout=0.0)
     block.eval()
