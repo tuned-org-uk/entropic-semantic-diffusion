@@ -449,9 +449,7 @@ def run_single(
         if wht is not None:
             decay = (1.0 - gate_norm_tau) ** tau_decay_power
             a_tau = a_tau_scale * decay
-            # Logistic closure: keep b_tau positive until gate_norm_tau is very
-            # close to 1, then drop sharply to enforce heat-death closure.
-            b_tau = 2.0 * a_tau_scale * (1.0 - 2.0 / (1.0 + np.exp(-1000.0 * (gate_norm_tau - 0.9999))))
+            b_tau = a_tau_scale * (decay - (gate_norm_tau ** tau_decay_power))
 
             # Map residuals into WHT positions; non-bright positions are zero.
             gate_logit = np.zeros(dim, dtype=np.float64)
@@ -467,10 +465,6 @@ def run_single(
                 gate_logit[:K] = r_k_np[wht.fiedler_order[:K]]
             gate_logit = a_tau * np.log1p(gate_logit) + b_tau
             g_residual = 1.0 / (1.0 + np.exp(-gate_logit))
-            # Soft floor: raises the gate mean early (helping g_mean_selective)
-            # while tapering to 0 at heat death so the closure invariant holds.
-            soft_floor = max(0.0, 0.25 * (1.0 - gate_norm_tau))
-            g_residual = soft_floor + (1.0 - soft_floor) * g_residual
             g_residual_mean = float(g_residual.mean())
 
             # Per-step residual-gate correlation.
