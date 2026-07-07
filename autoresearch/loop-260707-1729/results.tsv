@@ -2,3 +2,4 @@
 iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 0	2026-07-07T16:29:01Z	6826b74	58.70	0.0	PASS	101	baseline	initial state
 1	2026-07-07T16:32:47Z	edd8255	58.70	0.0	PASS	101	no-op	conservation metric fix (score unchanged)
+2	2026-07-07T16:34:56Z	bf8188b	60.83	+2.13	PASS	101	keep	kl_S=1.0 kl_decay=0.08
