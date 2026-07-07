@@ -1,0 +1,3 @@
+# metric_direction: higher_is_better
+iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
+0	2026-07-07T16:29:01Z	6826b74	58.70	0.0	PASS	101	baseline	initial state

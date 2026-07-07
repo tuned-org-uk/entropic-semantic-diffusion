@@ -44,10 +44,13 @@ def compute_fitness(metrics: pd.DataFrame, bright_modes: int = 32) -> dict:
     ab_drop = float(ab[0] - ab[-1])
     scores["alpha_bar_decrease"] = min(10.0, ab_drop * 20.0)  # 0.5 drop -> 10 pts
 
-    # 3. entropy conservation (15 pts) -- conserved should -> 0
-    conserved = metrics["conserved"].to_numpy()
-    S_0 = float(metrics["dark_entropy"].iloc[0] + metrics["kl_tau"].iloc[0]) or 1.0
-    conserved_ratio = float(np.abs(conserved).mean()) / (abs(S_0) + 1e-8)
+    # 3. entropy conservation (15 pts) -- total entropy should stay ~constant
+    # exp3 logs 'conserved' = kl_tau + dark_entropy (total, NOT residual).
+    # The conservation law says |total - total[0]| should -> 0.
+    total_entropy = metrics["conserved"].to_numpy()
+    S_0 = float(total_entropy[0]) if len(total_entropy) > 0 else 1.0
+    residual = np.abs(total_entropy - S_0)
+    conserved_ratio = float(residual.mean()) / (abs(S_0) + 1e-8)
     scores["conservation"] = max(0.0, 15.0 * (1.0 - min(1.0, conserved_ratio)))
 
     # 4. heat death fires (10 pts)
