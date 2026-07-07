@@ -447,15 +447,15 @@ def run_single(
         # Bivariate gate from the WHT filter (only when wht is active).
         r_k_np = r_k.detach().numpy()
         if wht is not None:
-            decay = (1.0 - gate_norm_tau) ** tau_decay_power
-            a_tau = a_tau_scale * decay
-            # Heat-death-aware b_tau: keep the gate in the selective mean
-            # window during the active phase, then snap to a strongly negative
-            # offset once the clock declares heat death so the residual gate
-            # closes toward the design target (0.05).
+            # Heat-death-aware gate authority: keep the residual coefficient
+            # high during the active phase so the gate remains correlated with
+            # per-mode residuals, then drop it to zero after heat death (the
+            # b_tau offset alone closes the gate).
             if clock.is_heat_death():
+                a_tau = 0.0
                 b_tau = -3.0
             else:
+                a_tau = a_tau_scale
                 b_tau = 0.5
 
             # Map residuals into WHT positions; non-bright positions are zero.
@@ -475,12 +475,20 @@ def run_single(
             g_residual_mean = float(g_residual.mean())
 
             # Per-step residual-gate correlation.
+            # Correlate the residual that actually drives each WHT gate
+            # position with the resulting gate value.  The raw `r_k_np` is in
+            # mode order, while `g_residual` is in WHT order; `fiedler_order`
+            # maps WHT positions back to modes, so pair them explicitly.
             if (
                 r_k.numel() > 1
                 and r_k.std().item() > 1e-15
-                and float(np.std(g_residual)) > 1e-15
+                and float(np.std(g_residual[:K])) > 1e-15
             ):
-                r_g_corr = float(spearmanr(r_k_np, g_residual).statistic)
+                if wht.fiedler_order is None:
+                    r_for_gate = r_k_np[:K]
+                else:
+                    r_for_gate = r_k_np[wht.fiedler_order[:K]]
+                r_g_corr = float(spearmanr(r_for_gate, g_residual[:K]).statistic)
             else:
                 r_g_corr = 0.0
         else:
