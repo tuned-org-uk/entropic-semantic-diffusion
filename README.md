@@ -15,7 +15,7 @@ Run the self-contained autoresearch driver to reproduce and improve the current 
 Check the current baseline fitness and the test guard:
 
 ```bash
-.venv/bin/python scripts/verify_fitness.py   # 90.68
+.venv/bin/python scripts/verify_fitness.py   # 103.95
 .venv/bin/python -m pytest tests/ -q         # 101 passed
 ```
 
@@ -366,7 +366,7 @@ fitness score; unsuccessful changes are reverted automatically.
 
 #### Current baseline
 
-The latest kept baseline scores **90.68 / 100** (code commit `7bb22c1`, results saved at `af64577`) and is reproduced by `scripts/verify_fitness.py`:
+The latest kept baseline scores **103.95 / 123** (code commit `2e2a866`) and is reproduced by `scripts/verify_fitness.py`:
 
 ```bash
 .venv/bin/python scripts/verify_fitness.py
@@ -389,7 +389,7 @@ The baseline parameters are:
 To replicate it explicitly:
 
 ```bash
-.venv/bin/python -m esdm.eval.fitness --n-steps 800 --kl-s-weight 0.5 --kl-decay 0.03
+.venv/bin/python -m esdm.eval.fitness --n-steps 800 --kl-s-weight 0.5 --kl-decay 0.03  # 103.95
 ```
 
 (The verify script hard-codes the same parameters.)  The baseline log is saved at

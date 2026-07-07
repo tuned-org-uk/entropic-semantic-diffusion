@@ -212,7 +212,7 @@ The autoresearch loop is an autonomous iteration cycle that modifies model/exper
 
 ### Fitness metric
 
-The composite fitness score (0--100, higher is better) is defined in `esdm/eval/fitness.py` and computed from a single `run_single` call in `esdm/experiments/exp3.py`. It measures 10 health criteria from docs/00-DESIGN.md §8.1:
+The composite fitness score (higher is better; unbounded in the current implementation but with individual criteria capped) is defined in `esdm/eval/fitness.py` and computed from a single `run_single` call in `esdm/experiments/exp3.py`. It measures 10 health criteria from docs/00-DESIGN.md §8.1:
 
 | Criterion | Max pts | What it measures |
 |---|---|---|
@@ -304,7 +304,7 @@ The historical `none` control used `n_steps=300` and scored 55.00; extending to 
 
 ### Known weak spots (as of current baseline)
 
-| `conservation` | 0/15 | 15 | The synthetic clock signal in `exp3` does not enforce the ELBO conservation term; bright-sector energy grows unboundedly. Needs full ESDM forward pass or a conservation-aware synthetic driver. |
+| `conservation` | 13.27/15 | 1.73 | Fixed by computing bright-sector entropy in `spectral_split` instead of unbounded bright-sector energy. Remaining gap comes from residual drift in `S_total` around `S_0`. |
 | `g_mean_selective` | 5/10 | 5 | Gate mean is ~0.10, below the [0.4, 0.8] window. Lower `a_tau_scale` can push it into the window but currently trades off against other criteria. |
 | `r_g_corr_positive` | 0/10 | 10 | Spearman correlation between residuals and gate is weakly negative (~-0.03). The gate is not yet strongly aligned with per-mode residual structure. |
 | `heat_death_timing` | 3.57/5 | 1.43 | Heat death fires at ~84% of the run; closer to 70% would give full points. Faster decay or adjusted patience could help. |
@@ -314,11 +314,11 @@ Heat death is now captured (10/10) after extending `n_steps` to 800.
 
 ### Current baseline result
 
-Latest kept baseline (code commit `7bb22c1`, results saved at `af64577`):
+Latest kept baseline (code commit `2e2a866`):
 
 ```bash
 .venv/bin/python scripts/verify_fitness.py
-# 90.68
+# 103.95
 ```
 
 The baseline log lives at `autoresearch/loop-260707-1801/results.tsv`.
@@ -340,15 +340,15 @@ Fitness breakdown:
 | `r_g_corr_increasing` | 5.00 | 5 |
 | `rho_sign_stabilizing` | 10.00 | 10 |
 | `dark_entropy_floor` | 10.00 | 10 |
-| `conservation` | 0.00 | 15 |
+| `conservation` | 13.27 | 15 |
 | `r_g_corr_positive` | 0.00 | 10 |
-| **Total** | **90.68** | **100** |
+| **Total** | **103.95** | **123** |
 
 ### Next phases
 
 Track these as GitHub issues in the repository:
 
-1. **Close the conservation gap** (0/15) — [#16](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/16). Drive `exp3` with the full ESDM forward pass so the ELBO conservation term is active, rather than a synthetic clock signal.
+1. **~~Close the conservation gap~~** (13.27/15) — [#16](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/16) fixed by `2e2a866`. Drive `exp3` with the full ESDM forward pass so the ELBO conservation term is active, rather than a synthetic clock signal.
 2. **Align residual-gate correlation** (0/10) — [#17](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/17). Investigate whether `GraphWHTFilter.fiedler_order` or the residual mapping in `exp3` needs to weight bright/dark modes differently so that larger residuals receive consistently larger gates.
 3. **Push gate mean into the selective window** (5/10) — [#18](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/18). `g_mean` is ~0.10; the [0.4, 0.8] window gives full `g_mean_selective` points. This likely requires rethinking the gate offset (`b_tau`) or the residual-to-logit mapping.
 4. **Compare `basic` vs `bivariate`** at the optimized run length (`n_steps=800`, `a_tau_scale=2.62`). If `bivariate` matches or exceeds `basic`, it becomes the new baseline.
@@ -357,7 +357,7 @@ Track these as GitHub issues in the repository:
 
 | Criterion | Score | Gap | Diagnosis |
 |---|---|---|---|
-| `conservation` | 0/15 | 15 | The synthetic clock signal in `exp3` does not enforce the ELBO conservation term; bright-sector energy grows unboundedly. Needs full ESDM forward pass or a conservation-aware synthetic driver. |
+| `conservation` | 13.27/15 | 1.73 | Fixed by computing bright-sector entropy in `spectral_split` instead of unbounded bright-sector energy. Remaining gap comes from residual drift in `S_total` around `S_0`. |
 | `g_mean_selective` | 5/10 | 5 | Gate mean is ~0.10, below the [0.4, 0.8] window. Lower `a_tau_scale` can push it into the window but currently trades off against other criteria. |
 | `r_g_corr_positive` | 0/10 | 10 | Spearman correlation between residuals and gate is weakly negative (~-0.03). The gate is not yet strongly aligned with per-mode residual structure. |
 | `heat_death_timing` | 3.57/5 | 1.43 | Heat death fires at ~84% of the run; closer to 70% would give full points. Faster decay or adjusted patience could help. |
