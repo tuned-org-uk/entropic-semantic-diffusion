@@ -395,11 +395,16 @@ def main_cli(
     clock_eps: float = 1e-8,
     lambda_clip: float = 15.0,
     bright_modes: int = 16,
+    n_steps: int = N_STEPS,
 ) -> pd.DataFrame:
-    """CLI entry point for Experiment 2."""
+    """CLI entry point for Experiment 2.
+
+    n_steps defaults to the production constant (N_STEPS) but can be
+    overridden for test runs.
+    """
     metrics = run_experiment(
         n=N,
-        n_steps=N_STEPS,
+        n_steps=n_steps,
         kl_decay=kl_decay,
         clock_eps=clock_eps,
         lambda_clip=lambda_clip,

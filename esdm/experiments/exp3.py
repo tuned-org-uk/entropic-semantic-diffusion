@@ -738,15 +738,20 @@ def main_cli(
     a_tau_scale: float = 5.0,
     dim: int = DIM,
     bright_modes: int = BRIGHT_MODES,
+    n_steps: int = N_STEPS,
+    batch_size: int = BATCH_SIZE,
 ) -> pd.DataFrame:
     """
     CLI entry point for a single Exp-3 run.
+
+    n_steps and batch_size default to the production constants
+    (N_STEPS, BATCH_SIZE) but can be overridden for test runs.
     """
     metrics = run_single(
         dim=dim,
         bright_modes=bright_modes,
-        n_steps=N_STEPS,
-        batch_size=BATCH_SIZE,
+        n_steps=n_steps,
+        batch_size=batch_size,
         kl_S_weight=kl_S_weight,
         kl_decay=kl_decay,
         clock_eps=clock_eps,
