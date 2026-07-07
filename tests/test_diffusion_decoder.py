@@ -5,8 +5,8 @@ All assertions from 01-IMPLEMENTATION-PLAN.md §5.3.
 import pytest
 import torch
 
-from esdm.clock import EntropicClock
-from esdm.diffusion_decoder import EntropicDiffusionDecoder
+from esdm_legacy.clock import EntropicClock
+from esdm_legacy.diffusion_decoder import EntropicDiffusionDecoder
 
 
 def test_alpha_bar_monotone_decreasing():

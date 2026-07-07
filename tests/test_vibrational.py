@@ -5,9 +5,9 @@ All assertions from 01-IMPLEMENTATION-PLAN.md §4.4.
 import pytest
 import torch
 
-from esdm._vendor.laplacian import DifferentiableLaplacian
-from esdm._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
-from esdm.vibrational import (
+from esdm_legacy._vendor.laplacian import DifferentiableLaplacian
+from esdm_legacy._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
+from esdm_legacy.vibrational import (
     VibrationalStateBlock,
     _laplacian_from_dense,
     compute_mode_residuals,

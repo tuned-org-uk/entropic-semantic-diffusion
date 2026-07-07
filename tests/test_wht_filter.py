@@ -4,7 +4,7 @@ Tests for the vendored Graph-WHT spectral filter.
 import numpy as np
 import pytest
 
-from esdm.wht_filter import GraphWHTFilter, heat_kernel
+from esdm_legacy.wht_filter import GraphWHTFilter, heat_kernel
 
 
 @pytest.fixture()
