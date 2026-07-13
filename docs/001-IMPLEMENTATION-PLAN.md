@@ -41,7 +41,7 @@ In scope:
   using `arrowspace` for all graph/Laplacian/Rayleigh-quotient operations.
 - A shared synthetic minimal-surface data generator (ground-truth surfaces
   with known analytic curvature).
-- A comparison harness (metrics, ablations) — detailed in `001-EXPERIMENTS.md`.
+- A comparison harness (metrics, ablations) — detailed in `002-EXPERIMENTS.md`.
 
 Out of scope (future tracks):
 - Real-world 3D scan / mesh datasets.
@@ -91,7 +91,7 @@ with a `# TEMPORARY: upstream issue #<n>` marker, per rule 3 below):
 | Intended primitive | Real-API status | Adapter action |
 | :-- | :-- | :-- |
 | `build_graph(features, k, sampler)` | missing | wrap `ArrowSpaceBuilder().with_*(...).build_full(...)` |
-| `graph.laplacian(normalized=True)` | partial — `GraphLaplacian.to_csr()` exists, no normalised form | normalise in the adapter: $L_{sym} = D^{-1/2} L D^{-1/2}$ from the CSR |
+| `graph.laplacian(normalized=True)` | partial — `GraphLaplacian.to_csr()` exists, no normalised form | normalise in the adapter: $L_{\text{sym}} = D^{-1/2} L D^{-1/2}$ from the CSR |
 | `graph.taumode_score(signal, tau)` | **missing** — no Rayleigh/λτ score primitive | compute $R(f) = f^\top L f / f^\top f$ locally in the adapter (this is the core 2.5-D score); file upstream issue for a native, differentiable implementation |
 | leading Laplacian eigenvectors (for $z$ embedding) | `lambdas_sorted()` exists; eigenvector accessor not confirmed | eigendecompose `to_dense()` with `torch.linalg.eigh` in the adapter until an upstream accessor lands |
 
@@ -169,6 +169,23 @@ determinant.
 
 This is the treatment condition under test.
 
+### 4.3 WHT-filtered 2.5-D update (Phase 2 integration)
+
+Once the entropic clock is wired (Macro-Phase A), the feature-signal update
+gains a WHT spectral gate $g \in \mathbb{R}^F$:
+
+$$
+f_{t-\Delta t} = f_t - \frac{\sigma^2 \Delta t}{2}\, \widetilde{L_F f_t}
+$$
+
+where $\widetilde{L_F f_t} = H_F^\top(g \odot \hat{L}_F \hat{f}_t)$ with
+$\hat{L}_F = H_F L_F H_F^\top$ and $\hat{f}_t = H_F f_t$. This replaces
+the plain $L_F f_t$ with a pass-band-filtered Laplacian action. Low-sequency
+components (globally-coherent string/spring modes) are preserved; high-
+sequency components (local noise) are progressively gated out as $\tau$
+increases. See `00-DESIGN_PREAMBLE.md` §WHT Spectral Filter for the full
+derivation.
+
 ## 5. Component breakdown
 
 | Component | Description | Owner module |
@@ -177,8 +194,8 @@ This is the treatment condition under test.
 | `graphs/wiring.py` | Thin wrapper around `arrowspace.build_graph`, caching sparse Laplacian as `torch.sparse` tensor | new, depends on `arrowspace` |
 | `models/score3d.py` | Baseline 3D score network + DSM loss | new |
 | `models/score25d.py` | 2.5-D dual-space score network + graph-diffusion step (uses `graphs/wiring.py`) | new |
-| `sampling/euler_maruyama.py` | Shared reverse-SDE sampler, parameterized by dimensionality | new |
-| `eval/metrics.py` | Chamfer distance, Rayleigh/λτ energy gap, discrete mean curvature error | new |
+| `sampling/euler_maruyama.py` | Shared reverse-SDE sampler, parameterized by dimensionality and step count $N$ | new |
+| `eval/metrics.py` | Chamfer distance, Rayleigh/λτ energy gap, discrete mean curvature error, coverage, precision, mode-separation | new |
 | `eval/harness.py` | Orchestrates training + sampling + metrics for both conditions | new |
 
 ## 6. Milestones
@@ -193,10 +210,14 @@ training converges).
 diffusion step; verify the Laplacian-smoothing step matches `arrowspace`
 taumode score behavior on held-out synthetic signals.
 4. **M4 — Comparison harness**: run both models on identical splits, produce
-the metrics table and ablations defined in `001-EXPERIMENTS.md`.
+the metrics table and ablations defined in `002-EXPERIMENTS.md`.
 5. **M5 — Spectral stability check**: re-wire graphs under subsampling and
 confirm λτ tail stability, per the validation protocol in the Graph
 Wiring paper.
+6. **M6 — Validation suite (new, issue #27)**: run Experiments 7–9 from
+`002-EXPERIMENTS.md` (frozen-gate ablation, step-count sweep, diversity
+decomposition) before any public claim about the ESDM string/spring
+mechanism is made. See §8 below.
 
 ## 7. Open risks / assumptions
 
@@ -207,3 +228,51 @@ track treats it as a hypothesis to validate empirically, not a given.
 suitable for backprop through the wiring step itself; if so, the wiring
 graph is treated as fixed per training run rather than re-optimized
 end-to-end (documented as a limitation, not silently patched).
+- The non-spectral baseline (plain MLP at matched parameter count, no $L_F$
+term) must be implemented alongside the 2.5-D model, not added later.
+  Without it, quality gains cannot be attributed to the spectral substrate.
+
+## 8. Validation requirements _(new, issue #27)_
+
+The following requirements must be satisfied before any architecture claim
+derived from this implementation is published or reported. They are adapted
+from the comparison with Un-0 (Unconventional AI, June 2026), translated into
+ESDM's string/spring design language.
+
+### 8.1 Frozen-gate reservoir control
+
+Every training run that reports a performance number from the 2.5-D ESDM
+must include a paired frozen-gate (Condition B) run under identical
+hyperparameters. The performance delta must be reported; if it is not
+statistically significant (3 seeds), the result is reported as "spectral
+filtering not isolable" rather than as evidence for the WHT gate mechanism.
+
+### 8.2 Step-count sweep
+
+The generation pipeline (`sampling/euler_maruyama.py`) must be evaluated at
+$N \in \{1, 2, 4, 8, 16, 32\}$ reverse steps on the first real experiment
+before $N$ is fixed for subsequent work. The sweep curve must be included in
+any results table.
+
+### 8.3 Diversity / quality split
+
+All results tables must report **coverage** and **precision** (defined in
+Experiment 9 of `002-EXPERIMENTS.md`) alongside Chamfer distance. A result
+that improves only precision while degrading coverage is not a win for the
+dual-space hypothesis, which predicts improved basin coverage.
+
+### 8.4 Non-spectral baseline
+
+All comparisons involving the 2.5-D model must include a non-spectral MLP
+baseline (no $L_F$ term, no WHT gate, matched parameter count). This
+baseline is the correct null hypothesis: improvements over it indicate that
+the spectral string/spring substrate contributes, not merely the additional
+parameters.
+
+### 8.5 Conservation law reporting
+
+All results tables must include the terminal-step `conserved` residual
+$|S_\text{bright} + S_\text{dark} - S_0|$ alongside quality metrics. A
+high-quality result with a large conservation residual indicates the physics
+constraint is not active and the model has drifted from its theoretical
+grounding.
