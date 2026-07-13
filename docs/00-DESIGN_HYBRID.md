@@ -229,43 +229,194 @@ made explicit. The three operators act in sequence:
 
 ---
 
-## 7. Open Questions
+## 7. Open Questions — Resolved Against Issue \#27 Findings
 
-1. **Backpropagation through $\Phi$.** $U_q$ is currently fixed after graph
-   construction. If $U_q$ is made differentiable (e.g. via a differentiable
-   eigendecomposition or a Lanczos approximation), the lifting step can be
-   jointly optimised with the rest of the model. This is flagged as an open
-   risk in `001-IMPLEMENTATION-PLAN.md` §7.
+### Q1 — Backpropagation through $\Phi$ (differentiable $U_q$)
 
-2. **Choice of $q$.** In the 2.5-D track, $q = 2$ (Fiedler + second
-   eigenvector). For the full ESDM, $q$ should be treated as a
-   hyperparameter to sweep: too small removes information, too large
-   (approaching $F$) removes the spectral projection benefit.
+**Resolution: keep $U_q$ fixed through Experiments 7–9; differentiable $U_q$
+is a Phase 3 variant.**
 
-3. **Asymmetry of $\Pi$.** The Rayleigh gradient $\nabla_{Q_t} R$ points
-   toward lower spectral energy. This means the hybridisation operator
-   always pulls item states toward smoother feature-space modes — it is a
-   **contractive** operator, not a conservative one. Whether this is
-   desirable or whether a symmetric (reversible) projection is needed for
-   the Loschmidt echo reversibility test (`00-DESIGN.md` §11.4) is an
-   open question.
+Issue \#27 identifies the core empirical risk as not knowing whether the
+spectral machinery does real work *beyond a fixed basis*. Making $U_q$
+differentiable would make the lifting step jointly optimisable — but it would
+also conflate two separate claims: (a) the fixed ArrowSpace spectral geometry
+contributes, and (b) an adapted lifting subspace contributes further. The
+frozen-vs-learned ablation (Experiment 7, `002-EXPERIMENTS.md`) is designed
+to isolate (a) first. Until that experiment is run and (a) is confirmed, a
+differentiable $U_q$ is premature.
 
-4. **Interaction with $\Lambda(\tau)$.** The forcing term $\Lambda(\tau) B_t$
-   can drive item states away from smooth modes (when $\Lambda$ is large).
-   The hybridisation operator $\mathcal{H}$ then pulls them back. The
-   tension between $\Lambda$ (exploration, attention-driven) and
-   $\mathcal{H}$ (contraction, Rayleigh-driven) is the core dynamical
-   balance of ESDM and should be monitored via the `r_g_corr` diagnostic
-   (`03-FITNESS-CRITERIA.md` §B).
+**Decision rule:**
+- If Experiment 7 frozen-gate ≈ learned-gate: the spectral basis itself is
+  not contributing beyond a scaling layer; differentiating $U_q$ is low
+  priority.
+- If learned-gate substantially outperforms frozen-gate: spectral frequency
+  selection is real; differentiating $U_q$ becomes the natural Phase 3
+  question — how much further gain comes from adapting the lifting subspace
+  itself vs. just the sequency gate $g$.
 
-5. **Relation to the signed density matrix.** Destructive interference
-   ($\rho_- > \rho_+$) occurs when $\mathcal{H}$ is driving item states
-   into anti-phase configurations relative to the Laplacian eigenmodes.
-   The `rho_sign` confidence signal (`00-DESIGN.md` §6.3) can therefore
-   be interpreted geometrically: high $\rho_-$ means items are
-   systematically positioned in the negative-curvature regions of the
-   Rayleigh quotient surface — the restoring force is pointing the
-   wrong way. See `03-FITNESS-CRITERIA.md` §B for the operationalisation.
+**Implementation note:** if $U_q$ is eventually made differentiable, the
+correct approach is a Lanczos-based differentiable eigendecomposition
+(e.g. `torch.lobpcg` with `largest=False`) rather than full
+`torch.linalg.eigh`, since only the leading $q \ll F$ eigenvectors are
+needed. Mark as `# TEMPORAL: upstream issue` per `001-IMPLEMENTATION-PLAN.md`
+§3 rules until a native `arrowspace` differentiable eigenbasis lands.
+
+---
+
+### Q2 — Choice of $q$
+
+**Resolution: $q$ is not a free scalar hyperparameter — it must be swept
+jointly with the diversity/quality split (Experiment 9).**
+
+Issue \#27 Gap 4 asks whether spectral diffusion improves *semantic basin
+coverage* or merely sharpens samples within dominant modes. The choice of $q$
+directly controls this:
+
+| $q$ | Lifting behaviour | Predicted effect on diversity |
+|---|---|---|
+| $1$ (Fiedler only) | Maximum compression to single connectivity axis | High mode-collapse risk; strong basin selection; low `coverage` |
+| $\approx F/4$ | Captures main basin boundaries, excludes noise | Regime where dual-space hypothesis predicts coverage gain |
+| $F/2$ | Moderate spectral richness | Diminishing returns on basin structure |
+| $F$ | $\Phi = \text{id}$, no projection | No spectral filtering benefit; correct non-spectral baseline for $\Phi$ specifically |
+
+**Sweep protocol:** add $q \in \{1, 2, F/4, F/2, F\}$ as a column in
+Experiment 9's diversity/quality table (`002-EXPERIMENTS.md`). The
+primary diagnostic is `mode_separation` (std of per-sample Rayleigh
+quotients $R(f_i)$ across the generated set, defined in
+`03-FITNESS-CRITERIA.md` §Diversity). If mode separation peaks at
+$q \approx F/4$ and collapses at both extremes, this is direct evidence
+for the optimal lifting subspace size. The $q = F$ condition is also
+the correct non-spectral baseline for $\Phi$ in isolation.
+
+**Default for implementation:** $q = F/4$, rounded to nearest power of 2
+for WHT compatibility. Override with `--q` flag in experiment configs.
+
+---
+
+### Q3 — Asymmetry of $\Pi$ (contractive vs. reversible)
+
+**Resolution: the asymmetry is a feature for forward diffusion but must
+be explicitly parameterised for the Loschmidt echo test.**
+
+The Rayleigh gradient $-\nabla_{Q_t} R$ is purely contractive: it always
+pulls item states toward lower spectral energy. This is correct for the
+*forward* diffusion direction (smoothing, semantic basin descent) but
+incompatible with the *reverse* direction (reconstruction, generation
+from noise) if the reverse process must climb the Rayleigh surface.
+
+Issue \#27 Gap 3 (endpoint-vs-trajectory supervision) is directly
+relevant: if supervising only terminal states is sufficient, the
+asymmetry is irrelevant during training — the reverse process never needs
+to invert $\Pi$. If intermediate states matter, the contraction must be
+reversible.
+
+**Resolution for the Loschmidt echo** (`00-DESIGN.md` §11.4): define a
+**signed projection** $\Pi_\pm$ controlled by the sign of $\Delta\tau$:
+
+$$\Pi_\pm(\tilde{F}_t,\, \text{sign}(\Delta\tau))
+  = -\,\text{sign}(\Delta\tau)\;\eta\,\nabla_{Q_t} R(\tilde{F}_t)$$
+
+This uses $-\nabla R$ in the forward direction (contraction, basin descent)
+and $+\nabla R$ in the reverse direction (expansion, basin ascent).
+Structurally this mirrors how score-based reverse SDEs flip the drift sign.
+The asymmetry is not resolved — it is made explicit and parameterised.
+
+**Monitoring:** add `pi_contraction_ratio` to the health check:
+
+$$\text{pi\_contraction\_ratio} = \frac{\|\Delta Q_t\|}{\|Q_t\|}$$
+
+Healthy range $\in [0.01, 0.3]$ per step. Values $> 0.5$ indicate $\Pi$ is
+overwhelming the wave dynamics (over-contraction); values near $0$ indicate
+$\Pi$ is inactive (feature diffusion not reaching item space).
+
+---
+
+### Q4 — Interaction between $\Lambda(\tau)$ and $\mathcal{H}$
+
+**Resolution: the $\Lambda$ vs $\mathcal{H}$ tension is the ESDM analogue
+of the Un-0 coupling-strength ablation; add `net_energy_flow` to the
+health check table.**
+
+In ESDM the tension between the two opposing forces is:
+
+$$\underbrace{+\Lambda(\tau)\cdot\Delta\tau^2\cdot B_t}_{\text{exploration: drives }Q_t\text{ away from smooth modes}}
+\quad\text{vs}\quad
+\underbrace{-\eta\,\Delta\tau^2\,\nabla_{Q_t} R(\tilde{F}_t)}_{\mathcal{H}\text{: pulls }Q_t\text{ toward smooth modes}}$$
+
+This is structurally identical to the Un-0 coupling-strength parameter: in
+Un-0 the coupling matrix magnitude controls how hard oscillators pull each
+other toward synchrony vs. how hard the external input drives them apart.
+Issue \#27 Gap 1 asks for the frozen-vs-learned ablation precisely to
+isolate this balance.
+
+**`r_g_corr`** (residual-gate correlation, `03-FITNESS-CRITERIA.md` §B)
+measures the per-mode correlation between residual magnitude and gate
+activity — it is a proxy for whether $\mathcal{H}$ is responding to
+meaningful spectral activity. But it does not directly measure which force
+is winning globally.
+
+**Add `net_energy_flow` to the health check** (`00-DESIGN.md` §8.1):
+
+$$\text{net\_energy\_flow}_t = \|Q_{t+1}\|_F^2 - \|Q_t\|_F^2$$
+
+| Value | Interpretation |
+|---|---|
+| $\approx 0$ | Balanced: $\Lambda$ and $\mathcal{H}$ are in equilibrium |
+| $> 0.1 \cdot \|Q_0\|_F^2$ | Forcing dominates: $\mathcal{H}$ is not pulling back fast enough |
+| $< -0.5 \cdot \|Q_0\|_F^2$ | Contraction dominates: modes collapsing, generation diversity lost |
+
+The `kl_S` barrier-height sweep (`00-DESIGN.md` §9) will produce one
+`net_energy_flow` curve per barrier height, directly analogous to
+Barontini's Fig. 2 (entropic time vs. barrier height). Low `kl_S` should
+produce oscillating $\pm$ energy flow (cyclic expansion/contraction); high
+`kl_S` should produce monotonically negative flow (rapid heat death).
+
+---
+
+### Q5 — Relation to the signed density matrix ($\rho_-$ and negative Rayleigh curvature)
+
+**Resolution: $\rho_-$ is currently an interpretive analogy; it becomes a
+validated mechanism only if Experiment 4 Condition C (unsigned spectral gate)
+shows a measurable delta. Until then, the signed density matrix is flagged
+as unvalidated.**
+
+The geometric interpretation is that $\rho_- > \rho_+$ (destructive
+interference dominates) means item states are in the *negative-curvature*
+regions of the Rayleigh quotient surface — $\Pi$ is pointing the wrong
+way, the restoring force is anti-aligned with the basin gradient.
+
+Issue \#27 Gap 6 frames this more sharply: the question is whether
+**anti-phase interactions** (negative Laplacian eigenvalue contributions,
+equivalent to negative coupling sign in Un-0) produce *measurable* gains
+in mode separation or controllability, or whether they are an interpretation
+layer over a conventional result.
+
+**The critical test is Experiment 4 Condition C** (`002-EXPERIMENTS.md`):
+the unsigned spectral gate ablation replaces $F_t$ (which can have negative
+components from anti-phase Laplacian modes) with $|F_t|$ (rectified,
+no destructive interference). The `signed_vs_unsigned_delta` metric
+(`03-FITNESS-CRITERIA.md` §B) measures the Chamfer distance delta between
+the two conditions.
+
+**Decision rule:**
+- `signed_vs_unsigned_delta` $\approx 0$ and `mode_separation` A ≈ C:
+  $\rho_-$ is architecturally present but computationally inert. The
+  quantum-interference framing should be replaced with a simpler
+  "Laplacian diffusion with learned gate" description. No action needed
+  on the signed density matrix.
+- `signed_vs_unsigned_delta` $> 0$ (signed better) and
+  `mode_separation` A $>$ C: anti-phase dynamics are contributing real
+  discriminative capacity. The signed density matrix interpretation is
+  validated and `rho_sign` should be promoted to a first-class training
+  signal (not just a confidence flag).
+- `signed_vs_unsigned_delta` $< 0$ (unsigned better): the signed
+  coefficients are harmful — anti-phase interference is corrupting the
+  diffusion trajectory. In this case, apply a rectification layer
+  $|\cdot|$ after $\Phi$ as a permanent architectural fix.
+
+**Until Experiment 4 Condition C is run, the signed density matrix
+interpretation is an analogy, not a validated mechanism.** This is the
+uncomfortable but correct reading of the issue \#27 findings.
 
 ---
 
@@ -286,6 +437,8 @@ Principled Collocation Strategy):
 > on the item-space state. The three operators together define the
 > mechanism by which the F×F feature-space spectral structure (dark sector)
 > directs the N×F geometric item-space dynamics (bright sector).
+> Open questions resolved against issue \#27 findings are in
+> `00-DESIGN_HYBRID.md` §7.
 
 ---
 
@@ -295,6 +448,8 @@ Principled Collocation Strategy):
 - `001-IMPLEMENTATION-PLAN.md` §4.2–4.3 — 2.5-D dual-space update equations
 - `00-DESIGN_PREAMBLE.md` — WHT spectral filter, two-sector partition
 - `03-FITNESS-CRITERIA.md` §A–B — gate learning and interference scoring
+- `002-EXPERIMENTS.md` Experiment 4 Condition C, Experiments 7–9
+- Issue \#27: Benchmark ESDM against Un-0-style oscillator dynamics
 - ArrowSpace taumode: $R(f) = f^\top L_F f / f^\top f$, via `WireGraph.rayleigh_quotient`
 - Moriondo, L. (2024). *ArrowSpace: Semantic Basins*.
   tuned.org.uk/posts/020_arrowspace_semantic_basins_part2
