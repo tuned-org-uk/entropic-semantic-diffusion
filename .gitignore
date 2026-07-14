@@ -17,6 +17,7 @@ build/
 
 # Data / artefacts (large; keep out of git)
 data/
+!esdm/data/
 checkpoints/
 results/
 wandb/
