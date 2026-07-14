@@ -1,7 +1,7 @@
 {
   "version": "2.1.0",
   "source": "loop",
-  "timestamp": "2026-07-14T14:41:46.299088+00:00",
+  "timestamp": "2026-07-14T14:57:29.416993+00:00",
   "status": "RUNNING",
   "results_tsv": "/Users/tuned-silicon/papers/entropic-semantic-diffusion/autoresearch/loop-260714-1458/results.tsv",
   "findings": [
@@ -16,7 +16,9 @@
     "Iteration 2 kept: n_steps=800, final_loss=3.3553, heat death at step 385. tau_n still plateaus at 0.0179; alpha_bar barely drops.",
     "Gamma sweep (n_steps=100): gamma=0.2 -> 3.9190, gamma=0.5 -> 3.8699, gamma=1.0 -> 3.8402. Best: gamma=1.0.",
     "N-vibrational-steps sweep (gamma=1.0, n_steps=100): n_vib=1 -> 3.8402, n_vib=2 -> 3.8496, n_vib=4 -> 3.9013. Best: n_vib=1.",
-    "Iteration 4 kept: gamma=1.0, n_vibrational_steps=1, lr=3e-4, final_loss=3.8402."
+    "Iteration 4 kept: gamma=1.0, n_vibrational_steps=1, lr=3e-4, final_loss=3.8402.",
+    "Iteration 7 kept: 800-step run gamma=0.95, n_vib=2 improved final_loss from 3.3553 to 3.3044; heat death at step 385.",
+    "WHT sweep (n_steps=100, gamma=0.95, n_vib=2): none=3.8498, basic=3.8499, bivariate=3.8499. No meaningful difference; WHT filter built from random L_F is not helping yet."
   ],
   "config": {
     "goal": "Deliver issue #22: full training on real embeddings (Exp 4 MNIST + Exp 5 CIFAR-10 + latent evaluation)",

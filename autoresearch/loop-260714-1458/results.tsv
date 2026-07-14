@@ -7,3 +7,7 @@ iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 4	2026-07-14T14:41:46.299088+00:00	55f2f90	-3.8402	+0.0297	PASS	118	keep	Gamma sweep: gamma=1.0, n_steps=100; final_loss 3.8699 -> 3.8402 (best gamma)
 5	2026-07-14T14:41:46.299088+00:00	55f2f90	-3.8496	-0.0094	PASS	118	no-op	N-vib sweep with gamma=1.0: n_vibrational_steps=2; final_loss 3.8496
 6	2026-07-14T14:41:46.299088+00:00	55f2f90	-3.9013	-0.0611	PASS	118	no-op	N-vib sweep with gamma=1.0: n_vibrational_steps=4; final_loss 3.9013
+7	2026-07-14T14:57:29.416993+00:00	b04f777	-3.3044	+0.0509	PASS	118	keep	800-step run with gamma=0.95, n_vib=2; final_loss 3.3553 -> 3.3044; heat death at step 385
+8	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8498	-0.5454	PASS	118	no-op	WHT sweep control: wht_filter=none, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8498
+9	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8499	-0.5455	PASS	118	no-op	WHT sweep: wht_filter=basic, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8499
+10	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8499	-0.5455	PASS	118	no-op	WHT sweep: wht_filter=bivariate, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8499
