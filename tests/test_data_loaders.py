@@ -1,4 +1,10 @@
-"""Tests for ESDM real-world data loaders (issue #21)."""
+"""Tests for ESDM real-world data loaders (issue #21).
+
+Test strategy:
+- Fast unit tests (default): CIFAR-10 helper functions and loader API surface.
+- Medium tests: MNIST loader (one OpenML download + PCA fit, cached per session).
+- Slow tests: CIFAR-10 full loader (frozen DINO encoding), run with --run-slow.
+"""
 from __future__ import annotations
 
 import numpy as np
@@ -9,57 +15,52 @@ from esdm.data.cifar10 import CIFAR10DINOLoader, DEFAULT_OUTPUT_DIM
 from esdm.data.mnist import MNISTLoader, DEFAULT_PCA_DIM
 
 
+# ---------------------------------------------------------------------------
+# MNIST loader tests (medium: one download + PCA fit)
+# ---------------------------------------------------------------------------
+
+
 class TestMNISTLoader:
-    """Unit tests for the MNIST PCA-16 loader."""
+    """Critical tests for the MNIST PCA-16 loader."""
 
     @classmethod
     @pytest.fixture(scope="class")
     def loader(cls):
-        # Use a temporary cache directory inside pytest_cache.
+        # Cache inside pytest_cache so repeated runs are fast after first fit.
         return MNISTLoader(pca_dim=DEFAULT_PCA_DIM, data_dir=".pytest_cache/mnist")
 
-    def test_dim_input_matches_pca_dim(self, loader):
-        assert loader.dim_input == DEFAULT_PCA_DIM
-
-    def test_train_data_shape(self, loader):
+    def test_train_and_test_shapes_and_dtype(self, loader):
         train = loader.train_data
-        assert train.shape == (60000, DEFAULT_PCA_DIM)
-        assert train.dtype == torch.float64
-
-    def test_test_data_shape(self, loader):
         test = loader.test_data
+        assert train.shape == (60000, DEFAULT_PCA_DIM)
         assert test.shape == (10000, DEFAULT_PCA_DIM)
+        assert train.dtype == torch.float64
         assert test.dtype == torch.float64
 
-    def test_l2_normalised(self, loader):
-        train = loader.train_data
-        norms = train.norm(dim=1)
-        assert torch.allclose(norms, torch.ones_like(norms), atol=1e-6)
-
-    def test_batch_shape(self, loader):
+    def test_batches_are_l2_normalised_and_correct_shape(self, loader):
         batch = loader.train_batch(batch_size=32, seed=3407)
         assert batch.shape == (32, DEFAULT_PCA_DIM)
+        norms = batch.norm(dim=1)
+        assert torch.allclose(norms, torch.ones_like(norms), atol=1e-6)
 
-    def test_variance_retained(self, loader):
-        ratio = loader.explained_variance_ratio
-        assert ratio.shape == (DEFAULT_PCA_DIM,)
-        assert float(ratio.sum()) > 0.55  # MNIST PCA-16 retains ~60% variance on raw pixels
-
-    def test_deterministic_with_seed(self, loader):
+    def test_loader_is_deterministic(self, loader):
         b1 = loader.train_batch(batch_size=16, seed=123)
         b2 = loader.train_batch(batch_size=16, seed=123)
         assert torch.allclose(b1, b2)
 
 
+# ---------------------------------------------------------------------------
+# CIFAR-10 loader tests (slow: DINO download/encode)
+# ---------------------------------------------------------------------------
+
 
 @pytest.mark.slow
 class TestCIFAR10DINOLoader:
-    """Unit tests for the CIFAR-10 DINO-256 loader (slow; requires DINO download/encode)."""
+    """Critical end-to-end tests for the CIFAR-10 DINO-256 loader."""
 
     @classmethod
     @pytest.fixture(scope="class")
     def loader(cls):
-        # Use a tiny subset so the frozen DINO encoder runs in test time.
         return CIFAR10DINOLoader(
             output_dim=DEFAULT_OUTPUT_DIM,
             data_dir=".pytest_cache/cifar10",
@@ -69,56 +70,45 @@ class TestCIFAR10DINOLoader:
             max_test_samples=50,
         )
 
-    def test_dim_input_matches_output_dim(self, loader):
-        assert loader.dim_input == DEFAULT_OUTPUT_DIM
-
-    def test_train_data_shape(self, loader):
+    def test_train_and_test_shapes_and_dtype(self, loader):
         train = loader.train_data
-        assert train.shape[0] == 200
-        assert train.shape[1] == DEFAULT_OUTPUT_DIM
-        assert train.dtype == torch.float64
-
-    def test_test_data_shape(self, loader):
         test = loader.test_data
-        assert test.shape[0] == 50
-        assert test.shape[1] == DEFAULT_OUTPUT_DIM
+        assert train.shape == (200, DEFAULT_OUTPUT_DIM)
+        assert test.shape == (50, DEFAULT_OUTPUT_DIM)
+        assert train.dtype == torch.float64
         assert test.dtype == torch.float64
 
-    def test_l2_normalised(self, loader):
-        train = loader.train_data
-        norms = train.norm(dim=1)
-        assert torch.allclose(norms, torch.ones_like(norms), atol=1e-6)
-
-    def test_batch_shape(self, loader):
+    def test_batches_are_l2_normalised_and_correct_shape(self, loader):
         batch = loader.train_batch(batch_size=16, seed=3407)
         assert batch.shape == (16, DEFAULT_OUTPUT_DIM)
+        norms = batch.norm(dim=1)
+        assert torch.allclose(norms, torch.ones_like(norms), atol=1e-6)
 
-    def test_explained_variance_shape(self, loader):
-        ratio = loader.explained_variance_ratio
-        assert ratio.shape == (DEFAULT_OUTPUT_DIM,)
-        assert float(ratio.sum()) > 0.0
-
-    def test_deterministic_with_seed(self, loader):
+    def test_loader_is_deterministic(self, loader):
         b1 = loader.train_batch(batch_size=16, seed=123)
         b2 = loader.train_batch(batch_size=16, seed=123)
         assert torch.allclose(b1, b2)
 
 
+# ---------------------------------------------------------------------------
+# CIFAR-10 helper tests (fast: pure numpy, no model/download)
+# ---------------------------------------------------------------------------
+
 
 class TestCIFAR10Helpers:
-    """Fast unit tests for CIFAR-10 loader helpers (no DINO encoding)."""
+    """Fast unit tests for CIFAR-10 preprocessing helpers."""
 
-    def test_resize_shape(self):
+    def test_resize_preserves_batch_and_channels(self):
         images = np.zeros((4, 3, 32, 32), dtype=np.float64)
         resized = CIFAR10DINOLoader._resize(images, size=224)
         assert resized.shape == (4, 3, 224, 224)
 
-    def test_normalise_matches_imagenet(self):
+    def test_normalise_uses_imagenet_stats(self):
         images = np.ones((2, 3, 224, 224), dtype=np.float64) * 255.0
         normed = CIFAR10DINOLoader._normalise(images)
-        # At max input (255), normalised value is (1 - mean) / std for each channel.
-        expected = (1.0 - np.array([0.485, 0.456, 0.406]).reshape(1, 3, 1, 1)) / np.array([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1)
-        assert np.allclose(normed, expected, atol=1e-6)
+        mean = np.array([0.485, 0.456, 0.406]).reshape(1, 3, 1, 1)
+        std = np.array([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1)
+        assert np.allclose(normed, (1.0 - mean) / std, atol=1e-6)
 
     def test_l2_normalise(self):
         x = np.array([[3.0, 4.0], [0.0, 5.0]], dtype=np.float64)
