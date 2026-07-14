@@ -1,0 +1,21 @@
+{
+  "version": "2.1.0",
+  "source": "loop",
+  "timestamp": "2026-07-14T14:01:45.688821+00:00",
+  "status": "STARTED",
+  "results_tsv": "/Users/tuned-silicon/papers/entropic-semantic-diffusion/autoresearch/loop-260714-1458/results.tsv",
+  "findings": [
+    "Issue #22 started after issue #21 completion.",
+    "Initial phase: test-count metric while scaffolding Exp 4/5 + latent eval.",
+    "Real-data slow tests (full MNIST/CIFAR-10) are optional; fast verify must finish in seconds."
+  ],
+  "config": {
+    "goal": "Deliver issue #22: full training on real embeddings (Exp 4 MNIST + Exp 5 CIFAR-10 + latent evaluation)",
+    "scope": "esdm/experiments/exp4.py, esdm/experiments/exp5.py, esdm/eval/latent.py, esdm/cli/train.py, tests/test_exp4.py, tests/test_exp5.py, tests/test_latent.py",
+    "metric": "Count of passing tests in tests/test_exp4.py and tests/test_exp5.py (Phase 1 scaffolding)",
+    "direction": "higher_is_better",
+    "verify": ".venv/bin/python -m pytest tests/test_exp4.py tests/test_exp5.py -q --tb=no",
+    "guard": ".venv/bin/python -m pytest tests/ -q --tb=no",
+    "iterations": 25
+  }
+}

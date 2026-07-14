@@ -370,6 +370,16 @@ Fitness breakdown:
 | `r_g_corr_positive` | 7.17 | 10 |
 | **Total** | **111.88** | **123** |
 
+### Issue completion status
+
+| Issue | Status | Notes |
+|---|---|---|
+| #21 — Real data loaders | **Complete** | MNIST PCA-16 and CIFAR-10 DINO-256 loaders implemented, wired into CLI, tested. Audio deferred to #25. |
+| #22 — Full training on real embeddings | **In progress** | Exp 4 (MNIST) + Exp 5 (CIFAR-10) + latent evaluation. Started in `autoresearch/loop-260714-1458/`. |
+| #23 — Generation and sampling | Pending | Blocked on #22. |
+| #24 — 2.5-D dual-space track | Pending | Blocked on #20 Phase 2 integration. |
+| #25 — Audio generation | Pending | Blocked on #21 (audio loader) and #23. |
+
 ### Macro-phase roadmap to image and sound generation
 
 The following macro-issues track the path from the current synthetic-diagnostic state to a model that produces images and sounds:
@@ -394,3 +404,40 @@ Track these as GitHub issues in the repository:
 4. **Compare `basic` vs `bivariate`** at the optimized run length (`n_steps=800`, `a_tau_scale=2.62`). If `bivariate` matches or exceeds `basic`, it becomes the new baseline.
 5. **Tune heat-death timing** to ~70% by adjusting `kl_decay`, `kl_S_weight`, or the clock's `heat_death_patience`.
 
+
+
+## Autoresearch loop — issue #22
+
+Issue #22 moves from synthetic diagnostics to full training on real embeddings. The loop starts with a test-count metric while scaffolding is built, then switches to a real-data fitness metric once training converges.
+
+### Goal
+
+Deliver issue #22: full training on real embeddings — Experiment 4 (MNIST PCA-16) and Experiment 5 (CIFAR-10 DINO-256), plus latent-space evaluation.
+
+### Scope
+
+- `esdm/experiments/exp4.py` — MNIST training experiment
+- `esdm/experiments/exp5.py` — CIFAR-10 training experiment
+- `esdm/eval/latent.py` — latent-space evaluation (reconstruction, conservation, downstream k-NN accuracy)
+- `esdm/cli/train.py` — real-data training loop refinements
+- `tests/test_exp4.py`, `tests/test_exp5.py`, `tests/test_latent.py` — fast + slow tests
+
+### Loop configuration
+
+| Parameter | Phase 1 (scaffolding) | Phase 2 (training) |
+|---|---|---|
+| Goal | Build and test Exp 4/5 + latent eval | Maximize real-data fitness (MNIST/CIFAR-10) |
+| Metric | Count of passing tests in `tests/test_exp4.py` and `tests/test_exp5.py` | Composite fitness on real data (reconstruction + conservation + latent k-NN) |
+| Direction | `higher_is_better` | `higher_is_better` |
+| Verify | `.venv/bin/python -m pytest tests/test_exp4.py tests/test_exp5.py -q --tb=no` | `.venv/bin/python scripts/verify_fitness.py --dataset mnist` (TBD) |
+| Guard | `.venv/bin/python -m pytest tests/ -q --tb=no` | `.venv/bin/python -m pytest tests/ -q --tb=no` |
+| Iterations | 25 (bounded) | 25 (bounded) |
+| Results | `autoresearch/loop-{YYMMDD}-{HHMM}/results.tsv` | `autoresearch/loop-{YYMMDD}-{HHMM}/results.tsv` |
+
+### Decision protocol
+
+Same as the generic autoresearch loop, with one addition: real-data slow tests (full MNIST PCA fit, CIFAR-10 DINO encode) are optional and run only with `--run-slow` or `ESDM_RUN_SLOW=1`. The fast verify command must finish in seconds.
+
+### Initial todos
+
+See `autoresearch/loop-260714-1458/todos.md`.
