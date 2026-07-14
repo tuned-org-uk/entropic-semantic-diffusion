@@ -8,3 +8,4 @@ iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 5	2026-07-14T14:36:34	cf710f79180396b9d7fa60972f63d53e4636da1d	11	0	PASS	114	keep	Harden CIFAR-10 download/extraction sentinel check (slow tests not run)
 6	2026-07-14T14:37:28	573e14f3f7837f3e1e845f479fbb64a072c37217	11	0	PASS	114	no-op	Track existing minimal_surfaces.py and autoresearch log
 7	2026-07-14T14:40:50	6fa0508a11f0beaff83dd68c1f331d8b19aa3733	7	-4	PASS	110	keep	Consolidate data-loader tests: 7 fast + 3 optional slow (removed 4 redundant tests)
+8	2026-07-14T14:43:09	b51468e5944c0d0d52a0d57ef27b6e944330d5a4	7	0	PASS	110	no-op	Add test-factoring guidance to AGENTS.md
