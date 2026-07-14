@@ -1,3 +1,8 @@
 # metric_direction: higher_is_better
 iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 0	2026-07-14T14:12:39	09bee2b46c8d697264983772b9e852e2043fbb9e	0	0.0	PASS	101	baseline	initial state (no data-loader tests)
+1	2026-07-14T14:20:44	4a08de3b17bdc186d5b0225d92f96da9554b7805	7	+7	PASS	108	keep	MNIST PCA-16 loader + tests
+2	2026-07-14T14:29:03	595b0d731d0f17718dee486eb29e2310a3a5eed6	7	0	PASS	108	keep	CIFAR-10 DINO-256 loader + optional slow tests (7 fast + 7 slow)
+3	2026-07-14T14:32:38	5dcf06884a95241f030560f1931ebd04eaa6f708	11	+4	PASS	114	keep	Wire loaders into CLI + helper tests + fix existing CLI tests
+4	2026-07-14T14:33:34	5c52719ec5ca7ca52fb02da43a646018dfc2e289	11	0	PASS	114	no-op	Add transformers dependency for DINO loader
+5	2026-07-14T14:36:34	cf710f79180396b9d7fa60972f63d53e4636da1d	11	0	PASS	114	keep	Harden CIFAR-10 download/extraction sentinel check (slow tests not run)
