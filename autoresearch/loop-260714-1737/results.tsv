@@ -1,0 +1,4 @@
+# metric_direction: higher_is_better
+iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
+0	2026-07-14T16:38:41.062221+00:00	4b6a28d	-53.56	0.0	PASS	118	baseline	Issue #28 baseline: ArrowSpace L_F, lr=1e-4, n_steps=100; final_loss=53.56
+1	2026-07-14T16:38:41.062221+00:00	4b6a28d	-40.01	+13.55	PASS	118	keep	#28.1: lr=0.05 (best from sweep 1e-5..0.1); final_loss 53.56 -> 40.01 at 800 steps; tau_n 0->20.4; alpha_bar 1.0->0.0; no heat death
