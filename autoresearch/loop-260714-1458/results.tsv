@@ -12,3 +12,11 @@ iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 9	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8499	-0.5455	PASS	118	no-op	WHT sweep: wht_filter=basic, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8499
 10	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8499	-0.5455	PASS	118	no-op	WHT sweep: wht_filter=bivariate, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8499
 11	2026-07-14T15:45:47.657589+00:00	7a1f4ca	-3.8340	+0.0062	PASS	118	keep	Architecture: wire real L_F (blended alpha=0.1) into ESDM; gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8402 -> 3.8340
+12	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.8284	+0.0118	PASS	118	keep	l_f_alpha sweep: alpha=0.0 (identity L_base), gamma=0.95, n_vib=2, n_steps=100; best blend
+13	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.8296	+0.0106	PASS	118	no-op	l_f_alpha sweep: alpha=0.05, n_steps=100
+14	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.8340	+0.0062	PASS	118	no-op	l_f_alpha sweep: alpha=0.1, n_steps=100
+15	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.8558	-0.0156	PASS	118	no-op	l_f_alpha sweep: alpha=0.2, n_steps=100
+16	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.9005	-0.0603	PASS	118	no-op	l_f_alpha sweep: alpha=0.3, n_steps=100
+17	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.8285	-0.0001	PASS	118	no-op	WHT sweep with real L_F: basic, n_steps=100
+18	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.8285	-0.0001	PASS	118	no-op	WHT sweep with real L_F: bivariate, n_steps=100
+19	2026-07-14T15:57:40.776224+00:00	662ae9c	-3.2943	+0.0101	PASS	118	keep	Best alpha=0.0 at n_steps=800; final_loss 3.3044 -> 3.2943; heat death at step 393

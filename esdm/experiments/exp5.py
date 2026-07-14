@@ -36,7 +36,7 @@ BATCH_SIZE: int = 64
 A_TAU_SCALE: float = 2.62
 
 
-def _build_l_f(loader, n_samples: int = 5000, k: int = 16, alpha: float = 0.1, seed: int = 3407) -> torch.Tensor:
+def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> torch.Tensor:
     """Build a real feature-space Laplacian L_F from the loader's training data."""
     data = loader.train_data  # (N, F)
     n = data.shape[0]
@@ -46,8 +46,13 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, alpha: float = 0.1, s
         data = data[idx]
     k_eff = min(k, data.shape[1] - 1)
     wg = WireGraph.build(data.T, k=k_eff, seed=seed)
-    L_F = wg.laplacian(normalized=True, sparse=False).to(dtype=torch.float64)
-    # Blend real feature Laplacian with identity for stability.
+    return wg.laplacian(normalized=True, sparse=False).to(dtype=torch.float64)
+
+
+def _build_l_base(L_F: torch.Tensor, alpha: float = 0.0) -> torch.Tensor:
+    """Blend real L_F with identity for the spectral decoder's L_base."""
+    if alpha == 0.0:
+        return torch.eye(L_F.shape[0], dtype=torch.float64)
     I = torch.eye(L_F.shape[0], dtype=torch.float64)
     return (1.0 - alpha) * I + alpha * L_F
 
@@ -114,8 +119,8 @@ def run_single(
         max_train_samples=max_train_samples,
         max_test_samples=max_test_samples,
     )
-    L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), alpha=l_f_alpha, seed=seed)
-    cfg["model"]["L_base"] = L_F
+    L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
+    cfg["model"]["L_base"] = _build_l_base(L_F, alpha=l_f_alpha)
     cfg["model"]["wht_filter"] = _build_wht_filter(
         wht_filter, L_F, a_tau_scale=a_tau_scale, tau_decay_power=tau_decay_power
     )

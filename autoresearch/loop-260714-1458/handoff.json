@@ -1,7 +1,7 @@
 {
   "version": "2.1.0",
   "source": "loop",
-  "timestamp": "2026-07-14T15:45:47.657589+00:00",
+  "timestamp": "2026-07-14T15:57:40.776224+00:00",
   "status": "RUNNING",
   "results_tsv": "/Users/tuned-silicon/papers/entropic-semantic-diffusion/autoresearch/loop-260714-1458/results.tsv",
   "findings": [
@@ -20,7 +20,10 @@
     "Iteration 7 kept: 800-step run gamma=0.95, n_vib=2 improved final_loss from 3.3553 to 3.3044; heat death at step 385.",
     "WHT sweep (n_steps=100, gamma=0.95, n_vib=2): none=3.8498, basic=3.8499, bivariate=3.8499. No meaningful difference; WHT filter built from random L_F is not helping yet.",
     "Architecture change committed: ESDM accepts cfg['model']['L_base']; exp4/exp5 build real L_F from data via WireGraph and blend with identity (alpha=0.1).",
-    "Iteration 11 kept: blended L_F (alpha=0.1) gives final_loss=3.8340 at 100 steps vs previous 100-step best 3.8402. Dynamics are healthy (tau_n small, alpha_bar near 1)."
+    "Iteration 11 kept: blended L_F (alpha=0.1) gives final_loss=3.8340 at 100 steps vs previous 100-step best 3.8402. Dynamics are healthy (tau_n small, alpha_bar near 1).",
+    "l_f_alpha sweep (n_steps=100): identity L_base (alpha=0.0) is best at 3.8284; blending real L_F hurts short-run loss.",
+    "WHT filter sweep with real L_F (alpha=0.0, n_steps=100): none=3.8284, basic=3.8285, bivariate=3.8285. No meaningful effect at 100 steps.",
+    "Iteration 19 kept: alpha=0.0 at n_steps=800 gives final_loss=3.2943, heat death at step 393."
   ],
   "config": {
     "goal": "Deliver issue #22: full training on real embeddings (Exp 4 MNIST + Exp 5 CIFAR-10 + latent evaluation)",
