@@ -285,6 +285,30 @@ Each iteration:
    - `crash` -- verify/guard failed -- `git revert HEAD --no-edit`
 7. **Log** -- append row to `results.tsv`
 
+### Test factoring for fast loops
+
+When the loop metric is a test count (e.g., issue #21), the verify command must finish in seconds, not minutes. Follow these rules:
+
+1. **Mark slow tests optional.** Use `@pytest.mark.slow` for any test that downloads data, loads a large frozen model, or encodes a dataset. Register the marker in `tests/conftest.py` and skip slow tests by default; run them on demand with `--run-slow` or `ESDM_RUN_SLOW=1`.
+2. **Consolidate redundant assertions.** One test per behavior. Do not split shape, dtype, and normalisation into separate tests if they all exercise the same loader property.
+3. **Test state, not interactions.** Assert on output tensors (shape, dtype, range, normalisation) rather than which private methods were called.
+4. **Avoid data-dependent thresholds.** Do not assert on exact variance-retention fractions or dataset statistics unless the value is part of the contract.
+5. **Keep helpers pure and fast.** Test preprocessing helpers with synthetic NumPy arrays; do not invoke downloads or model inference.
+6. **Separate test sizes.** Use the `small/medium/large` model: small = pure logic, medium = local downloads/cache, large = external model inference.
+
+Example verify/guard pair for a test-count loop:
+
+```bash
+# Fast verify (autoresearch loop)
+.venv/bin/python -m pytest tests/test_data_loaders.py -q --tb=no
+
+# Full guard (all tests, slow ones skipped by default)
+.venv/bin/python -m pytest tests/ -q --tb=no
+
+# Optional slow tests
+.venv/bin/python -m pytest tests/test_data_loaders.py -q --tb=no --run-slow
+```
+
 ### Baseline conditions
 
 The current kept baseline uses the moderate-barrier condition with an extended run length and the basic WHT filter:
