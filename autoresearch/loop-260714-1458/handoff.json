@@ -1,7 +1,7 @@
 {
   "version": "2.1.0",
   "source": "loop",
-  "timestamp": "2026-07-14T14:18:23.503829+00:00",
+  "timestamp": "2026-07-14T14:26:04.483525+00:00",
   "status": "RUNNING",
   "results_tsv": "/Users/tuned-silicon/papers/entropic-semantic-diffusion/autoresearch/loop-260714-1458/results.tsv",
   "findings": [
@@ -9,14 +9,16 @@
     "Initial phase: test-count metric while scaffolding Exp 4/5 + latent eval.",
     "Real-data slow tests (full MNIST/CIFAR-10) are optional; fast verify must finish in seconds.",
     "Scaffolding committed: exp4.py, exp5.py, latent.py, tests. Guard passes (118/5 skipped).",
-    "Ready for iteration 1 of autoresearch loop on issue #22."
+    "Ready for iteration 1 of autoresearch loop on issue #22.",
+    "Iteration 0 baseline: Exp4 MNIST final_loss=4.1377 (100 steps, stable config).",
+    "Phase 1 scaffolding complete (test count metric). Moving to Phase 2 real-data fitness optimization."
   ],
   "config": {
     "goal": "Deliver issue #22: full training on real embeddings (Exp 4 MNIST + Exp 5 CIFAR-10 + latent evaluation)",
     "scope": "esdm/experiments/exp4.py, esdm/experiments/exp5.py, esdm/eval/latent.py, esdm/cli/train.py, tests/test_exp4.py, tests/test_exp5.py, tests/test_latent.py",
-    "metric": "Count of passing tests in tests/test_exp4.py and tests/test_exp5.py (Phase 1 scaffolding)",
+    "metric": "Real-data fitness: -final_loss on Exp4 MNIST (proxy; composite fitness TBD)",
     "direction": "higher_is_better",
-    "verify": ".venv/bin/python -m pytest tests/test_exp4.py tests/test_exp5.py -q --tb=no",
+    "verify": ".venv/bin/python -m esdm.experiments.exp4 --n-steps 100 --wht-filter none --n-vibrational-steps 1 --gamma 0.5",
     "guard": ".venv/bin/python -m pytest tests/ -q --tb=no",
     "iterations": 25
   }

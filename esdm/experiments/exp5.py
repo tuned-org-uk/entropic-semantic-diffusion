@@ -57,6 +57,10 @@ def run_single(
     a_tau_scale: float = A_TAU_SCALE,
     tau_decay_power: float = 1.0,
     wht_filter: str = "basic",
+    lr: float = 1e-4,
+    grad_clip: Optional[float] = 1.0,
+    n_vibrational_steps: int = 1,
+    gamma: float = 0.5,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
     data_dir: Optional[Path | str] = None,
@@ -84,6 +88,10 @@ def run_single(
     cfg["model"]["n_modes"] = min(cfg["model"].get("n_modes", DIM), DIM // 2)
     cfg["training"]["max_steps"] = n_steps
     cfg["training"]["batch_size"] = batch_size
+    cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
+    cfg["model"]["gamma"] = gamma
+    cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
+    cfg["model"]["gamma"] = gamma
 
     args = _TrainArgs(
         dataset="cifar10",
@@ -111,7 +119,7 @@ def run_single(
 
     optimizer = torch.optim.Adam(
         model.parameters(),
-        lr=cfg["training"]["lr"],
+        lr=lr,
         weight_decay=cfg["training"]["weight_decay"],
     )
 
@@ -121,6 +129,8 @@ def run_single(
         optimizer.zero_grad()
         out = model(x)
         out.loss.backward()
+        if grad_clip is not None:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
 
         hc = model.health_check()

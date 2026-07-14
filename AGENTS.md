@@ -376,6 +376,7 @@ Fitness breakdown:
 |---|---|---|
 | #21 — Real data loaders | **Complete** | MNIST PCA-16 and CIFAR-10 DINO-256 loaders implemented, wired into CLI, tested. Audio deferred to #25. |
 | #22 — Full training on real embeddings | **In progress** | Exp 4 (MNIST) + Exp 5 (CIFAR-10) + latent evaluation. Started in `autoresearch/loop-260714-1458/`. |
+| #27 — Design validation vs Un-0 | **Complete** | Hybridisation operator (`docs/00-DESIGN_HYBRID.md`), phase-aware fitness criteria, diversity/quality metrics, Experiments 7–9 added to `docs/002-EXPERIMENTS.md`. |
 | #23 — Generation and sampling | Pending | Blocked on #22. |
 | #24 — 2.5-D dual-space track | Pending | Blocked on #20 Phase 2 integration. |
 | #25 — Audio generation | Pending | Blocked on #21 (audio loader) and #23. |
