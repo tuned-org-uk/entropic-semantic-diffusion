@@ -89,15 +89,16 @@ def test_training_loop_advances_entropic_time():
 
     torch.manual_seed(42)
     model = ESDM(cfg)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.05)
 
     taus = []
     alphas = []
-    for step in range(5):
+    for step in range(100):
         x = torch.randn(8, cfg["model"]["dim_input"])
         optimizer.zero_grad()
         out = model(x)
         out.loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         taus.append(out.clock.tau_n)
         alphas.append(float(model.clock.alpha_bar()))

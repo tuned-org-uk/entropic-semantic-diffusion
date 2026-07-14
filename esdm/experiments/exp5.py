@@ -45,7 +45,7 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> 
         idx = torch.randperm(n, generator=rng)[:n_samples]
         data = data[idx]
     k_eff = min(k, data.shape[1] - 1)
-    wg = WireGraph.build(data.T, k=k_eff, seed=seed)
+    wg = WireGraph.build(data, k=k_eff, seed=seed)
     return wg.laplacian(normalized=True, sparse=False)
 
 
@@ -67,7 +67,7 @@ def run_single(
     batch_size: int = BATCH_SIZE,
     a_tau_scale: float = A_TAU_SCALE,
     tau_decay_power: float = 1.0,
-    wht_filter: str = "basic",
+    wht_filter: str = "none",
     lr: float = 1e-4,
     grad_clip: Optional[float] = 1.0,
     n_vibrational_steps: int = 2,
@@ -143,9 +143,11 @@ def run_single(
             "alpha_bar": float(model.clock.alpha_bar()),
             "Lambda_tau": hc["Lambda_tau"],
             "heat_death": int(hc["heat_death"]),
-            "conserved": hc["conserved"],
             "rho_sign": hc["rho_sign"],
         }
+        # Log the ELBO term breakdown from the model output.
+        for k, v in out.metrics.items():
+            row[k] = float(v.detach())
         if step % cfg["training"].get("log_every", 10) == 0:
             logger.info(
                 "Exp5 step=%d loss=%.4f tau_n=%.4f alpha_bar=%.4f heat_death=%s",
@@ -170,7 +172,7 @@ def main_cli(
     n_steps: int = N_STEPS,
     batch_size: int = BATCH_SIZE,
     a_tau_scale: float = A_TAU_SCALE,
-    wht_filter: str = "basic",
+    wht_filter: str = "none",
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
 ) -> pd.DataFrame:

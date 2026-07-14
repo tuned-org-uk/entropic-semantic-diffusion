@@ -375,7 +375,7 @@ Fitness breakdown:
 | Issue | Status | Notes |
 |---|---|---|
 | #21 — Real data loaders | **Complete** | MNIST PCA-16 and CIFAR-10 DINO-256 loaders implemented, wired into CLI, tested. Audio deferred to #25. |
-| #22 — Full training on real embeddings | **In progress** | Exp 4 (MNIST) + Exp 5 (CIFAR-10) + latent evaluation. Started in `autoresearch/loop-260714-1458/`. |
+| #22 — Full training on real embeddings | **In progress** | Exp 4/5 training loops wired; CIFAR-10 clean baseline (no WHT, lr=0.05, 800 steps on 2k-train subset) run. `scripts/verify_fitness.py` now supports `--dataset {mnist,cifar10}`. Latent evaluation still pending. |
 | #27 — Design validation vs Un-0 | **Complete** | Hybridisation operator (`docs/00-DESIGN_HYBRID.md`), phase-aware fitness criteria, diversity/quality metrics, Experiments 7–9 added to `docs/002-EXPERIMENTS.md`. |
 | #23 — Generation and sampling | Pending | Blocked on #22. |
 | #24 — 2.5-D dual-space track | Pending | Blocked on #20 Phase 2 integration. |
@@ -465,7 +465,7 @@ Deliver issue #22: full training on real embeddings — Experiment 4 (MNIST PCA-
 | Goal | Build and test Exp 4/5 + latent eval | Maximize real-data fitness (MNIST/CIFAR-10) |
 | Metric | Count of passing tests in `tests/test_exp4.py` and `tests/test_exp5.py` | Composite fitness on real data (reconstruction + conservation + latent k-NN) |
 | Direction | `higher_is_better` | `higher_is_better` |
-| Verify | `.venv/bin/python -m pytest tests/test_exp4.py tests/test_exp5.py -q --tb=no` | `.venv/bin/python scripts/verify_fitness.py --dataset mnist` (TBD) |
+| Verify | `.venv/bin/python -m pytest tests/test_exp4.py tests/test_exp5.py -q --tb=no` | `.venv/bin/python scripts/verify_fitness.py --dataset {mnist,cifar10}` |
 | Guard | `.venv/bin/python -m pytest tests/ -q --tb=no` | `.venv/bin/python -m pytest tests/ -q --tb=no` |
 | Iterations | 25 (bounded) | 25 (bounded) |
 | Results | `autoresearch/loop-{YYMMDD}-{HHMM}/results.tsv` | `autoresearch/loop-{YYMMDD}-{HHMM}/results.tsv` |

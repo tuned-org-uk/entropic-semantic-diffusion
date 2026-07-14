@@ -134,9 +134,11 @@ def run_single(
             "alpha_bar": float(model.clock.alpha_bar()),
             "Lambda_tau": hc["Lambda_tau"],
             "heat_death": int(hc["heat_death"]),
-            "conserved": hc["conserved"],
             "rho_sign": hc["rho_sign"],
         }
+        # Log the ELBO term breakdown from the model output.
+        for k, v in out.metrics.items():
+            row[k] = float(v.detach())
         if step % cfg["training"].get("log_every", 10) == 0:
             logger.info(
                 "Exp4 step=%d loss=%.4f tau_n=%.4f alpha_bar=%.4f heat_death=%s",

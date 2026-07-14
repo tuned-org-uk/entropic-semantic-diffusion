@@ -200,6 +200,9 @@ class ESDM(nn.Module):
             self.S_0 = (
                 spectral["kl_S"] + spectral["kl_tau"] + spectral["dark_entropy"]
             ).detach()
+            # Scale the entropic time horizon so alpha_bar starts near 1 and
+            # decreases gradually as entropy flows (docs/00-DESIGN.md §4).
+            self.clock.tau_max_est.fill_(10.0 * float(self.S_0.item()))
 
         # 4. Entropic clock: update tau, Lambda, delta_tau
         # Normalize kl_tau by S_0 so the clock is scale-invariant w.r.t. the

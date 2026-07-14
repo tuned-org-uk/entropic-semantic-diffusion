@@ -152,6 +152,82 @@ def compute_fitness(metrics: pd.DataFrame, bright_modes: int = 32) -> dict:
             "conserved_ratio": conserved_ratio, "heat_death_fired": hd > 0}
 
 
+
+
+def compute_fitness_real(metrics: pd.DataFrame) -> dict:
+    """
+    Compute a real-data fitness score from Exp-4/5 metrics.
+
+    Unlike the synthetic Exp-3 fitness, this score omits WHT-filter-specific
+    Path-A diagnostics (which are NaN when the filter is disabled) and focuses
+    on training health: entropic-clock motion, conservation, reconstruction
+    progress, and heat-death behaviour.
+    """
+    scores: dict[str, float] = {}
+    n = len(metrics)
+    if n == 0:
+        return {"total": 0.0, "criteria": {}}
+
+    tau = metrics["tau_n"].to_numpy()
+    tau_range = float(tau[-1] - tau[0])
+    scores["tau_monotone"] = 10.0 if np.all(np.diff(tau) >= -1e-12) else 0.0
+    scores["tau_range_bonus"] = min(5.0, tau_range * 50.0)
+
+    ab = metrics["alpha_bar"].to_numpy()
+    ab_drop = float(ab[0] - ab[-1])
+    scores["alpha_bar_decrease"] = min(10.0, ab_drop * 20.0)
+
+    # Conservation: total entropy should stay close to the initial budget S_0.
+    if {"kl_S", "kl_tau", "dark_entropy"}.issubset(metrics.columns):
+        total = (
+            metrics["kl_S"].to_numpy()
+            + metrics["kl_tau"].to_numpy()
+            + metrics["dark_entropy"].to_numpy()
+        )
+    else:
+        total = metrics["conserved"].to_numpy()
+    S_0 = float(total[0])
+    residual = np.abs(total - S_0)
+    conserved_ratio = float(residual.mean()) / (abs(S_0) + 1e-8)
+    scores["conservation"] = max(0.0, 15.0 * (1.0 - min(1.0, conserved_ratio)))
+
+    # Heat death.
+    hd_col = "is_heat_death" if "is_heat_death" in metrics.columns else "heat_death"
+    hd = int(metrics[hd_col].sum())
+    scores["heat_death"] = 10.0 if hd > 0 else 0.0
+    if hd > 0:
+        hd_step = int(metrics[metrics[hd_col] == 1]["step"].iloc[0])
+        frac = hd_step / n
+        scores["heat_death_timing"] = max(0.0, 5.0 * (1.0 - abs(frac - 0.7) * 2))
+
+    # Rho-sign stabilisation.
+    rs = metrics["rho_sign"].to_numpy()
+    if n > 20:
+        first_var = float(np.var(rs[: n // 3]))
+        last_var = float(np.var(rs[-n // 3 :]))
+        scores["rho_sign_stabilizing"] = 10.0 if last_var < first_var else 0.0
+
+    # Reconstruction/ELBO progress.
+    loss = metrics["loss"].to_numpy()
+    loss_drop = float(loss[0] - loss[-1])
+    scores["loss_decrease"] = (
+        min(10.0, max(0.0, (loss_drop / (abs(loss[0]) + 1e-8)) * 10.0))
+        if loss[0] != 0
+        else 0.0
+    )
+
+    total = sum(scores.values())
+    return {
+        "total": round(total, 4),
+        "criteria": scores,
+        "S_0": S_0,
+        "tau_range": tau_range,
+        "alpha_bar_drop": ab_drop,
+        "conserved_ratio": conserved_ratio,
+        "heat_death_fired": hd > 0,
+    }
+
+
 def main(argv: Optional[list] = None) -> None:
     parser = argparse.ArgumentParser(
         prog="esdm-fitness",

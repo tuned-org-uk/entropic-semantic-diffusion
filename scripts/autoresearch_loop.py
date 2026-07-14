@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import os
 import re
 import subprocess
 import sys
@@ -195,7 +194,7 @@ def main() -> int:
     cfg = parse_agents_config()
     max_iterations = args.iterations if args.iterations is not None else cfg["iterations"]
 
-    print(f"[autoresearch] mode: classic")
+    print("[autoresearch] mode: classic")
     print(f"Goal: {cfg['goal']}")
     print(f"Verify: {cfg['verify']}")
     print(f"Guard:  {cfg['guard']}")
