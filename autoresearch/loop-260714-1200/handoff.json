@@ -1,7 +1,7 @@
 {
   "version": "2.1.0",
   "source": "loop",
-  "timestamp": "2026-07-14T13:38:05.488339+00:00",
+  "timestamp": "2026-07-14T13:41:08.685157+00:00",
   "status": "BOUNDED",
   "results_tsv": "/Users/tuned-silicon/papers/entropic-semantic-diffusion/autoresearch/loop-260714-1200/results.tsv",
   "findings": [
@@ -11,7 +11,8 @@
     "esdm.cli.train now supports --dataset {random,mnist,cifar10} and configures dim_input/n_nodes/dim_latent/n_modes accordingly.",
     "transformers added to runtime dependencies for DINO encoder support.",
     "Audio loader deferred to issue #25 per user direction.",
-    "CIFAR-10 slow tests were not fully executed due to download interruptions; download robustness was hardened."
+    "CIFAR-10 slow tests were not fully executed due to download interruptions; download robustness was hardened.",
+    "Test consolidation: removed redundant shape/dtype/norm tests; fast suite now 7 tests, slow suite 3 tests."
   ],
   "config": {
     "goal": "Deliver issue #21: real data loaders for MNIST PCA-16, CIFAR-10 DINO-256 (audio deferred to #25)",
