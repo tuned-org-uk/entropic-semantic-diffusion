@@ -97,15 +97,24 @@ class CIFAR10DINOLoader:
     def _download(self) -> None:
         """Download and extract CIFAR-10 if not already present."""
         extracted = self.data_dir / "cifar-10-batches-py"
-        if extracted.exists():
+        expected_files = {f"data_batch_{i}" for i in range(1, 6)} | {"test_batch", "batches.meta"}
+        if extracted.exists() and expected_files.issubset({p.name for p in extracted.iterdir()}):
             return
         archive = self.data_dir / "cifar-10-python.tar.gz"
-        if not archive.exists():
+        expected_bytes = 170498071
+        if not archive.exists() or archive.stat().st_size != expected_bytes:
             logger.info("Downloading CIFAR-10 from %s ...", _CIFAR10_URL)
-            urllib.request.urlretrieve(_CIFAR10_URL, archive)
+            tmp = self.data_dir / "cifar-10-python.tar.gz.tmp"
+            urllib.request.urlretrieve(_CIFAR10_URL, tmp)
+            size = tmp.stat().st_size
+            if size != expected_bytes:
+                raise RuntimeError(
+                    f"CIFAR-10 download incomplete: {size} bytes (expected {expected_bytes})"
+                )
+            tmp.replace(archive)
         logger.info("Extracting CIFAR-10 archive ...")
         with tarfile.open(archive, "r:gz") as tar:
-            tar.extractall(self.data_dir)
+            tar.extractall(self.data_dir, filter="data")
 
     @staticmethod
     def _unpickle(path: Path) -> dict:
