@@ -3,7 +3,13 @@ ESDM training CLI.
 
 Usage:
     esdm-train --config esdm/_configs/default.yaml [overrides...]
-    esdm-train --wht-filter bivariate --a-tau-scale 5.0
+    esdm-train --dataset mnist --steps 1000
+    esdm-train --dataset cifar10 --wht-filter bivariate --a-tau-scale 5.0
+
+The --dataset flag selects the real-world data loader:
+    random     -- synthetic Gaussian placeholder (legacy smoke path)
+    mnist      -- MNIST PCA-16 embeddings
+    cifar10    -- CIFAR-10 DINO-256 embeddings
 
 The --wht-filter flag selects the spectral filter directive:
     none       -- bare L_f @ Q (no WHT gating)
@@ -21,9 +27,14 @@ import torch
 import yaml
 
 from esdm.cli.wht_filter import build_wht_filter, WHT_FILTER_CHOICES
+from esdm.data.cifar10 import CIFAR10DINOLoader, DEFAULT_OUTPUT_DIM as CIFAR_DIM
+from esdm.data.mnist import MNISTLoader, DEFAULT_PCA_DIM as MNIST_DIM
 from esdm.models.esdm import ESDM
 
 logger = logging.getLogger("esdm.cli.train")
+
+#: Supported CLI datasets.
+DATASET_CHOICES = ("random", "mnist", "cifar10")
 
 
 def _load_config(path: str) -> dict:
@@ -34,8 +45,38 @@ def _load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 
+def _build_loader(dataset: str, seed: int) -> tuple[object, int]:
+    """
+    Build a data loader for the requested dataset and return its input dimension.
+
+    Returns
+    -------
+    loader :
+        Object with ``train_batch(batch_size, seed) -> Tensor``.
+    dim_input : int
+        Embedding dimension $F$ for the dataset.
+    """
+    if dataset == "mnist":
+        loader = MNISTLoader(pca_dim=MNIST_DIM, seed=seed)
+        return loader, MNIST_DIM
+    if dataset == "cifar10":
+        loader = CIFAR10DINOLoader(output_dim=CIFAR_DIM, seed=seed)
+        return loader, CIFAR_DIM
+    if dataset == "random":
+        return None, None  # use config default
+    raise ValueError(f"Unknown dataset: {dataset}")
+
+
 def _build_model(cfg: dict, args: argparse.Namespace) -> ESDM:
-    """Construct ESDM from config, applying CLI overrides for the WHT filter."""
+    """Construct ESDM from config, applying CLI overrides for dataset and WHT filter."""
+    loader, dim_input = _build_loader(args.dataset, args.seed)
+    if dim_input is not None:
+        cfg["model"]["dim_input"] = dim_input
+        cfg["model"]["n_nodes"] = dim_input
+        # Ensure latent dimensions do not exceed the graph node count.
+        cfg["model"]["dim_latent"] = min(cfg["model"].get("dim_latent", dim_input), dim_input // 2)
+        cfg["model"]["n_modes"] = min(cfg["model"].get("n_modes", dim_input), dim_input // 2)
+
     if args.wht_filter != "none":
         F = cfg["model"]["dim_input"]
         rng = np.random.default_rng(args.seed)
@@ -51,7 +92,8 @@ def _build_model(cfg: dict, args: argparse.Namespace) -> ESDM:
         )
     else:
         cfg["model"]["wht_filter"] = None
-    return ESDM(cfg)
+
+    return ESDM(cfg), loader
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -63,6 +105,12 @@ def main(argv: list[str] | None = None) -> None:
         "--config", "-c",
         default="esdm/_configs/default.yaml",
         help="Path to YAML config file (default: esdm/_configs/default.yaml)",
+    )
+    parser.add_argument(
+        "--dataset",
+        choices=DATASET_CHOICES,
+        default="random",
+        help="Dataset loader to use (default: random)",
     )
     parser.add_argument(
         "--wht-filter",
@@ -104,14 +152,14 @@ def main(argv: list[str] | None = None) -> None:
         cfg["training"]["max_steps"] = args.steps
 
     logger.info(
-        "Building ESDM with wht_filter=%s, a_tau_scale=%s",
-        args.wht_filter, args.a_tau_scale,
+        "Building ESDM with dataset=%s, wht_filter=%s, a_tau_scale=%s",
+        args.dataset, args.wht_filter, args.a_tau_scale,
     )
-    model = _build_model(cfg, args)
+    model, loader = _build_model(cfg, args)
     logger.info("Model instantiated. dim_input=%d, n_nodes=%d",
                 model.dim_input, model.n_nodes)
 
-    # Training loop stub -- the full loop belongs to Phase 2 (image/sound data).
+    # Training loop -- uses the selected data loader when available.
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=cfg["training"]["lr"],
@@ -122,7 +170,10 @@ def main(argv: list[str] | None = None) -> None:
 
     logger.info("Starting training: %d steps, batch_size=%d", max_steps, batch_size)
     for step in range(max_steps):
-        x = torch.randn(batch_size, model.dim_input)
+        if loader is not None:
+            x = loader.train_batch(batch_size, seed=args.seed + step)
+        else:
+            x = torch.randn(batch_size, model.dim_input)
         optimizer.zero_grad()
         out = model(x)
         out.loss.backward()

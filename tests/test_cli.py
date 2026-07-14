@@ -52,12 +52,13 @@ def test_build_model_with_none_filter():
     cfg["model"]["n_modes"] = 8
 
     class FakeArgs:
+        dataset = "random"
         wht_filter = "none"
         a_tau_scale = 5.0
         tau_decay_power = 1.0
         seed = 3407
 
-    model = _build_model(cfg, FakeArgs())
+    model, _ = _build_model(cfg, FakeArgs())
     assert model.wht_filter is None
 
 
@@ -69,12 +70,13 @@ def test_build_model_with_basic_filter():
     cfg["model"]["n_modes"] = 8
 
     class FakeArgs:
+        dataset = "random"
         wht_filter = "basic"
         a_tau_scale = 5.0
         tau_decay_power = 1.0
         seed = 3407
 
-    model = _build_model(cfg, FakeArgs())
+    model, _ = _build_model(cfg, FakeArgs())
     assert model.wht_filter is not None
     assert isinstance(model.wht_filter, GraphWHTFilter)
 
@@ -87,12 +89,13 @@ def test_build_model_with_bivariate_filter():
     cfg["model"]["n_modes"] = 8
 
     class FakeArgs:
+        dataset = "random"
         wht_filter = "bivariate"
         a_tau_scale = 5.0
         tau_decay_power = 1.0
         seed = 3407
 
-    model = _build_model(cfg, FakeArgs())
+    model, _ = _build_model(cfg, FakeArgs())
     assert model.wht_filter is not None
     assert model.wht_filter.a_tau_scale == 5.0
 
@@ -109,23 +112,56 @@ def test_forward_with_none_vs_basic_both_finite():
     x = torch.randn(4, 32)
 
     class FakeArgsNone:
+        dataset = "random"
         wht_filter = "none"
         a_tau_scale = 5.0
         tau_decay_power = 1.0
         seed = 3407
 
     class FakeArgsBasic:
+        dataset = "random"
         wht_filter = "basic"
         a_tau_scale = 5.0
         tau_decay_power = 1.0
         seed = 3407
 
     cfg_none = {k: dict(v) if isinstance(v, dict) else v for k, v in cfg.items()}
-    model_none = _build_model(cfg_none, FakeArgsNone())
+    model_none, _ = _build_model(cfg_none, FakeArgsNone())
     out_none = model_none(x)
     assert torch.isfinite(out_none.loss)
 
     cfg_basic = {k: dict(v) if isinstance(v, dict) else v for k, v in cfg.items()}
-    model_basic = _build_model(cfg_basic, FakeArgsBasic())
+    model_basic, _ = _build_model(cfg_basic, FakeArgsBasic())
     out_basic = model_basic(x)
     assert torch.isfinite(out_basic.loss)
+
+
+
+def test_build_model_mnist_sets_dim_input():
+    cfg = _load_config("esdm/_configs/default.yaml")
+
+    class FakeArgs:
+        dataset = "mnist"
+        wht_filter = "none"
+        a_tau_scale = 5.0
+        tau_decay_power = 1.0
+        seed = 3407
+
+    model, loader = _build_model(cfg, FakeArgs())
+    assert model.dim_input == 16
+    assert loader is not None
+
+
+def test_build_model_cifar10_sets_dim_input():
+    cfg = _load_config("esdm/_configs/default.yaml")
+
+    class FakeArgs:
+        dataset = "cifar10"
+        wht_filter = "none"
+        a_tau_scale = 5.0
+        tau_decay_power = 1.0
+        seed = 3407
+
+    model, loader = _build_model(cfg, FakeArgs())
+    assert model.dim_input == 256
+    assert loader is not None

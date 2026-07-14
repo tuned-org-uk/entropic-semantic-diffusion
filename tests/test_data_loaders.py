@@ -1,6 +1,7 @@
 """Tests for ESDM real-world data loaders (issue #21)."""
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import torch
 
@@ -101,3 +102,30 @@ class TestCIFAR10DINOLoader:
         b1 = loader.train_batch(batch_size=16, seed=123)
         b2 = loader.train_batch(batch_size=16, seed=123)
         assert torch.allclose(b1, b2)
+
+
+
+class TestCIFAR10Helpers:
+    """Fast unit tests for CIFAR-10 loader helpers (no DINO encoding)."""
+
+    def test_resize_shape(self):
+        images = np.zeros((4, 3, 32, 32), dtype=np.float64)
+        resized = CIFAR10DINOLoader._resize(images, size=224)
+        assert resized.shape == (4, 3, 224, 224)
+
+    def test_normalise_matches_imagenet(self):
+        images = np.ones((2, 3, 224, 224), dtype=np.float64) * 255.0
+        normed = CIFAR10DINOLoader._normalise(images)
+        # At max input (255), normalised value is (1 - mean) / std for each channel.
+        expected = (1.0 - np.array([0.485, 0.456, 0.406]).reshape(1, 3, 1, 1)) / np.array([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1)
+        assert np.allclose(normed, expected, atol=1e-6)
+
+    def test_l2_normalise(self):
+        x = np.array([[3.0, 4.0], [0.0, 5.0]], dtype=np.float64)
+        normed = CIFAR10DINOLoader._l2_normalise(x)
+        assert np.allclose(normed[0], np.array([0.6, 0.8]))
+        assert np.allclose(normed[1], np.array([0.0, 1.0]))
+
+    def test_loader_dim_input(self):
+        loader = CIFAR10DINOLoader(output_dim=256, data_dir=".pytest_cache/cifar10")
+        assert loader.dim_input == 256
