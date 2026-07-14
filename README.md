@@ -2,8 +2,6 @@
 
 > A learning architecture in which time is not given — it is *earned* from entropy.
 
-> **Note:** the repository slug retains the historical spelling `enthropic-semantic-diffusion`; the Python package name is `esdm`.
-
 ## Quick Start — Autoresearch Loop
 
 Run the self-contained autoresearch driver to reproduce and improve the current baseline:
