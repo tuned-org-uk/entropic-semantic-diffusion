@@ -90,8 +90,6 @@ def run_single(
     cfg["training"]["batch_size"] = batch_size
     cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
     cfg["model"]["gamma"] = gamma
-    cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
-    cfg["model"]["gamma"] = gamma
 
     args = _TrainArgs(
         dataset="cifar10",

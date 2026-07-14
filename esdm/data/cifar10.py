@@ -73,6 +73,7 @@ class CIFAR10DINOLoader:
         dino_model_name: str = _DINO_MODEL,
         max_train_samples: Optional[int] = None,
         max_test_samples: Optional[int] = None,
+        use_hf: bool = True,
     ) -> None:
         self.output_dim = output_dim
         self.data_dir = Path(data_dir or "data/cifar10")
@@ -83,6 +84,7 @@ class CIFAR10DINOLoader:
         self.dino_model_name = dino_model_name
         self.max_train_samples = max_train_samples
         self.max_test_samples = max_test_samples
+        self.use_hf = use_hf
 
         self._train: Optional[Tensor] = None
         self._test: Optional[Tensor] = None
@@ -93,6 +95,25 @@ class CIFAR10DINOLoader:
         self._dino: Optional[torch.nn.Module] = None
 
     # ------------------------------------------------------------------ #
+
+    def _download_hf(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Load CIFAR-10 via HuggingFace ``datasets`` (usually much faster)."""
+        from datasets import load_dataset
+
+        logger.info("Loading CIFAR-10 from HuggingFace datasets ...")
+        ds = load_dataset("uoft-cs/cifar10")
+
+        def _to_chw(examples):
+            # examples["img"] is a list of PIL images
+            arr = np.stack([np.array(img) for img in examples["img"]], axis=0)
+            arr = arr.transpose(0, 3, 1, 2).astype(np.float64)
+            return arr
+
+        train_x = _to_chw(ds["train"])
+        train_y = np.asarray(ds["train"]["label"], dtype=np.int64)
+        test_x = _to_chw(ds["test"])
+        test_y = np.asarray(ds["test"]["label"], dtype=np.int64)
+        return train_x, train_y, test_x, test_y
 
     def _download(self) -> None:
         """Download and extract CIFAR-10 if not already present."""
@@ -123,6 +144,11 @@ class CIFAR10DINOLoader:
 
     def _load_raw(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Load raw CIFAR-10 images and labels."""
+        if self.use_hf:
+            try:
+                return self._download_hf()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("HuggingFace load failed (%s), falling back to direct download.", exc)
         self._download()
         root = self.data_dir / "cifar-10-batches-py"
 
@@ -193,7 +219,13 @@ class CIFAR10DINOLoader:
         train_x, train_y, test_x, test_y = self._load_raw()
 
         rng = np.random.default_rng(self.seed)
-        pca_idx = rng.choice(train_x.shape[0], size=min(self.pca_fit_samples, train_x.shape[0]), replace=False)
+        available = train_x.shape[0]
+        if available < self.output_dim:
+            raise ValueError(
+                f"Need at least output_dim={self.output_dim} samples for PCA, got {available}. "
+                f"Increase max_train_samples or reduce output_dim."
+            )
+        pca_idx = rng.choice(available, size=min(self.pca_fit_samples, available), replace=False)
 
         logger.info("Resizing CIFAR-10 images for DINO ...")
         train_resized = self._resize(train_x[pca_idx])
