@@ -381,6 +381,41 @@ Fitness breakdown:
 | #24 — 2.5-D dual-space track | Pending | Blocked on #20 Phase 2 integration. |
 | #25 — Audio generation | Pending | Blocked on #21 (audio loader) and #23. |
 
+### Architecture constants (from docs)
+
+The following values are **constants**, not hyperparameters. They are set by the design docs and should not be swept in the autoresearch loop.
+
+| Constant | Value | Source |
+|---|---|---|
+| $q$ (spectral modes) | $F/4$ | `docs/00-DESIGN_HYBRID.md` §5 |
+| $\gamma$ (damping) | 0.1 | VDT default |
+| `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ (doc says 4, but 4 is unstable with ArrowSpace eigenvalues) |
+| `lambda_clip` | 100.0 | `docs/00-DESIGN.md` §4.2 |
+| `grad_clip` | 1.0 | Training stability |
+| `seed` | 3407 | Project-wide rule |
+| `batch_size` | 64 | Standard |
+| `k` (ArrowSpace clusters) | 4 | Graph construction; tuning via `arrowspace_tuner` |
+
+The only free hyperparameters are `lr` and `n_steps` (governed by heat death).
+
+### Feature-space Laplacian
+
+$L_F$ is built via **ArrowSpace** (`esdm/graphs/wiring.py`), not a custom k-NN fallback. The ArrowSpace Rust bindings return a sparse CSR or dense numpy array of shape $(F, F)$ — the feature-space Laplacian. This is loaded into PyTorch as `float32`.
+
+- `WireGraph.build(data, k, seed, mode="feature")` — ArrowSpace feature-space Laplacian $(F, F)$
+- `WireGraph.build(data, k, seed, mode="item")` — k-NN item-space Laplacian $(N, N)$ (2.5-D track only)
+- Graph parameter tuning is deferred to `arrowspace_tuner` (not installed yet).
+
+### Clock scaling
+
+The entropic clock normalizes `kl_tau` by $S_0$ before accumulation: $\tau_n = \sum |\Delta (\mathit{kl\_\tau} / S_0)|$. This makes the clock scale-invariant with respect to the feature-space Laplacian's eigenvalue scale. $S_0$ is the total entropy budget from the first forward pass.
+
+`tau_max_est` is initialized to $10 \cdot S_0$ so that $\bar{\alpha}(\tau) = \cos^2(\pi/2 \cdot \tau / \tau_\mathit{max})$ starts near 1 and decreases as entropy flows.
+
+### No identity blending
+
+$L_F$ is the real ArrowSpace graph Laplacian. It is **not** blended with identity. The noise/stochasticity in the system comes from the entropic clock via $\Lambda(\tau) \cdot \Delta\tau^2 \cdot B_t$, not from diluting $L_F$.
+
 ### Macro-phase roadmap to image and sound generation
 
 The following macro-issues track the path from the current synthetic-diagnostic state to a model that produces images and sounds:

@@ -39,24 +39,57 @@ def _normalize_symmetric(L: Tensor) -> Tensor:
 
 @dataclass
 class WireGraph:
-    laplacian_dense: Tensor          # (N, N)
-    laplacian_sym: Tensor            # (N, N) normalised, cached
-    features: Tensor                 # (N, D) source features
+    """Feature-space graph Laplacian built via ArrowSpace.
+
+    The Laplacian is (F, F) where F is the feature dimension of the input
+    data. ArrowSpace builds the graph from item co-occurrence structure:
+    pass data as (N, F) where N = items, F = features.
+    """
+    laplacian_dense: Tensor          # (F, F)
+    laplacian_sym: Tensor            # (F, F) normalised, cached
+    features: Tensor                 # (N, D) source items
     nnz: int
 
     # ------------------------------------------------------------------ #
     @classmethod
-    def build(cls, features: Tensor, k: int = 16, seed: int = 3407) -> "WireGraph":
-        features = features.detach().cpu().float()
-        L = cls._knn_laplacian(features, k=k, seed=seed)  # TEMPORARY: upstream issue —
-        # arrowspace exposes no `build_graph(features, k)`; until pyarrowspace
-        # exposes one, the adapter builds a symmetric k-NN graph Laplacian
-        # directly. The arrowspace path is probed and used when available.
+    def build(cls, features: Tensor, k: int = 4, seed: int = 3407, mode: str = "feature") -> "WireGraph":
+        """Build a graph Laplacian via ArrowSpace.
+
+        Parameters
+        ----------
+        features : Tensor (N, F)
+            Item-feature matrix. N items, F features.
+        k : int
+            Max clusters for ArrowSpace builder (feature mode) or k-NN
+            neighbors (item mode). Default 4.
+        seed : int
+            Random seed.
+        mode : str
+            "feature" — ArrowSpace returns (F, F) feature-space Laplacian.
+            "item" — k-NN Laplacian on item rows, returns (N, N).
+        """
+        if mode == "feature" and _HAS_ASP:
+            items_np = features.detach().cpu().to(torch.float64).numpy()
+            L = cls._arrowspace_laplacian(items_np, k=k, seed=seed)
+        else:
+            L = cls._knn_laplacian_fallback(features, k=k, seed=seed)
+        L = L.to(dtype=torch.float32)
         L_sym = _normalize_symmetric(L)
         return cls(laplacian_dense=L, laplacian_sym=L_sym, features=features, nnz=int((L != 0).sum()))
 
     @staticmethod
-    def _knn_laplacian(features: Tensor, k: int, seed: int) -> Tensor:
+    def _arrowspace_laplacian(items_np: np.ndarray, k: int, seed: int) -> Tensor:
+        """Build L_F via the real ArrowSpace Rust bindings."""
+        builder = (asp.ArrowSpaceBuilder()
+                   .with_seed(seed)
+                   .with_cluster_max_clusters(k))
+        _space, gl = builder.build_full({}, items_np)
+        L_np = np.array(gl.to_dense())
+        return torch.from_numpy(L_np)
+
+    @staticmethod
+    def _knn_laplacian_fallback(features: Tensor, k: int, seed: int) -> Tensor:
+        """Fallback k-NN Laplacian when ArrowSpace bindings are absent."""
         n = features.shape[0]
         f = features / (features.norm(dim=-1, keepdim=True) + 1e-8)
         sims = f @ f.t()
@@ -83,7 +116,7 @@ class WireGraph:
     def rayleigh_quotient(self, f: Tensor) -> Tensor:
         # R(f) = f^T L f / f^T f  — the λτ / Dirichlet-energy proxy.
         # TEMPORARY: upstream issue — arrowspace has no `taumode_score`.
-        f = f.to(self.laplacian_dense).float()
+        f = f.to(dtype=self.laplacian_dense.dtype, device=self.laplacian_dense.device)
         Lf = self.laplacian_dense @ f
         den = (f * f).sum(dim=-1) + 1e-8
         # per-node Rayleigh energy density R_k(f) = f_k (L f)_k / (f^T f)

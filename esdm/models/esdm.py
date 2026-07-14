@@ -110,14 +110,16 @@ class ESDM(nn.Module):
         # use it as L_base and derive U_q / eigvals_q from its eigenvectors.
         L_base_cfg = cfg["model"].get("L_base", None)
         if L_base_cfg is not None:
-            L_base = torch.as_tensor(L_base_cfg, dtype=torch.float64)
+            L_base = torch.as_tensor(L_base_cfg, dtype=torch.float32)
             if L_base.shape != (self.n_nodes, self.n_nodes):
                 raise ValueError(
                     f"cfg['model']['L_base'] shape {tuple(L_base.shape)} does not match "
                     f"expected ({self.n_nodes}, {self.n_nodes})"
                 )
             self.register_buffer("L_base", L_base)
-            vals, vecs = torch.linalg.eigh(L_base)
+            vals, vecs = torch.linalg.eigh(L_base.double())
+            vals = vals.float()
+            vecs = vecs.float()
             # Leading eigenvectors are those with smallest eigenvalues.
             self.register_buffer("U_q", vecs[:, :self.dim_latent])
             self.register_buffer("eigvals_q", vals[:self.dim_latent])
@@ -199,8 +201,17 @@ class ESDM(nn.Module):
             ).detach()
 
         # 4. Entropic clock: update tau, Lambda, delta_tau
+        # Normalize kl_tau by S_0 so the clock is scale-invariant w.r.t. the
+        # feature-space Laplacian's eigenvalue scale.
+        kl_tau_norm = spectral["kl_tau"] / (self.S_0 + 1e-8)
+        # Initialize the clock's previous kl_tau on the first forward pass
+        # so the first delta_tau is ~0 (not the full kl_tau magnitude).
+        # This prevents tau_n from jumping to ~1 on step 0 and collapsing
+        # alpha_bar to 0 immediately.
+        if self.clock._prev_kl_tau.item() == 0.0 and self.clock.tau_n.item() == 0.0:
+            self.clock._prev_kl_tau.fill_(float(kl_tau_norm.item()))
         clock_state = self.clock.step(
-            kl_tau_current=spectral["kl_tau"],
+            kl_tau_current=kl_tau_norm,
             phi_current=spectral["log_lam_s"],
             rho_plus=self._last_rho_plus,
             rho_minus=self._last_rho_minus,

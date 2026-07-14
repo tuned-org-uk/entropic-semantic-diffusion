@@ -40,7 +40,7 @@ class HarnessResult:
 def run(cfg: HarnessConfig) -> HarnessResult:
     torch.manual_seed(cfg.seed)
     pts = sample_surface(cfg.surface, cfg.n_points, cfg.seed)
-    graph = WireGraph.build(pts, k=cfg.k, seed=cfg.seed)
+    graph = WireGraph.build(pts, k=cfg.k, seed=cfg.seed, mode="item")
 
     score3d = ScoreNet(dim=3)
     opt3d = torch.optim.Adam(score3d.parameters(), lr=1e-3)

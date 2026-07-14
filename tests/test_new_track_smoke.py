@@ -20,7 +20,7 @@ def test_surface_shape():
 
 def test_wiregraph_contract():
     pts = sample_surface("catenoid", 64, seed=3407)
-    g = WireGraph.build(pts, k=8, seed=3407)
+    g = WireGraph.build(pts, k=8, seed=3407, mode="item")
     L = g.laplacian(normalized=True)
     assert L.is_sparse and L.shape == (64, 64)
     R = g.rayleigh_quotient(pts[:, 0])
@@ -37,7 +37,7 @@ def test_3d_loss_finite():
 
 def test_25d_loss_finite():
     pts = sample_surface("enneper", 64, seed=3407)
-    g = WireGraph.build(pts, k=8, seed=3407)
+    g = WireGraph.build(pts, k=8, seed=3407, mode="item")
     z = g.spectral_embedding(2).detach()
     loss = dsm_loss_25d(ScoreNet25D(2), g, z, pts[:, 0].detach())
     assert torch.isfinite(loss) and loss > 0
@@ -45,7 +45,7 @@ def test_25d_loss_finite():
 
 def test_graph_diffusion_step_smooths():
     pts = sample_surface("enneper", 64, seed=3407)
-    g = WireGraph.build(pts, k=8, seed=3407)
+    g = WireGraph.build(pts, k=8, seed=3407, mode="item")
     L = g.laplacian(normalized=True)
     f = torch.randn(64)
     R_before = g.rayleigh_quotient(f).abs().mean()

@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DIM: int = DEFAULT_PCA_DIM
-N_STEPS: int = 200
+N_STEPS: int = 800
 BATCH_SIZE: int = 64
 A_TAU_SCALE: float = 2.62
 
@@ -44,18 +44,10 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> 
         rng = torch.Generator().manual_seed(seed)
         idx = torch.randperm(n, generator=rng)[:n_samples]
         data = data[idx]
-    # Feature-space graph: nodes are features, so pass (F, N) = data.T.
+    # ArrowSpace takes (N, F) items and returns (F, F) feature-space Laplacian.
     k_eff = min(k, data.shape[1] - 1)
-    wg = WireGraph.build(data.T, k=k_eff, seed=seed)
-    return wg.laplacian(normalized=True, sparse=False).to(dtype=torch.float64)
-
-
-def _build_l_base(L_F: torch.Tensor, alpha: float = 0.0) -> torch.Tensor:
-    """Blend real L_F with identity for the spectral decoder's L_base."""
-    if alpha == 0.0:
-        return torch.eye(L_F.shape[0], dtype=torch.float64)
-    I = torch.eye(L_F.shape[0], dtype=torch.float64)
-    return (1.0 - alpha) * I + alpha * L_F
+    wg = WireGraph.build(data, k=k_eff, seed=seed)
+    return wg.laplacian(normalized=True, sparse=False)
 
 
 def _build_wht_filter(
@@ -79,9 +71,8 @@ def run_single(
     wht_filter: str = "basic",
     lr: float = 1e-4,
     grad_clip: Optional[float] = 1.0,
-    n_vibrational_steps: int = 1,
-    gamma: float = 0.5,
-    l_f_alpha: float = 0.1,
+    n_vibrational_steps: int = 2,
+    gamma: float = 0.1,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
     data_dir: Optional[Path | str] = None,
@@ -100,8 +91,10 @@ def run_single(
     cfg = _load_config("esdm/_configs/default.yaml")
     cfg["model"]["dim_input"] = DIM
     cfg["model"]["n_nodes"] = DIM
-    cfg["model"]["dim_latent"] = min(cfg["model"].get("dim_latent", DIM), DIM // 2)
-    cfg["model"]["n_modes"] = min(cfg["model"].get("n_modes", DIM), DIM // 2)
+    # q = F/4 per docs/00-DESIGN_HYBRID.md §5, rounded to nearest power of 2.
+    q = max(1, DIM // 4)
+    cfg["model"]["dim_latent"] = q
+    cfg["model"]["n_modes"] = q
     cfg["training"]["max_steps"] = n_steps
     cfg["training"]["batch_size"] = batch_size
     cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
@@ -111,12 +104,12 @@ def run_single(
 
     loader = MNISTLoader(pca_dim=DEFAULT_PCA_DIM, data_dir=data_dir or "data/mnist", seed=seed)
     L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
-    cfg["model"]["L_base"] = _build_l_base(L_F, alpha=l_f_alpha)
+    cfg["model"]["L_base"] = L_F
     cfg["model"]["wht_filter"] = _build_wht_filter(
         wht_filter, L_F, a_tau_scale=a_tau_scale, tau_decay_power=tau_decay_power
     )
 
-    model = ESDM(cfg).double()
+    model = ESDM(cfg)
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=lr,
@@ -125,7 +118,7 @@ def run_single(
 
     rows: list[dict] = []
     for step in range(n_steps):
-        x = loader.train_batch(batch_size, seed=seed + step)
+        x = loader.train_batch(batch_size, seed=seed + step).float()
         optimizer.zero_grad()
         out = model(x)
         out.loss.backward()
