@@ -18,8 +18,11 @@ import numpy as np
 import pandas as pd
 import torch
 
-from ..cli.train import _build_model, _load_config
-from ..data.cifar10 import DEFAULT_OUTPUT_DIM
+from ..cli.train import _load_config
+from ..data.cifar10 import DEFAULT_OUTPUT_DIM, CIFAR10DINOLoader
+from ..graphs.wiring import WireGraph
+from ..graphs.wht_filter import GraphWHTFilter
+from ..models.esdm import ESDM
 
 logger = logging.getLogger(__name__)
 
@@ -33,22 +36,33 @@ BATCH_SIZE: int = 64
 A_TAU_SCALE: float = 2.62
 
 
-class _TrainArgs:
-    """Minimal namespace for `_build_model` (mirrors train CLI args)."""
+def _build_l_f(loader, n_samples: int = 5000, k: int = 16, alpha: float = 0.1, seed: int = 3407) -> torch.Tensor:
+    """Build a real feature-space Laplacian L_F from the loader's training data."""
+    data = loader.train_data  # (N, F)
+    n = data.shape[0]
+    if n > n_samples:
+        rng = torch.Generator().manual_seed(seed)
+        idx = torch.randperm(n, generator=rng)[:n_samples]
+        data = data[idx]
+    k_eff = min(k, data.shape[1] - 1)
+    wg = WireGraph.build(data.T, k=k_eff, seed=seed)
+    L_F = wg.laplacian(normalized=True, sparse=False).to(dtype=torch.float64)
+    # Blend real feature Laplacian with identity for stability.
+    I = torch.eye(L_F.shape[0], dtype=torch.float64)
+    return (1.0 - alpha) * I + alpha * L_F
 
-    def __init__(
-        self,
-        dataset: str = "cifar10",
-        wht_filter: str = "basic",
-        a_tau_scale: float = A_TAU_SCALE,
-        tau_decay_power: float = 1.0,
-        seed: int = 3407,
-    ) -> None:
-        self.dataset = dataset
-        self.wht_filter = wht_filter
-        self.a_tau_scale = a_tau_scale
-        self.tau_decay_power = tau_decay_power
-        self.seed = seed
+
+def _build_wht_filter(
+    mode: str,
+    L_F: torch.Tensor,
+    a_tau_scale: float = A_TAU_SCALE,
+    tau_decay_power: float = 1.0,
+) -> GraphWHTFilter | None:
+    """Build a GraphWHTFilter from the real feature-space Laplacian."""
+    if mode == "none":
+        return None
+    from ..cli.wht_filter import build_wht_filter as _factory
+    return _factory(mode, L_F.numpy(), a_tau_scale=a_tau_scale, tau_decay_power=tau_decay_power)
 
 
 def run_single(
@@ -61,6 +75,7 @@ def run_single(
     grad_clip: Optional[float] = 1.0,
     n_vibrational_steps: int = 1,
     gamma: float = 0.5,
+    l_f_alpha: float = 0.1,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
     data_dir: Optional[Path | str] = None,
@@ -91,29 +106,21 @@ def run_single(
     cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
     cfg["model"]["gamma"] = gamma
 
-    args = _TrainArgs(
-        dataset="cifar10",
-        wht_filter=wht_filter,
-        a_tau_scale=a_tau_scale,
-        tau_decay_power=tau_decay_power,
+    loader = CIFAR10DINOLoader(
+        output_dim=DEFAULT_OUTPUT_DIM,
+        data_dir=data_dir or "data/cifar10",
         seed=seed,
+        pca_fit_samples=pca_fit_samples,
+        max_train_samples=max_train_samples,
+        max_test_samples=max_test_samples,
     )
-    # _build_model for cifar10 ignores max_train_samples; we patch the loader below.
-    model, loader = _build_model(cfg, args)
-    model = model.double()
+    L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), alpha=l_f_alpha, seed=seed)
+    cfg["model"]["L_base"] = L_F
+    cfg["model"]["wht_filter"] = _build_wht_filter(
+        wht_filter, L_F, a_tau_scale=a_tau_scale, tau_decay_power=tau_decay_power
+    )
 
-    # Override subset sizes if requested (the default CIFAR loader uses full data).
-    if max_train_samples is not None or max_test_samples is not None:
-        from ..data.cifar10 import CIFAR10DINOLoader
-
-        loader = CIFAR10DINOLoader(
-            output_dim=DEFAULT_OUTPUT_DIM,
-            data_dir=data_dir or "data/cifar10",
-            seed=seed,
-            pca_fit_samples=pca_fit_samples,
-            max_train_samples=max_train_samples,
-            max_test_samples=max_test_samples,
-        )
+    model = ESDM(cfg).double()
 
     optimizer = torch.optim.Adam(
         model.parameters(),

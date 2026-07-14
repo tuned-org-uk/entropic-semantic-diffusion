@@ -37,11 +37,19 @@ class _FakeCIFAR10Loader:
         idx = rng.integers(0, self._test.shape[0], size=batch_size)
         return self._test[idx]
 
+    @property
+    def train_data(self) -> torch.Tensor:
+        return self._train
+
+    @property
+    def test_data(self) -> torch.Tensor:
+        return self._test
+
 
 @pytest.fixture
 def fake_loader(monkeypatch):
     monkeypatch.setattr(
-        "esdm.cli.train.CIFAR10DINOLoader", _FakeCIFAR10Loader, raising=False
+        "esdm.experiments.exp5.CIFAR10DINOLoader", _FakeCIFAR10Loader, raising=False
     )
     return _FakeCIFAR10Loader
 

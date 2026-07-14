@@ -11,3 +11,4 @@ iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 8	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8498	-0.5454	PASS	118	no-op	WHT sweep control: wht_filter=none, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8498
 9	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8499	-0.5455	PASS	118	no-op	WHT sweep: wht_filter=basic, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8499
 10	2026-07-14T14:57:29.416993+00:00	b04f777	-3.8499	-0.5455	PASS	118	no-op	WHT sweep: wht_filter=bivariate, gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8499
+11	2026-07-14T15:45:47.657589+00:00	7a1f4ca	-3.8340	+0.0062	PASS	118	keep	Architecture: wire real L_F (blended alpha=0.1) into ESDM; gamma=0.95, n_vib=2, n_steps=100; final_loss 3.8402 -> 3.8340

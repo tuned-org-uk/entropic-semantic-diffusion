@@ -37,11 +37,19 @@ class _FakeMNISTLoader:
         idx = rng.integers(0, self._test.shape[0], size=batch_size)
         return self._test[idx]
 
+    @property
+    def train_data(self) -> torch.Tensor:
+        return self._train
+
+    @property
+    def test_data(self) -> torch.Tensor:
+        return self._test
+
 
 @pytest.fixture
 def fake_loader(monkeypatch):
     monkeypatch.setattr(
-        "esdm.cli.train.MNISTLoader", _FakeMNISTLoader, raising=False
+        "esdm.experiments.exp4.MNISTLoader", _FakeMNISTLoader, raising=False
     )
     return _FakeMNISTLoader
 

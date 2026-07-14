@@ -106,14 +106,28 @@ class ESDM(nn.Module):
         self.enc_logvar = nn.Linear(self.dim_input, self.dim_latent)
 
         # Frozen spectral basis and base Laplacian for the smoke path.
-        self.register_buffer("U_q", torch.randn(self.n_nodes, self.dim_latent))
-        self.register_buffer("L_base", torch.eye(self.n_nodes))
-
-        # Leading eigenvalues of the base Laplacian, used by spectral KLs.
-        self.register_buffer(
-            "eigvals_q",
-            torch.linalg.eigvalsh(self.L_base)[:self.dim_latent],
-        )
+        # If a real feature-space Laplacian L_F is provided in the config,
+        # use it as L_base and derive U_q / eigvals_q from its eigenvectors.
+        L_base_cfg = cfg["model"].get("L_base", None)
+        if L_base_cfg is not None:
+            L_base = torch.as_tensor(L_base_cfg, dtype=torch.float64)
+            if L_base.shape != (self.n_nodes, self.n_nodes):
+                raise ValueError(
+                    f"cfg['model']['L_base'] shape {tuple(L_base.shape)} does not match "
+                    f"expected ({self.n_nodes}, {self.n_nodes})"
+                )
+            self.register_buffer("L_base", L_base)
+            vals, vecs = torch.linalg.eigh(L_base)
+            # Leading eigenvectors are those with smallest eigenvalues.
+            self.register_buffer("U_q", vecs[:, :self.dim_latent])
+            self.register_buffer("eigvals_q", vals[:self.dim_latent])
+        else:
+            self.register_buffer("U_q", torch.randn(self.n_nodes, self.dim_latent))
+            self.register_buffer("L_base", torch.eye(self.n_nodes))
+            self.register_buffer(
+                "eigvals_q",
+                torch.linalg.eigvalsh(self.L_base)[:self.dim_latent],
+            )
 
     # ------------------------------------------------------------------ #
 
