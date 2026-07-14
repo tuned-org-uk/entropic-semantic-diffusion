@@ -1,3 +1,4 @@
 # metric_direction: higher_is_better
 iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 0	2026-07-14T14:26:04.482826+00:00	21a0e29	-4.1377	0.0	PASS	118	keep	Exp4 MNIST baseline: n_steps=100, wht_filter=none, n_vibrational_steps=1, gamma=0.5, lr=1e-4, grad_clip=1.0; final_loss=4.1377
+1	2026-07-14T14:29:30.117770+00:00	5251bbc	-3.8699	+0.2678	PASS	118	keep	Increase lr 1e-4 -> 3e-4 for Exp4 MNIST (n_steps=100, stable config); final_loss 4.1377 -> 3.8699
