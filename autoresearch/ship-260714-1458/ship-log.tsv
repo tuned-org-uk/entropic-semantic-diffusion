@@ -4,6 +4,6 @@ Inventory	PASS	modified: AGENTS.md, autoresearch/loop-260714-1200/handoff.json; 
 Checklist	PASS	code-PR checklist generated; README.md has pre-existing unstaged change (not part of ship)
 Prepare	PASS	tests: 118 passed, 5 skipped; lint: all checks passed; secrets: no credentials in diff
 Dry-Run	PASS	would commit issue #22 scaffolding + AGENTS.md update + handoff.json update; no blockers
-Ship	PENDING	requires explicit user approval for git add/commit/push
-Verify	PENDING	post-commit smoke tests not yet run
+Ship	PASS	commit 2c6e7e6 pushed to origin/main; merged remote issue #27 docs first
+Verify	PASS	post-commit smoke tests: 8 passed, 2 skipped in 2.03s
 Log	PASS	ship artifacts written to autoresearch/ship-260714-1458/

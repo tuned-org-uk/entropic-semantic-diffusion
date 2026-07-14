@@ -1,8 +1,8 @@
 {
   "version": "2.1.0",
   "source": "ship",
-  "timestamp": "2026-07-14T14:01:45.688387+00:00",
-  "status": "DRY_RUN",
+  "timestamp": "2026-07-14T14:18:12.862092+00:00",
+  "status": "COMPLETE",
   "target": "entropic-semantic-diffusion/",
   "ship_type": "code-pr",
   "findings": [
@@ -10,6 +10,8 @@
     "Issue #22 scoped as full training on real embeddings (Exp 4 MNIST + Exp 5 CIFAR-10 + latent eval).",
     "Tests pass: 110 passed, 3 skipped.",
     "Lint passes: ruff clean.",
-    "Git commit/push requires explicit user approval."
+    "Git commit/push requires explicit user approval.",
+    "Commit 2c6e7e6 pushed to origin/main after merging remote issue #27 docs.",
+    "Post-ship smoke tests: 8 passed, 2 skipped."
   ]
 }

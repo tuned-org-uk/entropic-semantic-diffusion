@@ -1,8 +1,12 @@
 # Ship Summary — entropic-semantic-diffusion
 
-## What is being shipped
+## What was shipped
 
 Transition from completed issue #21 (real data loaders) to issue #22 (full training on real embeddings).
+
+## Commit
+
+`2c6e7e6` — experiment: scaffold issue #22 — real-data training (MNIST/CIFAR-10) and latent eval
 
 ## Artifacts
 
@@ -17,14 +21,15 @@ Transition from completed issue #21 (real data loaders) to issue #22 (full train
 
 ## Verification
 
-- Full test suite: PASS (118 passed, 5 skipped).
-- Lint: PASS.
+- Pre-ship full test suite: PASS (118 passed, 5 skipped).
+- Pre-ship lint: PASS.
+- Post-ship smoke tests: PASS (8 passed, 2 skipped in 2.03s).
 - No secrets in diff.
 
-## Pre-existing unstaged change
+## Remote merge
 
-`README.md` has an unstaged modification unrelated to this ship (removes historical spelling note). It is NOT included in the proposed commit.
+Remote main contained issue #27 documentation commits (00-DESIGN_HYBRID.md, fitness/implementation/experiment docs). These were merged before push with no conflicts.
 
 ## Status
 
-DRY_RUN complete. Actual git commit/push pending explicit user approval.
+COMPLETE.
