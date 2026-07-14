@@ -56,24 +56,26 @@ class TestMNISTLoader:
 
 @pytest.mark.slow
 class TestCIFAR10DINOLoader:
-    """Critical end-to-end tests for the CIFAR-10 DINO-256 loader."""
+    """Critical end-to-end tests for the CIFAR-10 DINO-256 loader via HuggingFace."""
 
     @classmethod
     @pytest.fixture(scope="class")
     def loader(cls):
+        # PCA requires n_samples >= n_components; DEFAULT_OUTPUT_DIM == 256.
         return CIFAR10DINOLoader(
             output_dim=DEFAULT_OUTPUT_DIM,
             data_dir=".pytest_cache/cifar10",
-            pca_fit_samples=100,
+            pca_fit_samples=256,
             dino_batch_size=16,
-            max_train_samples=200,
+            max_train_samples=300,
             max_test_samples=50,
+            use_hf=True,
         )
 
     def test_train_and_test_shapes_and_dtype(self, loader):
         train = loader.train_data
         test = loader.test_data
-        assert train.shape == (200, DEFAULT_OUTPUT_DIM)
+        assert train.shape == (300, DEFAULT_OUTPUT_DIM)
         assert test.shape == (50, DEFAULT_OUTPUT_DIM)
         assert train.dtype == torch.float64
         assert test.dtype == torch.float64
