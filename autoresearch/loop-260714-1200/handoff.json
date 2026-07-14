@@ -1,0 +1,24 @@
+{
+  "version": "2.1.0",
+  "source": "loop",
+  "timestamp": "2026-07-14T13:38:05.488339+00:00",
+  "status": "BOUNDED",
+  "results_tsv": "/Users/tuned-silicon/papers/entropic-semantic-diffusion/autoresearch/loop-260714-1200/results.tsv",
+  "findings": [
+    "MNIST PCA-16 loader implemented via sklearn.datasets.fetch_openml + scikit-learn PCA, L2-normalised.",
+    "CIFAR-10 DINO-256 loader implemented via direct download + frozen facebook/dino-vits16 + PCA projection to 256-D, L2-normalised.",
+    "Slow CIFAR-10/DINO tests are marked @pytest.mark.slow and skipped by default; run with --run-slow or ESDM_RUN_SLOW=1.",
+    "esdm.cli.train now supports --dataset {random,mnist,cifar10} and configures dim_input/n_nodes/dim_latent/n_modes accordingly.",
+    "transformers added to runtime dependencies for DINO encoder support.",
+    "Audio loader deferred to issue #25 per user direction.",
+    "CIFAR-10 slow tests were not fully executed due to download interruptions; download robustness was hardened."
+  ],
+  "config": {
+    "goal": "Deliver issue #21: real data loaders for MNIST PCA-16, CIFAR-10 DINO-256 (audio deferred to #25)",
+    "scope": "esdm/data/, esdm/cli/train.py, pyproject.toml, tests/test_data_loaders.py, tests/test_cli.py, tests/conftest.py",
+    "metric": "Count of passing tests in tests/test_data_loaders.py (fast tests; slow tests skipped by default)",
+    "direction": "higher_is_better",
+    "verify": ".venv/bin/python -m pytest tests/test_data_loaders.py -q --tb=no",
+    "guard": ".venv/bin/python -m pytest tests/ -q --tb=no"
+  }
+}
