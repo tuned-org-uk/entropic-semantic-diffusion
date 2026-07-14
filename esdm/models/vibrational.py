@@ -28,6 +28,7 @@ from torch import Tensor
 
 from .._vendor.laplacian import DifferentiableLaplacian
 from .._vendor.vdt import VibrationalStateBlock as _VDTVibrationalBlock
+from ..graphs.wht_filter import GraphWHTFilter
 
 
 def compute_mode_residuals(
@@ -179,10 +180,12 @@ class VibrationalStateBlock(nn.Module):
         gamma: float = 0.1,
         dropout: float = 0.1,
         density_momentum: float = 0.9,
+        wht_filter: Optional["GraphWHTFilter"] = None,
     ) -> None:
         super().__init__()
         self.dim = dim
         self.n_steps = n_steps
+        self.wht_filter = wht_filter
 
         # The feature channel is 1: x (B, F) -> Q (B, F, 1).
         # MultiheadAttention requires embed_dim divisible by num_heads.
@@ -217,6 +220,87 @@ class VibrationalStateBlock(nn.Module):
 
     # ------------------------------------------------------------------ #
 
+    def _wht_filtered_laplacian_action(
+        self,
+        L_f: Tensor,
+        Q_t: Tensor,
+    ) -> Tensor:
+        """
+        Compute the WHT-filtered Laplacian action inside the wave recurrence.
+
+        Implements:  L̃_f Q_t = H_F^T (g ⊙ (L̂_f · Q̂_t^T)^T)
+
+        where:
+          H_F   = normalised Hadamard matrix (F×F, precomputed)
+          L̂_f   = H_F L_f H_F^T  (WHT-domain Laplacian)
+          Q̂_t   = H_F Q_t         (WHT of the state)
+          g     = spectral gate vector (heat-kernel or bivariate)
+
+        This is the Phase 2 integration from docs/00-DESIGN.md §4.3.
+        """
+        F = L_f.shape[-1]
+        wht = self.wht_filter
+
+        # Build normalised Hadamard matrix H_F in torch.
+        # Uses the Fiedler ordering from GraphWHTFilter for sequency alignment.
+        if not hasattr(self, '_H_F') or self._H_F.shape[0] != F:
+            import numpy as np
+            P = wht.P if wht.P is not None else F
+            # Build Hadamard matrix of size P×P, then truncate to F×F.
+            H = np.eye(P)
+            h = 1
+            while h < P:
+                for i in range(0, P, h * 2):
+                    for j in range(i, i + h):
+                        a, b = H[j].copy(), H[j + h].copy()
+                        H[j] = a + b
+                        H[j + h] = a - b
+                h *= 2
+            H = H / np.sqrt(P)
+            # Apply Fiedler ordering to rows/cols
+            if wht.fiedler_order is not None:
+                order = wht.fiedler_order[:F]
+                H_ordered = np.eye(P)
+                H_ordered[:F, :F] = H[np.ix_(order, order)]
+                H = H_ordered
+            self._H_F = torch.from_numpy(H[:F, :F].astype(np.float32)).to(device=L_f.device, dtype=L_f.dtype).detach()
+            self._H_F_T = self._H_F.t().detach()
+
+        H_F = self._H_F
+        H_F_T = self._H_F_T
+
+        # L̂_f = H_F L_f H_F^T (precomputed lazily)
+        if not hasattr(self, '_L_hat') or self._L_hat.shape != L_f.shape:
+            with torch.no_grad():
+                if L_f.dim() == 3:
+                    self._L_hat = torch.bmm(torch.bmm(H_F.unsqueeze(0).expand_as(L_f), L_f), H_F_T.unsqueeze(0).expand_as(L_f))
+                else:
+                    self._L_hat = H_F @ L_f @ H_F_T
+        L_hat = self._L_hat
+
+        # Q̂_t = H_F Q_t (apply Hadamard to the feature dimension)
+        Q_hat = torch.bmm(H_F.unsqueeze(0).expand(Q_t.shape[0], -1, -1), Q_t) if Q_t.dim() == 3 else H_F @ Q_t
+
+        # Gate g: heat-kernel for basic mode, bivariate for bivariate mode.
+        # wht_filter.a_tau_scale and wht_filter.tau_decay_power control the
+        # bivariate gate. The gate attenuates high-sequency modes.
+        import numpy as np
+        tau_t = float(wht.tau_max_est) if hasattr(wht, 'tau_max_est') else 1.0
+        if hasattr(wht, 'wht_lambdas') and wht.wht_lambdas is not None:
+            wht_lam = wht.wht_lambdas[:F]
+            # Heat-kernel gate: g_k = exp(-t * λ_k)
+            g_np = np.exp(-tau_t * wht_lam)
+            g = torch.from_numpy(g_np.astype(np.float32)).to(device=L_f.device, dtype=L_f.dtype).detach()
+        else:
+            g = torch.ones(F, dtype=L_f.dtype, device=L_f.device).detach()
+
+        # Filtered action: H_F^T (g ⊙ (L̂_f · Q̂_t))
+        LQ_hat = torch.bmm(L_hat, Q_hat) if L_hat.dim() == 3 else torch.matmul(L_hat, Q_hat)
+        gated = g.unsqueeze(0).unsqueeze(-1) * LQ_hat if LQ_hat.dim() == 3 else g * LQ_hat
+        L_tilde = torch.bmm(H_F_T.unsqueeze(0).expand(Q_t.shape[0], -1, -1), gated) if gated.dim() == 3 else H_F_T @ gated
+
+        return L_tilde
+
     def _step(
         self,
         Q_t: Tensor,
@@ -248,8 +332,11 @@ class VibrationalStateBlock(nn.Module):
         dt = torch.minimum(delta_tau_t, dt)
         dt2 = dt * dt
 
-        # Wave update: Δτ² · L_f @ Q_t
-        L_term = torch.bmm(L_f, Q_t) if L_f.dim() == 3 else torch.matmul(L_f, Q_t)
+        # Wave update: Δτ² · L_f @ Q_t (WHT-filtered when a filter is injected)
+        if self.wht_filter is not None:
+            L_term = self._wht_filtered_laplacian_action(L_f, Q_t)
+        else:
+            L_term = torch.bmm(L_f, Q_t) if L_f.dim() == 3 else torch.matmul(L_f, Q_t)
         damp = block.gamma.view(1, 1, -1) * (Q_t - Q_tm1)
 
         Lambda_tau_t = (

@@ -30,7 +30,7 @@ from .diffusion_decoder import EntropicDiffusionDecoder
 from .elbo import esdm_elbo
 from .spectral_decoder import SpectralLoadingDecoder
 from .spectral_kl import tau_mode_kl_per_mode
-from .vibrational import VibrationalStateBlock, compute_mode_residuals
+from .vibrational import VibrationalStateBlock
 from .._vendor.spectral import spectral_basis_kl
 from ..graphs.wht_filter import GraphWHTFilter
 
@@ -95,6 +95,7 @@ class ESDM(nn.Module):
             n_heads=1,
             n_steps=cfg["model"]["n_vibrational_steps"],
             gamma=cfg["model"]["gamma"],
+            wht_filter=cfg["model"].get("wht_filter", None),
         )
         self.diffusion_decoder = EntropicDiffusionDecoder(
             dim=self.dim_input,
@@ -238,28 +239,9 @@ class ESDM(nn.Module):
         self._last_rho_minus = rho_minus.detach().clone()
         self._last_N_active.fill_(int(spectral["N_active"].item()))
 
-        # 6. Optional timestep-aware Graph-WHT smoothing of the diffusion state.
+        # 6. The WHT filter is now applied INSIDE the vibrational recurrence
+        # (Phase 2 integration, docs/00-DESIGN.md §4.3).  No post-processing.
         Q_raw = Q
-        if self.wht_filter is not None:
-            Q_prev = (
-                self._last_Q
-                if self._last_Q is not None
-                else torch.zeros_like(Q_raw)
-            )
-            r_k = compute_mode_residuals(
-                Q_raw, Q_prev, bright_modes=self.n_modes
-            )
-            Q_np = Q_raw.detach().cpu().numpy()
-            r_k_np = r_k.detach().cpu().numpy()
-            Q_np = self.wht_filter.forward(
-                Q_np,
-                tau=float(self.clock.tau_n),
-                tau_max=float(self.clock.tau_max_est),
-                r_k=r_k_np,
-                t=float(self.clock.tau_n),
-            )
-            Q = torch.from_numpy(Q_np).to(device=Q.device, dtype=Q.dtype)
-
         self._last_Q = Q_raw.detach().clone()
 
         # 7. Entropic diffusion decode: alpha_bar from clock
