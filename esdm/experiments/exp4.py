@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 DIM: int = DEFAULT_PCA_DIM
 N_STEPS: int = 800
-BATCH_SIZE: int = 64
 A_TAU_SCALE: float = 2.62
+GRAD_CLIP: float = 1.0
 
 
 def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> torch.Tensor:
@@ -66,14 +66,9 @@ def _build_wht_filter(
 
 def run_single(
     n_steps: int = N_STEPS,
-    batch_size: int = BATCH_SIZE,
-    a_tau_scale: float = A_TAU_SCALE,
-    tau_decay_power: float = 1.0,
-    wht_filter: str = "basic",
     lr: float = 3e-4,
-    grad_clip: Optional[float] = 1.0,
-    n_vibrational_steps: int = 2,
-    gamma: float = 0.1,
+    wht_filter: str = "basic",
+    lam_s: float = 1.0,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
     data_dir: Optional[Path | str] = None,
@@ -81,10 +76,9 @@ def run_single(
     """
     Run a single Exp-4 training loop on MNIST PCA-16 embeddings.
 
-    Parameters
-    ----------
-    wht_filter : str
-        "none" / "basic" / "bivariate" -- passed to the WHT filter factory.
+    Free parameters: n_steps, lr, wht_filter, lam_s.
+    Architecture constants (gamma, n_vibrational_steps, batch_size, grad_clip)
+    come from esdm/_configs/default.yaml and AGENTS.md — do not sweep.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -98,25 +92,22 @@ def run_single(
     cfg = _load_config("esdm/_configs/default.yaml")
     cfg["model"]["dim_input"] = DIM
     cfg["model"]["n_nodes"] = DIM
-    # q = F/4 per docs/00-DESIGN_HYBRID.md §5, rounded to nearest power of 2.
     q = max(1, DIM // 4)
     cfg["model"]["dim_latent"] = q
     cfg["model"]["n_modes"] = q
     cfg["training"]["max_steps"] = n_steps
-    cfg["training"]["batch_size"] = batch_size
-    cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
-    cfg["model"]["gamma"] = gamma
+    cfg["model"]["lam_s"] = lam_s
 
     from ..data.mnist import MNISTLoader
 
     loader = MNISTLoader(pca_dim=DEFAULT_PCA_DIM, data_dir=data_dir or "data/mnist", seed=seed)
     L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
     cfg["model"]["L_base"] = L_F
-    cfg["model"]["wht_filter"] = _build_wht_filter(
-        wht_filter, L_F, a_tau_scale=a_tau_scale, tau_decay_power=tau_decay_power
-    )
+    cfg["model"]["wht_filter"] = _build_wht_filter(wht_filter, L_F)
 
     model = ESDM(cfg)
+
+    batch_size = cfg["training"]["batch_size"]
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=lr,
@@ -131,8 +122,8 @@ def run_single(
 
     rows: list[dict] = []
     logger.info(
-        "Starting Exp4: n_steps=%d batch_size=%d lr=%g wht_filter=%s device=%s",
-        n_steps, batch_size, lr, wht_filter,
+        "Starting Exp4: n_steps=%d batch_size=%d lr=%g wht_filter=%s lam_s=%g device=%s",
+        n_steps, batch_size, lr, wht_filter, lam_s,
         str(next(model.parameters()).device),
     )
     run_start = time.perf_counter()
@@ -141,8 +132,7 @@ def run_single(
         optimizer.zero_grad()
         out = model(x)
         out.loss.backward()
-        if grad_clip is not None:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
         optimizer.step()
         scheduler.step()
 
@@ -156,7 +146,6 @@ def run_single(
             "heat_death": int(hc["heat_death"]),
             "rho_sign": hc["rho_sign"],
         }
-        # Log the ELBO term breakdown from the model output.
         for k, v in out.metrics.items():
             row[k] = float(v.detach())
         if step % cfg["training"].get("log_every", 10) == 0:
@@ -191,8 +180,6 @@ def run_single(
 
 def main_cli(
     n_steps: int = N_STEPS,
-    batch_size: int = BATCH_SIZE,
-    a_tau_scale: float = A_TAU_SCALE,
     wht_filter: str = "basic",
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
@@ -200,8 +187,6 @@ def main_cli(
     """CLI entry point for a single Exp-4 run."""
     metrics = run_single(
         n_steps=n_steps,
-        batch_size=batch_size,
-        a_tau_scale=a_tau_scale,
         wht_filter=wht_filter,
         seed=seed,
         output_dir=output_dir,

@@ -58,7 +58,6 @@ def test_exp4_run_single_smoke(fake_loader, monkeypatch, tmp_path):
     """Exp4 run_single should complete a few steps without error."""
     metrics = exp4.run_single(
         n_steps=3,
-        batch_size=8,
         wht_filter="none",
         seed=3407,
         output_dir=tmp_path,
@@ -78,7 +77,6 @@ def test_exp4_real_mnist_short(tmp_path):
     """Slow: run a handful of steps on the real MNIST PCA-16 loader."""
     metrics = exp4.run_single(
         n_steps=3,
-        batch_size=8,
         wht_filter="none",
         seed=3407,
         output_dir=tmp_path,

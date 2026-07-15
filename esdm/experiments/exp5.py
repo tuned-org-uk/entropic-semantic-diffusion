@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 DIM: int = DEFAULT_OUTPUT_DIM
 N_STEPS: int = 800
-BATCH_SIZE: int = 64
 A_TAU_SCALE: float = 2.62
+GRAD_CLIP: float = 1.0
 
 
 def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> torch.Tensor:
@@ -65,14 +65,8 @@ def _build_wht_filter(
 
 def run_single(
     n_steps: int = N_STEPS,
-    batch_size: int = BATCH_SIZE,
-    a_tau_scale: float = A_TAU_SCALE,
-    tau_decay_power: float = 1.0,
-    wht_filter: str = "none",
     lr: float = 3e-4,
-    grad_clip: Optional[float] = 1.0,
-    n_vibrational_steps: int = 2,
-    gamma: float = 0.1,
+    wht_filter: str = "none",
     lam_s: float = 1.0,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
@@ -84,12 +78,9 @@ def run_single(
     """
     Run a single Exp-5 training loop on CIFAR-10 DINO-256 embeddings.
 
-    Parameters
-    ----------
-    wht_filter : str
-        "none" / "basic" / "bivariate" -- passed to the WHT filter factory.
-    max_train_samples, max_test_samples : int, optional
-        Subset sizes for fast iteration.  Use ``None`` for the full dataset.
+    Free parameters: n_steps, lr, wht_filter, lam_s.
+    Architecture constants (gamma, n_vibrational_steps, batch_size, grad_clip)
+    come from esdm/_configs/default.yaml and AGENTS.md — do not sweep.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -107,9 +98,6 @@ def run_single(
     cfg["model"]["dim_latent"] = q
     cfg["model"]["n_modes"] = q
     cfg["training"]["max_steps"] = n_steps
-    cfg["training"]["batch_size"] = batch_size
-    cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
-    cfg["model"]["gamma"] = gamma
     cfg["model"]["lam_s"] = lam_s
 
     loader = CIFAR10DINOLoader(
@@ -122,12 +110,11 @@ def run_single(
     )
     L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
     cfg["model"]["L_base"] = L_F
-    cfg["model"]["wht_filter"] = _build_wht_filter(
-        wht_filter, L_F, a_tau_scale=a_tau_scale, tau_decay_power=tau_decay_power
-    )
+    cfg["model"]["wht_filter"] = _build_wht_filter(wht_filter, L_F)
 
     model = ESDM(cfg)
 
+    batch_size = cfg["training"]["batch_size"]
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=lr,
@@ -135,7 +122,7 @@ def run_single(
     )
 
     # Linear warmup over the first 50 steps to avoid destabilising the
-    # spectral decoder's variance head (lr=0.05 blew up kl_S at step 1-3).
+    # spectral decoder's variance head.
     warmup_steps = 50
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / warmup_steps)
@@ -143,9 +130,9 @@ def run_single(
 
     rows: list[dict] = []
     logger.info(
-        "Starting Exp5: n_steps=%d batch_size=%d lr=%g wht_filter=%s "
+        "Starting Exp5: n_steps=%d batch_size=%d lr=%g wht_filter=%s lam_s=%g "
         "max_train_samples=%s max_test_samples=%s pca_fit_samples=%s device=%s",
-        n_steps, batch_size, lr, wht_filter,
+        n_steps, batch_size, lr, wht_filter, lam_s,
         max_train_samples, max_test_samples, pca_fit_samples,
         str(next(model.parameters()).device),
     )
@@ -155,8 +142,7 @@ def run_single(
         optimizer.zero_grad()
         out = model(x)
         out.loss.backward()
-        if grad_clip is not None:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
         optimizer.step()
         scheduler.step()
 
@@ -205,8 +191,6 @@ def run_single(
 
 def main_cli(
     n_steps: int = N_STEPS,
-    batch_size: int = BATCH_SIZE,
-    a_tau_scale: float = A_TAU_SCALE,
     wht_filter: str = "none",
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
@@ -214,8 +198,6 @@ def main_cli(
     """CLI entry point for a single Exp-5 run."""
     metrics = run_single(
         n_steps=n_steps,
-        batch_size=batch_size,
-        a_tau_scale=a_tau_scale,
         wht_filter=wht_filter,
         seed=seed,
         output_dir=output_dir,

@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> None:
 
     for kl_s in kl_values:
         cfg = {k: dict(v) if isinstance(v, dict) else v for k, v in base_cfg.items()}
-        cfg["elbo"]["kl_s_weight"] = kl_s
+        cfg.setdefault("elbo", {})["kl_s_weight"] = kl_s
         cfg["training"]["max_steps"] = args.steps
 
         torch.manual_seed(args.seed)

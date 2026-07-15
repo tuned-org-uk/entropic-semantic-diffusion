@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             n_steps=args.n_steps,
             lr=args.lr,
             wht_filter=args.wht_filter,
+            lam_s=args.lam_s,
             seed=3407,
         )
         r = compute_fitness_real(m)
