@@ -2,6 +2,32 @@
 
 > A learning architecture in which time is not given — it is *earned* from entropy.
 
+## Quick Start — Run experiment
+This can take 15-20 minutes:
+
+```bash
+.venv/bin/python - <<'PY'
+from pathlib import Path
+from esdm.experiments import exp5
+
+metrics = exp5.run_single(
+    n_steps=800,
+    batch_size=64,
+    lr=0.05,
+    wht_filter='none',
+    seed=3407,
+    output_dir=Path('results/cifar10_20k_baseline_800'),
+    data_dir='data/cifar10',
+    max_train_samples=20000,
+    max_test_samples=1000,
+    pca_fit_samples=5000,
+)
+
+print("\nFinal metrics:")
+print(metrics.iloc[-1].to_string())
+PY
+```
+
 ## Quick Start — Autoresearch Loop
 
 Run the self-contained autoresearch driver to reproduce and improve the current baseline:

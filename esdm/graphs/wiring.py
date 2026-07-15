@@ -79,13 +79,22 @@ class WireGraph:
 
     @staticmethod
     def _arrowspace_laplacian(items_np: np.ndarray, k: int, seed: int) -> Tensor:
-        """Build L_F via the real ArrowSpace Rust bindings."""
-        builder = (asp.ArrowSpaceBuilder()
-                   .with_seed(seed)
-                   .with_cluster_max_clusters(k))
-        _space, gl = builder.build_full({}, items_np)
+        """Build L_F via the real ArrowSpace Rust bindings, with tuner-discovered graph_params."""
+        import arrowspace_tuner as arrowspace
+
+        # use arrowspace_tuner to find the best graph parameters and generate
+        # the arrospace's graph Laplacian
+        # Narrow k search around the caller-specified k, still auto-tuning eps/tau.
+        _, gl = arrowspace.optuna(
+            embeddings=items_np,
+            seed=seed,
+            k_low=max(3, k - 5),
+            k_high=k + 5,
+        )
+
         L_np = np.array(gl.to_dense())
         return torch.from_numpy(L_np)
+
 
     @staticmethod
     def _knn_laplacian_fallback(features: Tensor, k: int, seed: int) -> Tensor:

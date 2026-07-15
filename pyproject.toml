@@ -47,6 +47,7 @@ dependencies = [
     "tqdm>=4.66",
     "pandas>=2.2",
     "transformers>=4.40",
+    "arrowspace_tuner>=0.3.1"
     # VDT modules are vendored in esdm/_vendor; no external git dependency.
 ]
 
