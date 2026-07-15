@@ -92,13 +92,14 @@ class WireGraph:
         uses them directly — no tuner run. When None, runs arrowspace_tuner
         to discover the best params (slow; should only happen once per dataset).
         """
-        import arrowspace as asp
-
         if graph_params and graph_params.get("eps") is not None:
+            import arrowspace as asp
             # Use cached params directly — no tuner run.
+            del graph_params["tau"]
             builder = (asp.ArrowSpaceBuilder()
                        .with_seed(seed)
-                       .with_sampling("simple", 1.0))
+                       .with_sampling("simple", 1.0)
+                       .with_dims_reduction(False, None))
             _, gl = builder.build_full(graph_params=graph_params, items=items_np)
             L_np = np.array(gl.to_dense())
         else:

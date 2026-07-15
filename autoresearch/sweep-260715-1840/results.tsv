@@ -1,0 +1,5 @@
+# metric_direction: higher_is_better
+# version: v0.1.0
+# baseline: 62.33
+iteration	timestamp	parameter	value	metric	delta	guard	status	description
+0	2026-07-15T18:40:00	baseline	-	62.33	0.00	pass	baseline	v0.1.0 baseline, lr=0.05, lam_s=1.0, 800 steps CIFAR-10
