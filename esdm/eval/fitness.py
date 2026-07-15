@@ -1,8 +1,15 @@
 """
 ESDM fitness evaluation -- composite health score from docs/00-DESIGN.md §8.1.
 
-Runs exp3 run_single with given parameters, measures 10 health criteria,
-returns a score in [0, 100]. Higher is better.
+Runs exp4/exp5 training and measures health criteria:
+- entropic-clock motion (tau_monotone, tau_range_bonus)
+- alpha_bar schedule decay
+- conservation of total entropy
+- heat death detection and timing
+- rho-sign stabilization
+- loss decrease
+- net_energy_flow balance (issue #20: Lambda vs H equilibrium)
+- pi_contraction_ratio (issue #20: Pi operator activity)
 
 Usage:
     python -m esdm.eval.fitness [--seed N] [--n-steps N] [exp3 params...]
@@ -19,9 +26,9 @@ def compute_fitness_real(metrics: pd.DataFrame) -> dict:
     """
     Compute a real-data fitness score from Exp-4/5 metrics.
 
-        Path-A diagnostics (which are NaN when the filter is disabled) and focuses
-    on training health: entropic-clock motion, conservation, reconstruction
-    progress, and heat-death behaviour.
+    Scores training health: entropic-clock motion, conservation,
+    reconstruction progress, heat-death behaviour, and the hybridisation
+    operator diagnostics (net_energy_flow, pi_contraction_ratio).
     """
     scores: dict[str, float] = {}
     n = len(metrics)
@@ -89,6 +96,38 @@ def compute_fitness_real(metrics: pd.DataFrame) -> dict:
         if loss[0] != 0
         else 0.0
     )
+
+    # --- Issue #20: Hybridisation operator diagnostics ---
+
+    # net_energy_flow: Lambda vs H balance.
+    # Healthy: |net_energy_flow| near 0 during the active diffusion phase.
+    # The metric is the mean absolute value normalised by the initial
+    # energy, scored on how close to 0 it is.
+    if "net_energy_flow" in metrics.columns:
+        nef = metrics["net_energy_flow"].to_numpy()
+        # Normalise by the initial Q energy (approximated by the first
+        # non-zero |net_energy_flow| or the max |nef|).
+        nef_scale = max(np.abs(nef).max(), 1e-8)
+        nef_ratio = np.abs(nef).mean() / nef_scale
+        # Score: 5 pts if mean |nef|/scale < 0.1, linearly decreasing
+        scores["net_energy_flow"] = max(0.0, 5.0 * (1.0 - min(1.0, nef_ratio * 10.0)))
+    else:
+        scores["net_energy_flow"] = 0.0
+
+    # pi_contraction_ratio: Pi operator activity.
+    # Healthy range [0.01, 0.3] per step.
+    if "pi_contraction_ratio" in metrics.columns:
+        pcr = metrics["pi_contraction_ratio"].to_numpy()
+        pcr_mean = float(np.mean(pcr))
+        # Score: full 5 pts if in [0.01, 0.3], partial outside
+        if pcr_mean < 0.01:
+            scores["pi_contraction_ratio"] = max(0.0, 5.0 * pcr_mean / 0.01)
+        elif pcr_mean > 0.3:
+            scores["pi_contraction_ratio"] = max(0.0, 5.0 * (1.0 - (pcr_mean - 0.3) / 0.3))
+        else:
+            scores["pi_contraction_ratio"] = 5.0
+    else:
+        scores["pi_contraction_ratio"] = 0.0
 
     total = sum(scores.values())
     return {

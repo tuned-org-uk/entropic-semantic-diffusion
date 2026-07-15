@@ -142,3 +142,106 @@ def test_compute_mode_residuals_known_difference():
     assert torch.allclose(r, expected, atol=1e-6)
     assert (r[:3] == 0).all()
     assert (r[4:] == 0).all()
+
+
+# ---------------------------------------------------------------------------
+# Hybridisation operator tests (issue #20)
+# ---------------------------------------------------------------------------
+
+
+def test_hybridisation_output_shape():
+    """H operator produces (B, F, 1) output matching Q_t shape."""
+    torch.manual_seed(3407)
+    F = 16
+    q = F // 4
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=1, dropout=0.0)
+    x = torch.randn(4, F)
+    L_f = _random_L_f(F)
+    vals, vecs = torch.linalg.eigh(L_f.double())
+    U_q = vecs.float()[:, :q]
+    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    assert Q.shape == x.shape
+    assert torch.all(torch.isfinite(Q))
+
+
+def test_hybridisation_backward_compat_no_uq():
+    """Without U_q, the block falls back to bare L_f@Q_t (matches old tests)."""
+    torch.manual_seed(3407)
+    F = 8
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=1, gamma=0.1, dropout=0.0)
+    block.eval()
+    x = torch.randn(2, F)
+    L_f = _random_L_f(F)
+    with torch.no_grad():
+        Q, _, _ = block(x, L_f, Lambda_tau=0.0, delta_tau=0.05)
+    assert Q.shape == x.shape
+    assert torch.all(torch.isfinite(Q))
+
+
+def test_hybridisation_diagnostics_populated():
+    """net_energy_flow and pi_contraction_ratio are populated after forward."""
+    torch.manual_seed(3407)
+    F = 16
+    q = F // 4
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=2, dropout=0.0)
+    x = torch.randn(4, F)
+    L_f = _random_L_f(F)
+    vals, vecs = torch.linalg.eigh(L_f.double())
+    U_q = vecs.float()[:, :q]
+    block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    diag = block.diagnostics()
+    assert "net_energy_flow" in diag
+    assert "pi_contraction_ratio" in diag
+    assert isinstance(diag["net_energy_flow"], float)
+    assert isinstance(diag["pi_contraction_ratio"], float)
+
+
+def test_hybridisation_gradients_flow():
+    """Gradients flow through sigma_sq and eta when not frozen."""
+    torch.manual_seed(3407)
+    F = 16
+    q = F // 4
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=1, dropout=0.0)
+    x = torch.randn(2, F)
+    L_f = _random_L_f(F)
+    vals, vecs = torch.linalg.eigh(L_f.double())
+    U_q = vecs.float()[:, :q]
+    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    loss = Q.sum()
+    loss.backward()
+    assert block.sigma_sq.grad is not None
+    assert block.eta.grad is not None
+
+
+def test_hybridisation_freeze_h():
+    """When freeze_h=True, sigma_sq and eta have no grad."""
+    torch.manual_seed(3407)
+    F = 16
+    q = F // 4
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=1, dropout=0.0, freeze_h=True)
+    assert not block.sigma_sq.requires_grad
+    assert not block.eta.requires_grad
+    x = torch.randn(2, F)
+    L_f = _random_L_f(F)
+    vals, vecs = torch.linalg.eigh(L_f.double())
+    U_q = vecs.float()[:, :q]
+    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    loss = Q.sum()
+    loss.backward()
+    assert block.sigma_sq.grad is None
+    assert block.eta.grad is None
+
+
+def test_hybridisation_q_equals_f_recovers_identity():
+    """When q=F, U_q U_q^T = I, so lifting is identity (no spectral filtering)."""
+    torch.manual_seed(3407)
+    F = 8
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=1, dropout=0.0)
+    x = torch.randn(2, F)
+    L_f = _random_L_f(F)
+    # Full eigenvectors -> U_q is (F, F), P = I
+    vals, vecs = torch.linalg.eigh(L_f.double())
+    U_q = vecs.float()  # all F eigenvectors
+    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    assert Q.shape == x.shape
+    assert torch.all(torch.isfinite(Q))

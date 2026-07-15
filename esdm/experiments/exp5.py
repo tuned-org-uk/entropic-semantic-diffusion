@@ -3,6 +3,7 @@ Experiment 5 - Full ESDM training on CIFAR-10 DINO-256 embeddings (issue #22).
 
 Ref: docs/02-EXPERIMENTS.md section Experiment 5
      issue #22 (2026-07-14): full training on real embeddings
+     issue #20: hybridisation operator H now active in the wave recurrence
 
 This module trains the full ESDM model on the CIFAR-10 DINO-256 loader from
 `esdm.data.cifar10`.  It mirrors Experiment 4 and is the high-dimensional
@@ -51,7 +52,6 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> 
 
 
 
-
 def run_single(
     n_steps: int = N_STEPS,
     lr: float = 3e-4,
@@ -62,11 +62,15 @@ def run_single(
     max_train_samples: Optional[int] = None,
     max_test_samples: Optional[int] = None,
     pca_fit_samples: int = 500,
+    q: Optional[int] = None,
+    sigma_sq: Optional[float] = None,
+    eta: Optional[float] = None,
+    freeze_h: bool = False,
 ) -> pd.DataFrame:
     """
     Run a single Exp-5 training loop on CIFAR-10 DINO-256 embeddings.
 
-    Free parameters: n_steps, lr lam_s.
+    Free parameters: n_steps, lr, lam_s, q, sigma_sq, eta, freeze_h.
     Architecture constants (gamma, n_vibrational_steps, batch_size, grad_clip)
     come from esdm/_configs/default.yaml and AGENTS.md — do not sweep.
     """
@@ -82,12 +86,17 @@ def run_single(
     cfg = _load_config("esdm/_configs/default.yaml")
     cfg["model"]["dim_input"] = DIM
     cfg["model"]["n_nodes"] = DIM
-    q = max(1, DIM // 4)
-    cfg["model"]["dim_latent"] = q
-    cfg["model"]["n_modes"] = q
+    q_eff = q if q is not None else max(1, DIM // 4)
+    cfg["model"]["dim_latent"] = q_eff
+    cfg["model"]["n_modes"] = q_eff
     cfg["training"]["max_steps"] = n_steps
     cfg["model"]["lam_s"] = lam_s
     cfg["clock"]["eps_rel"] = 1e-3  # enable relative heat-death threshold for stochastic batches
+    if sigma_sq is not None:
+        cfg["model"]["sigma_sq"] = sigma_sq
+    if eta is not None:
+        cfg["model"]["eta"] = eta
+    cfg["model"]["freeze_h"] = freeze_h
 
     loader = CIFAR10DINOLoader(
         output_dim=DEFAULT_OUTPUT_DIM,
@@ -119,9 +128,9 @@ def run_single(
     rows: list[dict] = []
     logger.info(
         "Starting Exp5: n_steps=%d batch_size=%d lr=%g lam_s=%g "
-        "max_train_samples=%s max_test_samples=%s pca_fit_samples=%s device=%s",
+        "max_train_samples=%s max_test_samples=%s pca_fit_samples=%s q=%d device=%s",
         n_steps, batch_size, lr, lam_s,
-        max_train_samples, max_test_samples, pca_fit_samples,
+        max_train_samples, max_test_samples, pca_fit_samples, q_eff,
         str(next(model.parameters()).device),
     )
     run_start = time.perf_counter()
@@ -143,6 +152,8 @@ def run_single(
             "Lambda_tau": hc["Lambda_tau"],
             "heat_death": int(hc["heat_death"]),
             "rho_sign": hc["rho_sign"],
+            "net_energy_flow": hc["net_energy_flow"],
+            "pi_contraction_ratio": hc["pi_contraction_ratio"],
         }
         # Log the ELBO term breakdown from the model output.
         for k, v in out.metrics.items():
@@ -153,9 +164,12 @@ def run_single(
             eta = step_time * (n_steps - step - 1)
             logger.info(
                 "Exp5 step=%d/%d loss=%.4f tau_n=%.4f alpha_bar=%.4f Lambda_tau=%.4f heat_death=%s "
+                "nef=%.4e pcr=%.4f "
                 "%.2f s/step, ETA %.1f min",
                 step, n_steps, row["loss"], row["tau_n"], row["alpha_bar"],
-                row["Lambda_tau"], row["heat_death"], step_time, eta / 60.0
+                row["Lambda_tau"], row["heat_death"],
+                row["net_energy_flow"], row["pi_contraction_ratio"],
+                step_time, eta / 60.0
             )
         rows.append(row)
         if hc["heat_death"]:

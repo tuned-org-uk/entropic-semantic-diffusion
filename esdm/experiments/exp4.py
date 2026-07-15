@@ -3,6 +3,7 @@ Experiment 4 - Full ESDM training on MNIST PCA-16 embeddings (issue #22).
 
 Ref: docs/02-EXPERIMENTS.md section Experiment 4
      issue #22 (2026-07-14): full training on real embeddings
+     issue #20: hybridisation operator H now active in the wave recurrence
 
 This module trains the full ESDM model on the MNIST PCA-16 loader from
 `esdm.data.mnist`.  It reuses the training logic from `esdm.cli.train` and
@@ -52,7 +53,6 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> 
 
 
 
-
 def run_single(
     n_steps: int = N_STEPS,
     lr: float = 3e-4,
@@ -60,11 +60,15 @@ def run_single(
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
     data_dir: Optional[Path | str] = None,
+    q: Optional[int] = None,
+    sigma_sq: Optional[float] = None,
+    eta: Optional[float] = None,
+    freeze_h: bool = False,
 ) -> pd.DataFrame:
     """
     Run a single Exp-4 training loop on MNIST PCA-16 embeddings.
 
-    Free parameters: n_steps, lr lam_s.
+    Free parameters: n_steps, lr, lam_s, q, sigma_sq, eta, freeze_h.
     Architecture constants (gamma, n_vibrational_steps, batch_size, grad_clip)
     come from esdm/_configs/default.yaml and AGENTS.md — do not sweep.
     """
@@ -80,12 +84,17 @@ def run_single(
     cfg = _load_config("esdm/_configs/default.yaml")
     cfg["model"]["dim_input"] = DIM
     cfg["model"]["n_nodes"] = DIM
-    q = max(1, DIM // 4)
-    cfg["model"]["dim_latent"] = q
-    cfg["model"]["n_modes"] = q
+    q_eff = q if q is not None else max(1, DIM // 4)
+    cfg["model"]["dim_latent"] = q_eff
+    cfg["model"]["n_modes"] = q_eff
     cfg["training"]["max_steps"] = n_steps
     cfg["model"]["lam_s"] = lam_s
     cfg["clock"]["eps_rel"] = 1e-3  # enable relative heat-death threshold for stochastic batches
+    if sigma_sq is not None:
+        cfg["model"]["sigma_sq"] = sigma_sq
+    if eta is not None:
+        cfg["model"]["eta"] = eta
+    cfg["model"]["freeze_h"] = freeze_h
 
     from ..data.mnist import MNISTLoader
 
@@ -110,8 +119,8 @@ def run_single(
 
     rows: list[dict] = []
     logger.info(
-        "Starting Exp4: n_steps=%d batch_size=%d lr=%g lam_s=%g device=%s",
-        n_steps, batch_size, lr, lam_s,
+        "Starting Exp4: n_steps=%d batch_size=%d lr=%g lam_s=%g q=%d device=%s",
+        n_steps, batch_size, lr, lam_s, q_eff,
         str(next(model.parameters()).device),
     )
     run_start = time.perf_counter()
@@ -133,6 +142,8 @@ def run_single(
             "Lambda_tau": hc["Lambda_tau"],
             "heat_death": int(hc["heat_death"]),
             "rho_sign": hc["rho_sign"],
+            "net_energy_flow": hc["net_energy_flow"],
+            "pi_contraction_ratio": hc["pi_contraction_ratio"],
         }
         for k, v in out.metrics.items():
             row[k] = float(v.detach())
@@ -142,9 +153,12 @@ def run_single(
             eta = step_time * (n_steps - step - 1)
             logger.info(
                 "Exp4 step=%d/%d loss=%.4f tau_n=%.4f alpha_bar=%.4f Lambda_tau=%.4f heat_death=%s "
+                "nef=%.4e pcr=%.4f "
                 "%.2f s/step, ETA %.1f min",
                 step, n_steps, row["loss"], row["tau_n"], row["alpha_bar"],
-                row["Lambda_tau"], row["heat_death"], step_time, eta / 60.0
+                row["Lambda_tau"], row["heat_death"],
+                row["net_energy_flow"], row["pi_contraction_ratio"],
+                step_time, eta / 60.0
             )
         rows.append(row)
         if hc["heat_death"]:

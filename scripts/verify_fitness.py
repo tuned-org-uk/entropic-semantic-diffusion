@@ -50,21 +50,48 @@ def main(argv: list[str] | None = None) -> int:
         default=1.0,
         help='Spectral prior precision multiplier (default: 1.0).',
     )
+    parser.add_argument(
+        "--q",
+        type=int,
+        default=None,
+        help='Spectral modes q for hybridisation operator (default: F/4).',
+    )
+    parser.add_argument(
+        "--sigma-sq",
+        type=float,
+        default=None,
+        help='Diffusion coefficient sigma^2 for H operator (default: 1.0).',
+    )
+    parser.add_argument(
+        "--eta",
+        type=float,
+        default=None,
+        help='Rayleigh gradient step size eta for H operator (default: 0.1).',
+    )
+    parser.add_argument(
+        "--freeze-h",
+        action="store_true",
+        default=False,
+        help='Freeze H operator params (sigma^2, eta) for ablation.',
+    )
     args = parser.parse_args(argv)
 
+    kwargs = {
+        "n_steps": args.n_steps,
+        "lr": args.lr,
+        "lam_s": args.lam_s,
+        "seed": 3407,
+        "q": args.q,
+        "sigma_sq": args.sigma_sq,
+        "eta": args.eta,
+        "freeze_h": args.freeze_h,
+    }
+
     if args.dataset == "mnist":
-        m = exp4.run_single(
-            n_steps=args.n_steps,
-            lr=args.lr,
-            lam_s=args.lam_s,
-            seed=3407,
-        )
+        m = exp4.run_single(**kwargs)
     elif args.dataset == "cifar10":
         m = exp5.run_single(
-            n_steps=args.n_steps,
-            lr=args.lr,
-            lam_s=args.lam_s,
-            seed=3407,
+            **kwargs,
             max_train_samples=args.max_train_samples,
             max_test_samples=200,
             pca_fit_samples=args.pca_fit_samples,

@@ -12,6 +12,8 @@ Fixes applied during port from esdm_legacy/model.py:
   3. kl_z: the encoder now produces (mu, logvar) and kl_z is the standard
      Gaussian VAE KL (was: hard-coded to zero).
 
+Issue #20: the vibrational block now receives U_q so the full hybridisation
+operator H is applied in the wave recurrence.
 """
 from __future__ import annotations
 
@@ -85,6 +87,9 @@ class ESDM(nn.Module):
             n_heads=1,
             n_steps=cfg["model"]["n_vibrational_steps"],
             gamma=cfg["model"]["gamma"],
+            sigma_sq=cfg["model"].get("sigma_sq", 1.0),
+            eta=cfg["model"].get("eta", 0.1),
+            freeze_h=cfg["model"].get("freeze_h", False),
         )
         self.diffusion_decoder = EntropicDiffusionDecoder(
             dim=self.dim_input,
@@ -223,11 +228,13 @@ class ESDM(nn.Module):
         else:
             L_f_wave = self.L_base.expand(x.shape[0], -1, -1)
 
+        # Issue #20: pass U_q so the full hybridisation operator H is applied.
         Q, rho_plus, rho_minus = self.vibrational(
             x,
             L_f=L_f_wave,
             Lambda_tau=clock_state.Lambda_tau,
             delta_tau=clock_state.delta_tau,
+            U_q=self.U_q,
         )
         self._last_rho_plus = rho_plus.detach().clone()
         self._last_rho_minus = rho_minus.detach().clone()
@@ -260,6 +267,8 @@ class ESDM(nn.Module):
         # Decoder-collapse: recon below 1e-3 means the diffusion decoder
         # has collapsed to a constant output (trivial ELBO optimum).
         last_recon = float(self._last_recon) if self._last_recon is not None else 1.0
+        # H-operator diagnostics from the vibrational block.
+        h_diag = self.vibrational.diagnostics()
         return {
             "tau_n":            float(c.tau_n),
             "tau_flat":         int(c._flat_steps),
@@ -269,4 +278,6 @@ class ESDM(nn.Module):
             "Lambda_tau":       float(c.Lambda_tau),
             "heat_death":       c.is_heat_death(),
             "decoder_collapsed": last_recon < 1e-3,
+            "net_energy_flow":  h_diag["net_energy_flow"],
+            "pi_contraction_ratio": h_diag["pi_contraction_ratio"],
         }
