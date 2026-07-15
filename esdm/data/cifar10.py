@@ -331,8 +331,12 @@ class CIFAR10DINOLoader:
 
     @property
     def default_lr(self) -> float:
-        """Learning rate that produces stable training on CIFAR-10 DINO-256."""
-        return 3e-4
+        """Learning rate that produces stable training on CIFAR-10 DINO-256.
+
+        Sweep-validated at v0.1.0: lr=0.025 gives fitness 68.23/85
+        (vs 62.33 at lr=0.05 and 55.72 at lr=3e-4). Heat death fires
+        at ~90% of the run."""
+        return 0.025
 
     @property
     def default_n_steps(self) -> int:
