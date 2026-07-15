@@ -63,22 +63,10 @@ def main(argv: list[str] | None = None) -> int:
         help='Diffusion coefficient sigma^2 for H operator (default: 1.0).',
     )
     parser.add_argument(
-        "--eta",
-        type=float,
-        default=None,
-        help='Rayleigh gradient step size eta for H operator (default: 0.1).',
-    )
-    parser.add_argument(
         "--freeze-h",
         action="store_true",
         default=False,
         help='Freeze H operator params (sigma^2, eta) for ablation.',
-    )
-    parser.add_argument(
-        "--tau-max-est",
-        type=float,
-        default=None,
-        help='Entropic time horizon in nat units (default: 10.0, or 150.0 when H is active).',
     )
     args = parser.parse_args(argv)
 
@@ -89,9 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed": 3407,
         "q": args.q,
         "sigma_sq": args.sigma_sq,
-        "eta": args.eta,
         "freeze_h": args.freeze_h,
-        "tau_max_est": args.tau_max_est,
     }
 
     if args.dataset == "mnist":

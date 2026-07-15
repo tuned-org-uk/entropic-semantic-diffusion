@@ -55,10 +55,10 @@ class ESDM(nn.Module):
         self.dim_latent = cfg["model"]["dim_latent"]
         self.n_nodes = cfg["model"]["n_nodes"]
         self.n_modes = cfg["model"]["n_modes"]
-        self.mode_threshold = cfg["model"].get("mode_threshold", 0.01)
+        # Mode threshold is derived per-batch as median(omega), not a fixed constant.
+        # See 001-IMPLEMENTATION-PLAN.md §3.1.
         self.lam_s = cfg["model"].get("lam_s", 1.0)
-        self.tau_max_est = cfg["clock"].get("tau_max_est", 10.0)
-
+        
 
         self.clock = EntropicClock(
             eps=cfg["clock"]["eps"],
@@ -78,32 +78,9 @@ class ESDM(nn.Module):
         self.register_buffer("_last_rho_plus", torch.eye(1))
         self.register_buffer("_last_rho_minus", torch.eye(1))
 
-        # Sub-modules
-        self.spectral_decoder = SpectralLoadingDecoder(
-            q=self.dim_latent,
-            d=self.n_nodes,
-        )
-        self.vibrational = VibrationalStateBlock(
-            dim=self.dim_input,
-            n_heads=1,
-            n_steps=cfg["model"]["n_vibrational_steps"],
-            gamma=cfg["model"]["gamma"],
-            sigma_sq=cfg["model"].get("sigma_sq", 1.0),
-            eta=cfg["model"].get("eta", 0.1),
-            freeze_h=cfg["model"].get("freeze_h", False),
-        )
-        self.diffusion_decoder = EntropicDiffusionDecoder(
-            dim=self.dim_input,
-        )
-
-        # Variational encoder: x -> (mu, logvar) for the spectral decoder.
-        # Fix 3: kl_z is now the standard Gaussian VAE KL, not zero.
-        self.enc_mu = nn.Linear(self.dim_input, self.dim_latent)
-        self.enc_logvar = nn.Linear(self.dim_input, self.dim_latent)
-
-        # Frozen spectral basis and base Laplacian for the smoke path.
-        # If a real feature-space Laplacian L_F is provided in the config,
-        # use it as L_base and derive U_q / eigvals_q from its eigenvectors.
+        # Frozen spectral basis and base Laplacian.
+        # Process L_base BEFORE creating the vibrational block so that
+        # eta_init can be derived from L_F's spectral scale.
         L_base_cfg = cfg["model"].get("L_base", None)
         if L_base_cfg is not None:
             L_base = torch.as_tensor(L_base_cfg, dtype=torch.float32)
@@ -119,6 +96,8 @@ class ESDM(nn.Module):
             # Leading eigenvectors are those with smallest eigenvalues.
             self.register_buffer("U_q", vecs[:, :self.dim_latent])
             self.register_buffer("eigvals_q", vals[:self.dim_latent])
+            # lambda_max = largest eigenvalue of L_F (last in ascending order).
+            lambda_max = float(vals[-1].clamp(min=1e-8))
         else:
             self.register_buffer("U_q", torch.randn(self.n_nodes, self.dim_latent))
             self.register_buffer("L_base", torch.eye(self.n_nodes))
@@ -126,6 +105,35 @@ class ESDM(nn.Module):
                 "eigvals_q",
                 torch.linalg.eigvalsh(self.L_base)[:self.dim_latent],
             )
+            lambda_max = 2.0  # upper bound for normalised Laplacian
+
+        # Derive eta_init from L_F spectral scale (NOT a hardcoded constant).
+        # The Rayleigh gradient magnitude scales as 2*lambda_max/||Q||^2.
+        # For pi_contraction_ratio ~ 0.1 (healthy range), eta ~ 0.1*F/(2*lambda_max).
+        # This makes the H operator's initial strength dataset-agnostic.
+        eta_init = 0.1 * self.dim_input / (2.0 * lambda_max)
+
+        # Sub-modules
+        self.spectral_decoder = SpectralLoadingDecoder(
+            q=self.dim_latent,
+            d=self.n_nodes,
+        )
+        self.vibrational = VibrationalStateBlock(
+            dim=self.dim_input,
+            n_heads=1,
+            n_steps=cfg["model"]["n_vibrational_steps"],
+            gamma=cfg["model"]["gamma"],
+            sigma_sq=cfg["model"].get("sigma_sq", 1.0),
+            eta=eta_init,
+            freeze_h=cfg["model"].get("freeze_h", False),
+        )
+        self.diffusion_decoder = EntropicDiffusionDecoder(
+            dim=self.dim_input,
+        )
+
+        # Variational encoder: x -> (mu, logvar) for the spectral decoder.
+        self.enc_mu = nn.Linear(self.dim_input, self.dim_latent)
+        self.enc_logvar = nn.Linear(self.dim_input, self.dim_latent)
 
     # ------------------------------------------------------------------ #
 
@@ -149,7 +157,11 @@ class ESDM(nn.Module):
             log_a, log_b, self.eigvals_q, tau=1.0, a_min=0.1
         )
 
-        active = omega > self.mode_threshold
+        # Per-batch median threshold: ~half the modes are bright, ~half dark.
+        # This ensures dark_entropy > 0 and the two-sector partition is active.
+        # See 001-IMPLEMENTATION-PLAN.md §3.1.
+        mode_threshold = omega.median(dim=-1, keepdim=True).values
+        active = omega > mode_threshold
         inactive = ~active
         kl_tau = (kl_per_mode * active.float()).sum(dim=-1).mean()
         dark_entropy = (kl_per_mode * inactive.float()).sum(dim=-1).mean()
@@ -199,7 +211,10 @@ class ESDM(nn.Module):
             # accumulates raw |Δkl_tau| (not normalised by S_0), so the
             # horizon is in nat units.  10 nats of cumulative KL change is
             # sufficient for alpha_bar to complete its cosine decay.
-            self.clock.tau_max_est.fill_(float(self.tau_max_est))
+            # tau_max_est = 3 * S_0: derived constant from the entropy budget.
+            # With S_0 ~ 52 on CIFAR-10, this gives tau_max ~ 156, spreading
+            # the cosine schedule across the full run. See 001-IMPLEMENTATION-PLAN.md §4.1.
+            self.clock.tau_max_est.fill_(float(self.S_0 * 3.0))
 
         # 4. Entropic clock: update tau, Lambda, delta_tau
         # Raw kl_tau (no S_0 normalisation): normalising by S_0 compressed

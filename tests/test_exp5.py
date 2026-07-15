@@ -45,6 +45,18 @@ class _FakeCIFAR10Loader:
     def test_data(self) -> torch.Tensor:
         return self._test
 
+    @property
+    def eps_rel(self) -> float:
+        return 1e-3
+
+    @property
+    def default_lr(self) -> float:
+        return 3e-4
+
+    @property
+    def default_n_steps(self) -> int:
+        return 800
+
 
 @pytest.fixture
 def fake_loader(monkeypatch):

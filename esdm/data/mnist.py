@@ -156,3 +156,22 @@ class MNISTLoader:
         rng = np.random.default_rng(seed if seed is not None else self.seed)
         idx = rng.integers(0, self._test.shape[0], size=batch_size)
         return self._test[idx]
+    # ------------------------------------------------------------------ #
+    # DatasetAdapter interface (see esdm/data/adapter.py)
+    # ------------------------------------------------------------------ #
+
+    @property
+    def eps_rel(self) -> float:
+        """Relative heat-death threshold for real stochastic batches."""
+        return 1e-3
+
+    @property
+    def default_lr(self) -> float:
+        """Learning rate that produces stable training on MNIST PCA-16."""
+        return 3e-4
+
+    @property
+    def default_n_steps(self) -> int:
+        """Step count at which heat death typically fires on MNIST."""
+        return 800
+

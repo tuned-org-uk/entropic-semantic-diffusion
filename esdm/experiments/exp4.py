@@ -54,22 +54,20 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> 
 
 
 def run_single(
-    n_steps: int = N_STEPS,
-    lr: float = 3e-4,
+    n_steps: int = None,
+    lr: float = None,
     lam_s: float = 1.0,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
     data_dir: Optional[Path | str] = None,
     q: Optional[int] = None,
     sigma_sq: Optional[float] = None,
-    eta: Optional[float] = None,
     freeze_h: bool = False,
-    tau_max_est: Optional[float] = None,
 ) -> pd.DataFrame:
     """
     Run a single Exp-4 training loop on MNIST PCA-16 embeddings.
 
-    Free parameters: n_steps, lr, lam_s, q, sigma_sq, eta, freeze_h.
+    Free parameters: n_steps, lr, lam_s, q, sigma_sq, freeze_h.
     Architecture constants (gamma, n_vibrational_steps, batch_size, grad_clip)
     come from esdm/_configs/default.yaml and AGENTS.md — do not sweep.
     """
@@ -90,18 +88,18 @@ def run_single(
     cfg["model"]["n_modes"] = q_eff
     cfg["training"]["max_steps"] = n_steps
     cfg["model"]["lam_s"] = lam_s
-    cfg["clock"]["eps_rel"] = 1e-3  # enable relative heat-death threshold for stochastic batches
     if sigma_sq is not None:
         cfg["model"]["sigma_sq"] = sigma_sq
-    if eta is not None:
-        cfg["model"]["eta"] = eta
     cfg["model"]["freeze_h"] = freeze_h
-    if tau_max_est is not None:
-        cfg["clock"]["tau_max_est"] = tau_max_est
 
     from ..data.mnist import MNISTLoader
 
     loader = MNISTLoader(pca_dim=DEFAULT_PCA_DIM, data_dir=data_dir or "data/mnist", seed=seed)
+    if n_steps is None:
+        n_steps = loader.default_n_steps
+    if lr is None:
+        lr = loader.default_lr
+    cfg["clock"]["eps_rel"] = loader.eps_rel
     L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
     cfg["model"]["L_base"] = L_F
 
@@ -153,7 +151,7 @@ def run_single(
         if step % cfg["training"].get("log_every", 10) == 0:
             elapsed = time.perf_counter() - run_start
             step_time = elapsed / (step + 1)
-            eta = step_time * (n_steps - step - 1)
+            eta_min = step_time * (n_steps - step - 1)
             logger.info(
                 "Exp4 step=%d/%d loss=%.4f tau_n=%.4f alpha_bar=%.4f Lambda_tau=%.4f heat_death=%s "
                 "nef=%.4e pcr=%.4f "
@@ -161,7 +159,7 @@ def run_single(
                 step, n_steps, row["loss"], row["tau_n"], row["alpha_bar"],
                 row["Lambda_tau"], row["heat_death"],
                 row["net_energy_flow"], row["pi_contraction_ratio"],
-                step_time, eta / 60.0
+                step_time, eta_min / 60.0
             )
         rows.append(row)
         if hc["heat_death"]:

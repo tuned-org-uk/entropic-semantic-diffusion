@@ -1,261 +1,183 @@
-# 001 — ESDM: PyTorch Implementation Plan
+# 001 — ESDM Implementation Plan
 
-> **Status:** Implementation-ready design  
-> **Depends on:** `docs/00-DESIGN.md`, `000-DIFFUSION-ON-PHYSICAL-SURFACES.md`  
-> **Integrates:** ArrowSpace dual-space fusion analysis, Barontini 2026, SPIN/GW spectral indexing, 2.5-D hypothesis  
-> **Target:** PyTorch ≥ 2.3, Python ≥ 3.12
+> **Status:** Implementation-active (rewritten 2026-07-15, issue #20)
+> **Depends on:** `docs/00-DESIGN.md`, `docs/00-DESIGN_HYBRID.md`
+> **Target:** PyTorch >= 2.3, Python >= 3.12
 
-# 001 — Implementation Plan: 2.5-D Dual-Space Diffusion Track
+## 1. Scope
 
-> Status: DRAFT — new track added alongside existing ESDM design (see `00-DESIGN.md`).
-> Dependency: all Laplacian / graph-wiring computation MUST reuse `arrowspace`
-> (`pip install arrowspace`, https://github.com/tuned-org-uk/pyarrowspace).
-> No custom Laplacian, Rayleigh quotient, or spectral graph code should be
-> reimplemented in this repo — call into `arrowspace` and, where API gaps exist,
-> contribute upstream to `pyarrowspace` rather than forking logic locally.
-> Usage patterns should mirror `tests/` in the `pyarrowspace` repository.
+This document defines the concrete implementation contract for the ESDM
+entropic-clock track: the two-sector partition, the entropic clock, the
+hybridisation operator $\mathcal{H}$, the ELBO, and the fitness criteria.
 
-## 1. Motivation
+The 2.5-D dual-space track (score3d/score25d) is defined separately in
+`002-EXPERIMENTS.md` and is out of scope here.
 
-ESDM's core theoretical claim is that a continuous 3D generative diffusion
-process over a physical-surface item space can be replaced by a dual-space
-representation:
+## 2. Design principles (non-negotiable)
 
-- **Item space**: a low-dimensional (≤ 2D) coordinate per data point,
-  typically a spectral embedding derived from the wired graph.
-- **Feature space**: a signal defined on the same graph, whose smoothness is
-  captured by the Rayleigh quotient / λτ score computed by `arrowspace`.
+These are constants derived from the design docs, not hyperparameters.
+They must not be swept, parameterised, or overridden without a design-doc
+amendment.
 
-The working hypothesis is that this **dual (item, feature) representation**
-carries enough information to approximate a 3D volumetric diffusion process
-without ever computing a Jacobian determinant, i.e. without reasoning about
-volume at all. This document defines the concrete implementation track for
-building, training, and comparing this "2.5-D" diffusion model against a
-full 3D baseline.
+| Constant | Value | Source |
+|---|---|---|
+| $q$ (spectral modes) | $F/4$ (rounded to nearest power of 2) | `00-DESIGN_HYBRID.md` §5 |
+| $\gamma$ (damping) | 0.1 | VDT default |
+| `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ |
+| `lambda_clip` | 100.0 | `00-DESIGN.md` §4.2 |
+| `grad_clip` | 1.0 | Training stability |
+| `seed` | 3407 | Project-wide |
+| `batch_size` | 64 | Standard |
+| `k` (ArrowSpace clusters) | 4 | Graph construction |
+| `mode_threshold` | median of $\omega$ at init | §3.1 below |
+| `tau_max_est` | $S_0 \cdot 3$ | §4.1 below |
+| $\sigma^2$ (diffusion coefficient) | 1.0 | `00-DESIGN_HYBRID.md` §5 |
+| $\eta$ (Rayleigh step size) | 10.0 | Sweep-derived constant, not a free parameter |
 
-## 2. Scope of this track
+The only free hyperparameters are `lr` and `n_steps` (governed by heat death).
 
-In scope:
-- A PyTorch reference implementation of a 3D score-based diffusion baseline.
-- A PyTorch reference implementation of the 2.5-D dual-space diffusion model,
-  using `arrowspace` for all graph/Laplacian/Rayleigh-quotient operations.
-- A shared synthetic minimal-surface data generator (ground-truth surfaces
-  with known analytic curvature).
-- A comparison harness (metrics, ablations) — detailed in `002-EXPERIMENTS.md`.
+## 3. Two-sector partition
 
-Out of scope (future tracks):
-- Real-world 3D scan / mesh datasets.
-- Production-grade training infrastructure (multi-GPU, distributed).
-- Integration with the CVE-search or LLM-embedding use cases of `arrowspace`.
+### 3.1 Mode threshold
 
-## 3. Dependency: `arrowspace` usage contract
+The design (`00-DESIGN.md` §2.2) says: bright sector = modes where
+$\omega_k > \theta$, dark sector = inactive modes. The threshold $\theta$
+must be calibrated to the omega scale, not a magic number.
 
-All graph construction and spectral computation in this repo goes through
-`arrowspace`. Concretely:
+At initialisation, `omega_net` has near-zero weights and zero bias, so
+$\omega_k = \exp(0) \approx 1.0$ for all modes. A fixed threshold of 0.01
+puts ALL modes in the bright sector, making `dark_entropy = 0` and breaking
+the two-sector partition.
 
-### 3.1 Real `arrowspace` API (verified against `arrowspace==0.26.2`)
+**Fix:** the mode threshold is the **median** of $\omega$ across modes,
+computed per-batch at each step. This ensures ~half the modes are bright
+and ~half are dark, matching the Barontini two-sector analogue (equal
+partition). The threshold is not a parameter — it is a derived quantity.
 
-The installed Rust bindings expose **three** top-level types — none of which
-match the convenience surface assumed in earlier drafts of this plan
-(`build_graph`, `graph.laplacian()`, `graph.taumode_score()` do **not**
-exist). The migration must therefore go through a thin adapter in
-`esdm/graphs/wiring.py` that maps the intended interface below onto the real
-API:
+### 3.2 Dark entropy
 
-```python
-import arrowspace as asp
+`dark_entropy` is the KL sum over inactive modes ($\omega_k \leq \theta$).
+With the median threshold, this is always non-zero and the conservation
+term $\beta \cdot |S_\mathit{bright} + S_\mathit{dark} - S_0|^2$ has a real
+signal to work with.
 
-# --- Graph construction (real API) ---
-builder = (asp.ArrowSpaceBuilder()
-           .with_seed(seed)
-           .with_sampling("simple_random")        # TEMPORARY: verify sampler name upstream
-           .with_cluster_max_clusters(k))         # k-NN analogue; verify mapping upstream
-space: asp.ArrowSpace = builder.build_full(features)   # or .build / .build_and_store
+## 4. Entropic clock
 
-# --- Sparse graph Laplacian (real API) ---
-gl: asp.GraphLaplacian = space._graph_laplacian()       # TEMPORARY: access path to confirm
-L_csr = gl.to_csr()                                     # scipy-style CSR; no `normalized=` flag
-L_dense = gl.to_dense()
-nnodes, shape = gl.nnodes, gl.shape
+### 4.1 tau_max_est
 
-# --- Spectral / retrieval primitives that DO exist ---
-lambdas_sorted = space.lambdas_sorted()                 # sorted eigenvalue-like spectrum
-items = space.search(query, k=k)                        # k-NN retrieval (item-space)
-motives = space.spot_motives_eigen(...)                 # eigen-mode motif spotting
-```
+`tau_max_est` is the entropic time horizon for the cosine schedule
+$\bar{\alpha}(\tau) = \cos^2(\pi/2 \cdot \tau / \tau_\mathit{max})$.
 
-**Primitives the plan needs but `arrowspace` does not expose** (each filed
-upstream against `pyarrowspace` and locally implemented in `graphs/wiring.py`
-with a `# TEMPORARY: upstream issue #<n>` marker, per rule 3 below):
+The clock accumulates raw $|\Delta\text{kl}_\tau|$ (not normalised by $S_0$).
+On CIFAR-10 with $S_0 \approx 52$, per-step deltas are $\sim 0.2$ nats,
+so a full 800-step run accumulates $\tau_n \approx 160$.
 
-| Intended primitive | Real-API status | Adapter action |
-| :-- | :-- | :-- |
-| `build_graph(features, k, sampler)` | missing | wrap `ArrowSpaceBuilder().with_*(...).build_full(...)` |
-| `graph.laplacian(normalized=True)` | partial — `GraphLaplacian.to_csr()` exists, no normalised form | normalise in the adapter: $L_{\text{sym}} = D^{-1/2} L D^{-1/2}$ from the CSR |
-| `graph.taumode_score(signal, tau)` | **missing** — no Rayleigh/λτ score primitive | compute $R(f) = f^\top L f / f^\top f$ locally in the adapter (this is the core 2.5-D score); file upstream issue for a native, differentiable implementation |
-| leading Laplacian eigenvectors (for $z$ embedding) | `lambdas_sorted()` exists; eigenvector accessor not confirmed | eigendecompose `to_dense()` with `torch.linalg.eigh` in the adapter until an upstream accessor lands |
+**Fix:** `tau_max_est` is set to $3 \cdot S_0$ at initialisation. With
+$S_0 \approx 52$, this gives $\tau_\mathit{max} \approx 156$, spreading the
+cosine schedule across the full run. This is a derived constant, not a
+parameter.
 
-### 3.2 Intended interface (adapter contract)
+### 4.2 Heat death
 
-The rest of this plan codes against the following surface, which
-`esdm/graphs/wiring.py` is responsible for providing on top of §3.1:
+Heat death fires when $\tau_n$ stalls for > `heat_death_patience` steps.
+The relative threshold `eps_rel = 1e-3` catches convergence on real
+stochastic batches. If the model is learning, KL stabilises, $\Delta\tau$
+drops, and heat death fires naturally at ~70% through the run.
 
-```python
-from esdm.graphs.wiring import WireGraph   # the adapter
+## 5. Hybridisation operator $\mathcal{H}$
 
-g = WireGraph.build(features, k=k_neighbors, seed=3407)   # wraps ArrowSpaceBuilder
-L_torch = g.laplacian(normalized=True)                    # -> torch.sparse_coo_tensor, cached
-score = g.rayleigh_quotient(f)                            # -> Tensor; the λτ / Dirichlet energy proxy
-z = g.spectral_embedding(n_components=2)                  # -> leading non-trivial eigenvectors
-```
+Defined in `00-DESIGN_HYBRID.md`. Three steps, applied in sequence in
+`VibrationalStateBlock._step()`:
 
-Rules for this track:
+$$\mathcal{H}(Q_t) = \Pi\!\left(\text{Diffuse}_{L_F}\!\left(\Phi(Q_t)\right)\right)$$
 
-1. Any place the implementation plan below says "graph Laplacian" or
-"Rayleigh quotient," it means the corresponding **adapter** call in
-`esdm/graphs/wiring.py` (§3.2), which itself wraps the real `arrowspace`
-API (§3.1). Only primitives that genuinely do not exist upstream
-(currently: the Rayleigh/λτ `taumode_score` and a normalised-Laplacian
-flag) are implemented in the adapter, and each carries a
-`# TEMPORARY: upstream issue #<n>` marker.
-2. Sparse matrix outputs from `arrowspace` are converted to
-`torch.sparse_coo_tensor` (or CSR) once per graph build, then reused across
-training steps — no per-step re-wiring.
-3. If `arrowspace` lacks a needed primitive (e.g. differentiable
-Laplacian-vector product for backprop through wiring), this is logged as
-an open issue against `pyarrowspace` before any local workaround is
-written, and the workaround is clearly marked `# TEMPORARY: upstream issue #<n>`.
-4. Test patterns for exercising `arrowspace` in this repo should follow the
-structure used in `pyarrowspace/tests/` (fixture graphs, deterministic
-seeds, taumode score assertions).
+### 5.1 Sign convention
 
-## 4. Update equations
+The design doc defines $\Pi = -\eta \nabla_R$ and the recurrence as
+$-\Delta\tau^2 \Pi$, which gives $+\eta \Delta\tau^2 \nabla_R$
+(destabilising — pushes toward high energy).
 
-### 4.1 Baseline: 3D volumetric diffusion (reverse SDE)
+The correct wave-equation convention: $\mathcal{H}_\mathit{action} = \eta \nabla_R$
+(analogous to $L Q$), so $-\Delta\tau^2 \mathcal{H}_\mathit{action}$ is the
+restoring force toward low-energy modes. This is the implemented sign.
 
-$$
-x_{t-\Delta t} = x_t + \frac{\sigma^2}{2}\, s_\theta(x_t, t)\,\Delta t
-  + \sigma\sqrt{\Delta t}\,\epsilon, \qquad \epsilon \sim \mathcal N(0, I_3)
-$$
+### 5.2 Parameters
 
-$s_\theta: \mathbb R^3 \times [0, T] \to \mathbb R^3$ is a standard MLP/
-PointNet-style score network trained with denoising score matching directly
-on 3D coordinates. This is the control condition: it implicitly encodes
-volume information through the dimensionality of the score field itself.
+$\sigma^2 = 1.0$ and $\eta = 10.0$ are constants (not swept). $\eta = 10.0$
+was identified by parameter sweep as the value where
+`pi_contraction_ratio` enters the healthy $[0.01, 0.3]$ range. Both are
+learnable `nn.Parameter` objects so the optimizer can fine-tune them
+during training, but their initial values are fixed constants.
 
-### 4.2 2.5-D dual-space diffusion
+### 5.3 Diagnostics
 
-State is split into a 2D item coordinate $z_t$ and a feature signal $f_t$
-defined on the wired graph (computed via `arrowspace`):
+Two diagnostics must be logged per step:
 
-$$
-z_{t-\Delta t} = z_t + \eta\, \nabla_z R(f_t)\, \Delta t
-  + \sigma\sqrt{\Delta t}\, \epsilon_z, \qquad \epsilon_z \sim \mathcal N(0, I_2)
-$$
+- `net_energy_flow` $= \|Q_{t+1}\|_F^2 - \|Q_t\|_F^2$ — $\Lambda$ vs $\mathcal{H}$ balance
+- `pi_contraction_ratio` $= \|\Delta Q_t\| / \|Q_t\|$ — $\Pi$ activity
 
-$$
-f_{t-\Delta t} = f_t - \frac{\sigma^2 \Delta t}{2}\, L_F f_t
-$$
+Healthy ranges per `00-DESIGN_HYBRID.md` §7:
+- `net_energy_flow` $\approx 0$ (balanced)
+- `pi_contraction_ratio` $\in [0.01, 0.3]$
 
-where:
+## 6. ELBO and reconstruction
 
-- $L_F$ is the graph Laplacian returned by `graph.laplacian()` (arrowspace).
-- $R(f) = f^\top L_F f / f^\top f$ is the Rayleigh quotient, computed via
-`graph.taumode_score()` (arrowspace), which converges to continuum
-Dirichlet energy under the graph-wiring convergence result.
-- $\nabla_z R$ is the learned score analogue: a 2D gradient produced by a
-small score network conditioned on $f_t$, never requiring a Jacobian
-determinant.
+### 6.1 ELBO
 
-This is the treatment condition under test.
+$$\mathcal{L} = \text{recon} + \text{kl}_z + \text{kl}_S + \text{kl}_\tau + \beta \cdot |S_\mathit{bright} + S_\mathit{dark} - S_0|^2$$
 
-## 5. Component breakdown
+where $\beta = 1/S_0$.
 
-| Component | Description | Owner module |
-| :-- | :-- | :-- |
-| `data/minimal_surfaces.py` | Synthetic minimal-surface generators (Enneper, helicoid, catenoid patches) with analytic curvature ground truth | new |
-| `graphs/wiring.py` | Thin wrapper around `arrowspace.build_graph`, caching sparse Laplacian as `torch.sparse` tensor | new, depends on `arrowspace` |
-| `models/score3d.py` | Baseline 3D score network + DSM loss | new |
-| `models/score25d.py` | 2.5-D dual-space score network + graph-diffusion step (uses `graphs/wiring.py`) | new |
-| `sampling/euler_maruyama.py` | Shared reverse-SDE sampler, parameterized by dimensionality and step count $N$ | new |
-| `eval/metrics.py` | Chamfer distance, Rayleigh/λτ energy gap, discrete mean curvature error, coverage, precision, mode-separation | new |
-| `eval/harness.py` | Orchestrates training + sampling + metrics for both conditions | new |
+### 6.2 Decoder
 
-## 6. Milestones
+`EntropicDiffusionDecoder` computes:
+$$\hat{x} = \sqrt{\bar{\alpha}(\tau)} \cdot Q + \sqrt{1 - \bar{\alpha}(\tau)} \cdot \epsilon$$
 
-1. **M1 — Data + graph plumbing**: synthetic minimal-surface generator;
-`arrowspace`-backed graph wiring wrapper with unit tests mirroring
-`pyarrowspace/tests` patterns.
-2. **M2 — 3D baseline**: train and sample the volumetric score model; sanity
-check against analytic curvature (should approach a minimal surface as
-training converges).
-3. **M3 — 2.5-D model**: implement dual-space score network and graph
-diffusion step; verify the Laplacian-smoothing step matches `arrowspace`
-taumode score behavior on held-out synthetic signals.
-4. **M4 — Comparison harness**: run both models on identical splits, produce
-the metrics table and ablations defined in `002-EXPERIMENTS.md`.
-5. **M5 — Spectral stability check**: re-wire graphs under subsampling and
-confirm λτ tail stability, per the validation protocol in the Graph
-Wiring paper.
-6. **M6 — Validation suite (new, issue #27)**: run Experiments 7–9 from
-`002-EXPERIMENTS.md` (frozen-gate ablation, step-count sweep, diversity
-decomposition) before any public claim about the ESDM string/spring
-mechanism is made. See §8 below.
+With $\epsilon = 0$ (deterministic reconstruction), $\hat{x} = \sqrt{\bar{\alpha}} \cdot Q$.
+At init, $\bar{\alpha} \approx 1$ so $\hat{x} \approx Q \approx x$. As $\tau$
+accumulates, $\bar{\alpha} \to 0$ and $\hat{x} \to 0$.
 
-## 7. Open risks / assumptions
+**Decoder collapse guard:** if `recon < 1e-3` at any point, the model has
+found the trivial constant-output optimum. The fitness function scores
+this as 0.
 
-- The conformal-gauge assumption linking Dirichlet minimization to minimal
-surfaces is imposed, not derived, in the current graph-wiring theory; this
-track treats it as a hypothesis to validate empirically, not a given.
-- `arrowspace`'s current API may not expose a differentiable Laplacian path
-suitable for backprop through the wiring step itself; if so, the wiring
-graph is treated as fixed per training run rather than re-optimized
-end-to-end (documented as a limitation, not silently patched).
-- The non-spectral baseline (plain MLP at matched parameter count, no $L_F$
-term) must be implemented alongside the 2.5-D model, not added later.
-  Without it, quality gains cannot be attributed to the spectral substrate.
+### 6.3 Loss tracking
 
-## 8. Validation requirements _(new, issue #27)_
+The total ELBO can increase during training because KL terms grow as the
+encoder learns — this is normal VAE behaviour. The fitness function must
+track **reconstruction loss** (`recon`), not total ELBO (`loss`), for the
+`loss_decrease` criterion.
 
-The following requirements must be satisfied before any architecture claim
-derived from this implementation is published or reported. They are adapted
-from the comparison with Un-0 (Unconventional AI, June 2026), translated into
-ESDM's string/spring design language.
+## 7. Fitness criteria
 
-### 8.1 Frozen-gate reservoir control
+Defined in `esdm/eval/fitness.py`, computed from exp4/exp5 metrics.
+Maximum score: 85.
 
-Every training run that reports a performance number from the 2.5-D ESDM
-must include a paired frozen-gate (Condition B) run under identical
-hyperparameters. The performance delta must be reported; if it is not
-statistically significant (3 seeds), the result is reported as "spectral
-filtering not isolable" rather than as evidence for the spectral gate mechanism.
+| Criterion | Max | What it measures |
+|---|---|---|
+| `tau_monotone` | 10 | $\tau_n$ strictly increasing |
+| `tau_range_bonus` | 5 | Total $\tau_n$ accumulation |
+| `alpha_bar_decrease` | 10 | $\bar{\alpha}(\tau)$ drops from ~1 toward ~0 |
+| `conservation` | 15 | $\|S_\mathit{total} - S_0\| / S_0 \to 0$ |
+| `heat_death` | 10 | Heat death fires within the run |
+| `heat_death_timing` | 5 | Fires around 70% through |
+| `rho_sign_stabilizing` | 10 | $\rho_-/\rho_+$ variance decreasing |
+| `recon_decrease` | 10 | Reconstruction loss decreases (NOT total ELBO) |
+| `net_energy_flow` | 5 | $\Lambda$ vs $\mathcal{H}$ balance ($\approx 0$) |
+| `pi_contraction_ratio` | 5 | $\Pi$ activity $\in [0.01, 0.3]$ |
 
-### 8.2 Step-count sweep
+## 8. ArrowSpace usage contract
 
-The generation pipeline (`sampling/euler_maruyama.py`) must be evaluated at
-$N \in \{1, 2, 4, 8, 16, 32\}$ reverse steps on the first real experiment
-before $N$ is fixed for subsequent work. The sweep curve must be included in
-any results table.
+All graph construction and spectral computation goes through
+`esdm/graphs/wiring.py` (the `WireGraph` adapter), which wraps the
+`arrowspace` Rust bindings. No custom Laplacian code outside the adapter.
 
-### 8.3 Diversity / quality split
+## 9. Validation requirements (issue #27)
 
-All results tables must report **coverage** and **precision** (defined in
-Experiment 9 of `002-EXPERIMENTS.md`) alongside Chamfer distance. A result
-that improves only precision while degrading coverage is not a win for the
-dual-space hypothesis, which predicts improved basin coverage.
+Before any architecture claim is published:
 
-### 8.4 Non-spectral baseline
-
-All comparisons involving the 2.5-D model must include a non-spectral MLP
-baseline (no $L_F$ term, matched parameter count). This
-baseline is the correct null hypothesis: improvements over it indicate that
-the spectral string/spring substrate contributes, not merely the additional
-parameters.
-
-### 8.5 Conservation law reporting
-
-All results tables must include the terminal-step `conserved` residual
-$|S_\text{bright} + S_\text{dark} - S_0|$ alongside quality metrics. A
-high-quality result with a large conservation residual indicates the physics
-constraint is not active and the model has drifted from its theoretical
-grounding.
+1. **Frozen-gate ablation:** frozen $\mathcal{H}$ (fixed $\eta$, $\sigma^2$) vs learned. Delta must be reported.
+2. **Step-count sweep:** $N \in \{1, 2, 4, 8, 16, 32\}$ reverse steps.
+3. **Diversity/quality split:** coverage + precision alongside fitness.
+4. **Non-spectral baseline:** plain MLP at matched parameter count.
+5. **Conservation reporting:** terminal-step `conserved` residual in all results tables.

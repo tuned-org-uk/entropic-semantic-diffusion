@@ -1,25 +1,21 @@
 # Default ESDM configuration
-# Architecture constants per AGENTS.md — do NOT sweep these.
+# Architecture constants per 001-IMPLEMENTATION-PLAN.md §2 — do NOT sweep.
 # The only free hyperparameters are lr and n_steps (governed by heat death).
-# lam_s is the treatment variable for the autoresearch loop.
 
 model:
   dim_input: 256          # embedding dimension F (overridden per experiment)
   dim_latent: 64          # VAE latent dimension q = F/4 (overridden per experiment)
   n_nodes: 256            # corpus node count N (overridden per experiment)
   n_modes: 32             # number of spectral modes tracked (overridden per experiment)
-  mode_threshold: 0.01    # threshold for classifying a spectral mode as active
   lam_s: 1.0              # precision multiplier for spectral-basis prior (barrier height)
   n_vibrational_steps: 2  # VDT recurrence depth (CFL-safe for real L_F)
   gamma: 0.1              # vibrational damping coefficient (VDT default)
-  sigma_sq: 1.0            # diffusion coefficient for H operator (issue #20)
-  eta: 10.0               # Rayleigh gradient step size for H operator (issue #20)
-  freeze_h: false          # freeze H params for ablation (issue #20 §4)
+  sigma_sq: 1.0           # diffusion coefficient for H operator (constant, 00-DESIGN_HYBRID.md §5)
+  freeze_h: false         # freeze H params for ablation (issue #20 §4)
 
 clock:
-  eps: 1.0e-8         # absolute entropy-flow threshold (synthetic data)
-  eps_rel: 0.0        # relative threshold delta_tau/tau_n (0=disabled; set 1e-3 for real data)
-
+  eps: 1.0e-8             # absolute entropy-flow threshold (synthetic data)
+  eps_rel: 0.0            # relative threshold delta_tau/tau_n (0=disabled; set 1e-3 for real data)
   heat_death_patience: 200
   lambda_clip: 100.0      # maximum allowed Lambda_tau
 
@@ -36,4 +32,3 @@ paths:
   lf_pt: data/L_F.pt
   v_pt:  data/V.pt
   output_dir: results/
-  tau_max_est: 150.0      # entropic time horizon (in nat units); matches H operator dynamics

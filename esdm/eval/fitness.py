@@ -88,14 +88,18 @@ def compute_fitness_real(metrics: pd.DataFrame) -> dict:
         last_var = float(np.var(rs[-n // 3 :]))
         scores["rho_sign_stabilizing"] = 10.0 if last_var < first_var else 0.0
 
-    # Reconstruction/ELBO progress.
-    loss = metrics["loss"].to_numpy()
-    loss_drop = float(loss[0] - loss[-1])
-    scores["loss_decrease"] = (
-        min(10.0, max(0.0, (loss_drop / (abs(loss[0]) + 1e-8)) * 10.0))
-        if loss[0] != 0
-        else 0.0
-    )
+    # Reconstruction progress (NOT total ELBO — KL grows intentionally in VAE).
+    # See 001-IMPLEMENTATION-PLAN.md §6.3.
+    if "recon" in metrics.columns:
+        recon = metrics["recon"].to_numpy()
+        recon_drop = float(recon[0] - recon[-1])
+        scores["recon_decrease"] = (
+            min(10.0, max(0.0, (recon_drop / (abs(recon[0]) + 1e-8)) * 10.0))
+            if recon[0] != 0
+            else 0.0
+        )
+    else:
+        scores["recon_decrease"] = 0.0
 
     # --- Issue #20: Hybridisation operator diagnostics ---
 
