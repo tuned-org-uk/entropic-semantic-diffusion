@@ -164,7 +164,15 @@ class ESDM(nn.Module):
         active = omega > mode_threshold
         inactive = ~active
         kl_tau = (kl_per_mode * active.float()).sum(dim=-1).mean()
-        dark_entropy = (kl_per_mode * inactive.float()).sum(dim=-1).mean()
+        # Dark entropy: the KL sum over inactive modes. Once S_0 is
+        # initialised, this is bounded as the residual S_0 - S_bright
+        # to structurally enforce conservation (00-DESIGN.md §2.3).
+        dark_entropy_raw = (kl_per_mode * inactive.float()).sum(dim=-1).mean()
+        if self.S_0 is not None:
+            # Bound: dark = max(0, S_0 - kl_S - kl_tau)
+            dark_entropy = (self.S_0 - kl_S.detach() - kl_tau.detach()).clamp(min=0.0)
+        else:
+            dark_entropy = dark_entropy_raw
 
         log_lam_s = torch.log(omega.mean().clamp(min=1e-8))
         N_active = active.float().sum(dim=-1).mean()
