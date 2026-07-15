@@ -57,6 +57,7 @@ class ESDM(nn.Module):
         self.n_modes = cfg["model"]["n_modes"]
         self.mode_threshold = cfg["model"].get("mode_threshold", 0.01)
         self.lam_s = cfg["model"].get("lam_s", 1.0)
+        self.tau_max_est = cfg["clock"].get("tau_max_est", 10.0)
 
 
         self.clock = EntropicClock(
@@ -198,7 +199,7 @@ class ESDM(nn.Module):
             # accumulates raw |Δkl_tau| (not normalised by S_0), so the
             # horizon is in nat units.  10 nats of cumulative KL change is
             # sufficient for alpha_bar to complete its cosine decay.
-            self.clock.tau_max_est.fill_(10.0)
+            self.clock.tau_max_est.fill_(float(self.tau_max_est))
 
         # 4. Entropic clock: update tau, Lambda, delta_tau
         # Raw kl_tau (no S_0 normalisation): normalising by S_0 compressed

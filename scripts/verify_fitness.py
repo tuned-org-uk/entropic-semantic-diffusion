@@ -74,6 +74,12 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help='Freeze H operator params (sigma^2, eta) for ablation.',
     )
+    parser.add_argument(
+        "--tau-max-est",
+        type=float,
+        default=None,
+        help='Entropic time horizon in nat units (default: 10.0, or 150.0 when H is active).',
+    )
     args = parser.parse_args(argv)
 
     kwargs = {
@@ -85,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         "sigma_sq": args.sigma_sq,
         "eta": args.eta,
         "freeze_h": args.freeze_h,
+        "tau_max_est": args.tau_max_est,
     }
 
     if args.dataset == "mnist":

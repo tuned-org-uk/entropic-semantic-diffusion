@@ -64,6 +64,7 @@ def run_single(
     sigma_sq: Optional[float] = None,
     eta: Optional[float] = None,
     freeze_h: bool = False,
+    tau_max_est: Optional[float] = None,
 ) -> pd.DataFrame:
     """
     Run a single Exp-4 training loop on MNIST PCA-16 embeddings.
@@ -95,6 +96,8 @@ def run_single(
     if eta is not None:
         cfg["model"]["eta"] = eta
     cfg["model"]["freeze_h"] = freeze_h
+    if tau_max_est is not None:
+        cfg["clock"]["tau_max_est"] = tau_max_est
 
     from ..data.mnist import MNISTLoader
 
