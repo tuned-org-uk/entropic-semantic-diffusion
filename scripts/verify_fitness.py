@@ -50,6 +50,12 @@ def main(argv: list[str] | None = None) -> int:
         default=1000,
         help='CIFAR-10 PCA-fit subset size (default: 1000).',
     )
+    parser.add_argument(
+        "--lam-s",
+        type=float,
+        default=1.0,
+        help='Spectral prior precision multiplier (default: 1.0).',
+    )
     args = parser.parse_args(argv)
 
     if args.dataset == "exp3":
@@ -79,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
             max_train_samples=args.max_train_samples,
             max_test_samples=200,
             pca_fit_samples=args.pca_fit_samples,
+            lam_s=args.lam_s,
         )
         r = compute_fitness_real(m)
     else:

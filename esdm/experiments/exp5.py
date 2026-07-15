@@ -73,6 +73,7 @@ def run_single(
     grad_clip: Optional[float] = 1.0,
     n_vibrational_steps: int = 2,
     gamma: float = 0.1,
+    lam_s: float = 1.0,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
     data_dir: Optional[Path | str] = None,
@@ -109,6 +110,7 @@ def run_single(
     cfg["training"]["batch_size"] = batch_size
     cfg["model"]["n_vibrational_steps"] = n_vibrational_steps
     cfg["model"]["gamma"] = gamma
+    cfg["model"]["lam_s"] = lam_s
 
     loader = CIFAR10DINOLoader(
         output_dim=DEFAULT_OUTPUT_DIM,
