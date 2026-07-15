@@ -161,17 +161,29 @@ class MNISTLoader:
     # ------------------------------------------------------------------ #
 
     @property
+    def _config(self) -> dict:
+        from .._configs.loader import load_dataset_config
+        if not hasattr(self, "_cached_config"):
+            self._cached_config = load_dataset_config("mnist")
+        return self._cached_config
+
+    @property
     def eps_rel(self) -> float:
         """Relative heat-death threshold for real stochastic batches."""
-        return 1e-3
+        return self._config["training"]["eps_rel"]
 
     @property
     def default_lr(self) -> float:
         """Learning rate that produces stable training on MNIST PCA-16."""
-        return 3e-4
+        return self._config["training"]["default_lr"]
 
     @property
     def default_n_steps(self) -> int:
         """Step count at which heat death typically fires on MNIST."""
-        return 800
+        return self._config["training"]["default_n_steps"]
+
+    @property
+    def graph_params(self) -> dict:
+        """ArrowSpace tuner-discovered graph parameters (from dataset config)."""
+        return self._config["graph_params"]
 

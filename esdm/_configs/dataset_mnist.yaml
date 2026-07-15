@@ -1,0 +1,18 @@
+# MNIST PCA-16 dataset adapter configuration
+# Tuned once via arrowspace_tuner, cached per dataset.
+# Do not re-tune unless the embedding pipeline or data changes.
+
+dataset:
+  name: mnist
+  embedding: pca16
+  dim_input: 16
+
+graph_params:
+  eps: null    # pending tuner run
+  k: null
+  tau: null
+
+training:
+  default_lr: 0.003
+  default_n_steps: 800
+  eps_rel: 0.001

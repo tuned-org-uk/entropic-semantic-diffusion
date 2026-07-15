@@ -325,21 +325,29 @@ class CIFAR10DINOLoader:
     # ------------------------------------------------------------------ #
 
     @property
+    def _config(self) -> dict:
+        from .._configs.loader import load_dataset_config
+        if not hasattr(self, "_cached_config"):
+            self._cached_config = load_dataset_config("cifar10")
+        return self._cached_config
+
+    @property
     def eps_rel(self) -> float:
         """Relative heat-death threshold for real stochastic batches."""
-        return 1e-3
+        return self._config["training"]["eps_rel"]
 
     @property
     def default_lr(self) -> float:
-        """Learning rate that produces stable training on CIFAR-10 DINO-256.
-
-        Sweep-validated at v0.1.0: lr=0.025 gives fitness 68.23/85
-        (vs 62.33 at lr=0.05 and 55.72 at lr=3e-4). Heat death fires
-        at ~90% of the run."""
-        return 0.025
+        """Learning rate validated by parameter sweep on CIFAR-10 DINO-256."""
+        return self._config["training"]["default_lr"]
 
     @property
     def default_n_steps(self) -> int:
         """Step count at which heat death typically fires on CIFAR-10."""
-        return 800
+        return self._config["training"]["default_n_steps"]
+
+    @property
+    def graph_params(self) -> dict:
+        """ArrowSpace tuner-discovered graph parameters (from dataset config)."""
+        return self._config["graph_params"]
 

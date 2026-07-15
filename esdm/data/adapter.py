@@ -76,3 +76,17 @@ class DatasetAdapter(Protocol):
     def default_n_steps(self) -> int:
         """Step count at which heat death typically fires on this data."""
         ...
+
+    @property
+    def graph_params(self) -> dict:
+        """
+        ArrowSpace tuner-discovered graph parameters for this dataset.
+
+        Cached after a single tuner run. Contains:
+        - eps: epsilon for ArrowSpace lambda graph
+        - k: k-NN parameter
+        - tau: tau mode parameter
+
+        If empty dict, the tuner runs on first use and caches here.
+        """
+        ...

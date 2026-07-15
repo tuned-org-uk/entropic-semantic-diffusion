@@ -52,7 +52,8 @@ class WireGraph:
 
     # ------------------------------------------------------------------ #
     @classmethod
-    def build(cls, features: Tensor, k: int = 4, seed: int = 3407, mode: str = "feature") -> "WireGraph":
+    def build(cls, features: Tensor, k: int = 4, seed: int = 3407, mode: str = "feature",
+              graph_params: dict | None = None) -> "WireGraph":
         """Build a graph Laplacian via ArrowSpace.
 
         Parameters
@@ -67,10 +68,15 @@ class WireGraph:
         mode : str
             "feature" — ArrowSpace returns (F, F) feature-space Laplacian.
             "item" — k-NN Laplacian on item rows, returns (N, N).
+        graph_params : dict, optional
+            Pre-tuned ArrowSpace parameters (eps, k, tau) from the dataset
+            adapter config. When provided, skips the arrowspace_tuner run.
+            When None, runs the tuner (slow — should only happen once per
+            dataset to discover the params, then cached in the config).
         """
         if mode == "feature" and _HAS_ASP:
             items_np = features.detach().cpu().to(torch.float64).numpy()
-            L = cls._arrowspace_laplacian(items_np, k=k, seed=seed)
+            L = cls._arrowspace_laplacian(items_np, k=k, seed=seed, graph_params=graph_params)
         else:
             L = cls._knn_laplacian_fallback(features, k=k, seed=seed)
         L = L.to(dtype=torch.float32)
@@ -78,21 +84,34 @@ class WireGraph:
         return cls(laplacian_dense=L, laplacian_sym=L_sym, features=features, nnz=int((L != 0).sum()))
 
     @staticmethod
-    def _arrowspace_laplacian(items_np: np.ndarray, k: int, seed: int) -> Tensor:
-        """Build L_F via the real ArrowSpace Rust bindings, with tuner-discovered graph_params."""
-        import arrowspace_tuner as arrowspace
+    def _arrowspace_laplacian(items_np: np.ndarray, k: int, seed: int,
+                               graph_params: dict | None = None) -> Tensor:
+        """Build L_F via the real ArrowSpace Rust bindings.
 
-        # use arrowspace_tuner to find the best graph parameters and generate
-        # the arrospace's graph Laplacian
-        # Narrow k search around the caller-specified k, still auto-tuning eps/tau.
-        _, gl = arrowspace.optuna(
-            embeddings=items_np,
-            seed=seed,
-            k_low=max(3, k - 5),
-            k_high=k + 5,
-        )
+        When graph_params is provided (eps, k, tau from the dataset config),
+        uses them directly — no tuner run. When None, runs arrowspace_tuner
+        to discover the best params (slow; should only happen once per dataset).
+        """
+        import arrowspace as asp
 
-        L_np = np.array(gl.to_dense())
+        if graph_params and graph_params.get("eps") is not None:
+            # Use cached params directly — no tuner run.
+            builder = (asp.ArrowSpaceBuilder()
+                       .with_seed(seed)
+                       .with_sampling("simple", 1.0))
+            _, gl = builder.build_full(graph_params=graph_params, items=items_np)
+            L_np = np.array(gl.to_dense())
+        else:
+            # First-time tuning: run arrowspace_tuner to discover params.
+            import arrowspace_tuner as arrowspace
+            _, gl = arrowspace.optuna(
+                embeddings=items_np,
+                seed=seed,
+                k_low=max(3, k - 5),
+                k_high=k + 5,
+            )
+            L_np = np.array(gl.to_dense())
+
         return torch.from_numpy(L_np)
 
 

@@ -57,6 +57,10 @@ class _FakeCIFAR10Loader:
     def default_n_steps(self) -> int:
         return 800
 
+    @property
+    def graph_params(self) -> dict:
+        return {}
+
 
 @pytest.fixture
 def fake_loader(monkeypatch):
