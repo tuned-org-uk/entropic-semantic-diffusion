@@ -1,21 +1,13 @@
-# CIFAR-10 DINO-256 dataset adapter configuration
-# Tuned once via arrowspace_tuner, cached per dataset.
-# Do not re-tune unless the embedding pipeline or data changes.
-
 dataset:
   name: cifar10
   embedding: dino-vits16-pca256
   dim_input: 256
-
 graph_params:
   eps: 3.66073
   k: 18
   tau: 0.166
-
 training:
   default_lr: 0.025
   default_n_steps: 800
-  eps_rel: 0.001
-
-# S_0 baseline (from first forward pass, for reference)
-# S_0: 52.10
+  eps_rel: 0.002
+  heat_death_patience: 50

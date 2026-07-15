@@ -90,3 +90,12 @@ class DatasetAdapter(Protocol):
         If empty dict, the tuner runs on first use and caches here.
         """
         ...
+
+    @property
+    def heat_death_patience(self) -> int:
+        """
+        Number of consecutive flat-clock steps before declaring heat death.
+
+        Dataset-specific: depends on batch KL variance and convergence rate.
+        """
+        ...

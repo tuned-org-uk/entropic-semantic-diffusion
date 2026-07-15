@@ -78,7 +78,10 @@ def compute_fitness_real(metrics: pd.DataFrame) -> dict:
     scores["heat_death"] = 10.0 if hd > 0 else 0.0
     if hd > 0:
         hd_step = int(metrics[metrics[hd_col] == 1]["step"].iloc[0])
-        frac = hd_step / n
+        # Use planned n_steps (not actual run length) for the fraction,
+        # since the run stops when heat death fires.
+        n_planned = int(metrics["n_steps"].iloc[0]) if "n_steps" in metrics.columns else n
+        frac = hd_step / n_planned
         scores["heat_death_timing"] = max(0.0, 5.0 * (1.0 - abs(frac - 0.7) * 2))
 
     # Rho-sign stabilisation.

@@ -15,4 +15,5 @@ graph_params:
 training:
   default_lr: 0.003
   default_n_steps: 800
-  eps_rel: 0.001
+  eps_rel: 0.002
+  heat_death_patience: 50

@@ -61,6 +61,10 @@ class _FakeCIFAR10Loader:
     def graph_params(self) -> dict:
         return {}
 
+    @property
+    def heat_death_patience(self) -> int:
+        return 200
+
 
 @pytest.fixture
 def fake_loader(monkeypatch):

@@ -105,6 +105,7 @@ def run_single(
     if lr is None:
         lr = loader.default_lr
     cfg["clock"]["eps_rel"] = loader.eps_rel
+    cfg["clock"]["heat_death_patience"] = loader.heat_death_patience
     L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
     cfg["model"]["L_base"] = L_F
 
@@ -142,6 +143,7 @@ def run_single(
         hc = model.health_check()
         row = {
             "step": step,
+            "n_steps": n_steps,
             "loss": float(out.loss.detach()),
             "tau_n": hc["tau_n"],
             "alpha_bar": float(model.clock.alpha_bar()),

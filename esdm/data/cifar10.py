@@ -351,3 +351,8 @@ class CIFAR10DINOLoader:
         """ArrowSpace tuner-discovered graph parameters (from dataset config)."""
         return self._config["graph_params"]
 
+    @property
+    def heat_death_patience(self) -> int:
+        """Number of consecutive flat-clock steps before declaring heat death."""
+        return self._config["training"]["heat_death_patience"]
+
