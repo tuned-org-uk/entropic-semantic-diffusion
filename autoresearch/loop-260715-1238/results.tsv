@@ -1,0 +1,5 @@
+# metric_direction: higher_is_better
+# verify: .venv/bin/python scripts/verify_fitness.py --dataset cifar10 --n-steps 800 --max-train-samples 2000 --pca-fit-samples 1000
+# guard: .venv/bin/python -m pytest tests/ -q --tb=no
+iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
+0	2026-07-15T12:38:00	82a6a17	46.58	0.0	PASS	118	keep	Post-fix CIFAR-10 2k baseline: lr=3e-4, n_steps=800, wht_filter=none, raw kl_tau clock; tau_n=34.6, alpha_bar->0, recon=0.0039, heat_death=0
