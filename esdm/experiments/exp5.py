@@ -99,6 +99,7 @@ def run_single(
     cfg["model"]["n_modes"] = q
     cfg["training"]["max_steps"] = n_steps
     cfg["model"]["lam_s"] = lam_s
+    cfg["clock"]["eps_rel"] = 1e-3  # enable relative heat-death threshold for stochastic batches
 
     loader = CIFAR10DINOLoader(
         output_dim=DEFAULT_OUTPUT_DIM,

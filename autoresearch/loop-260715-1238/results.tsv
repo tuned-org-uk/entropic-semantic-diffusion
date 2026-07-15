@@ -3,3 +3,7 @@
 # guard: .venv/bin/python -m pytest tests/ -q --tb=no
 iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 0	2026-07-15T12:38:00	82a6a17	46.58	0.0	PASS	118	keep	Post-fix CIFAR-10 2k baseline: lr=3e-4, n_steps=800, wht_filter=none, raw kl_tau clock; tau_n=34.6, alpha_bar->0, recon=0.0039, heat_death=0
+1	2026-07-15T15:48:43	bd72836	47.30	+0.72	PASS	118	keep	lam_s 1.0->5.0: loss 3828, tau_n=21.0, heat_death=0; kl_S dominates loss, marginal fitness gain
+2	2026-07-15T16:00:09	846d9d7	46.58	+0.00	PASS	118	discard	clock eps 1e-8->1e-3: no effect (deltas avg 0.043, still above threshold); heat_death=0
+3	2026-07-15T16:03:34	846d9d7	45.83	-0.75	PASS	118	discard	lr 3e-4->1e-3: loss 39.45->39.11 but tau_n=54.3 (too fast), conservation worsened
+4	2026-07-15T16:07:20	846d9d7	45.80	-0.78	PASS	118	discard	n_steps 800->2000: model doesn't converge (tau_n=131.5 at step 2000, still accelerating); heat_death structurally unreachable

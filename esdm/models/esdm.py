@@ -73,6 +73,7 @@ class ESDM(nn.Module):
             eps=cfg["clock"]["eps"],
             heat_death_patience=cfg["clock"]["heat_death_patience"],
             lambda_clip=cfg["clock"]["lambda_clip"],
+            eps_rel=cfg["clock"].get("eps_rel", 1e-3),
         )
 
         # S_0 registered as a buffer so it is saved in checkpoints.

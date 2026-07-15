@@ -42,9 +42,11 @@ class EntropicClock(nn.Module):
         eps: float = 1e-8,
         heat_death_patience: int = 200,
         lambda_clip: float = 100.0,
+        eps_rel: float = 0.0,  # 0 = disabled; set >0 for real stochastic data
     ) -> None:
         super().__init__()
         self.eps = eps
+        self.eps_rel = eps_rel
         self.heat_death_patience = heat_death_patience
         self.lambda_clip = lambda_clip
 
@@ -109,8 +111,16 @@ class EntropicClock(nn.Module):
         denom = (d_kl_scalar / (d_phi + self.eps)).abs() + self.eps
         Lambda_tau = (1.0 / denom).clamp(0.0, self.lambda_clip)
 
-        # Heat death counter: reset on entropy flow, else increment
-        if delta_tau_scalar.item() <= self.eps:
+        # Heat death counter: dual absolute+relative threshold.
+        # Absolute (eps) catches total stall on synthetic data; relative
+        # (eps_rel) catches convergence on real stochastic batches where
+        # kl_tau has irreducible batch variance ~O(0.01) but tau_n ~O(10+).
+        # The relative check only activates once tau_n has accumulated
+        # enough entropic time to be meaningful (tau_min_rel threshold).
+        rel_ratio = delta_tau_scalar.item() / (self.tau_n.item() + self.eps)
+        is_flat_abs = delta_tau_scalar.item() <= self.eps
+        is_flat_rel = self.eps_rel > 0.0 and rel_ratio <= self.eps_rel
+        if is_flat_abs or is_flat_rel:
             self._flat_steps = self._flat_steps + 1
         else:
             self._flat_steps.zero_()
