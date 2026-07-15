@@ -29,8 +29,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--lr",
         type=float,
-        default=0.05,
-        help='Learning rate for real-data runs (default: 0.05).',
+        default=3e-4,
+        help='Learning rate for real-data runs (default: 3e-4).',
     )
     parser.add_argument(
         "--wht-filter",

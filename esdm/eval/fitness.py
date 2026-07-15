@@ -168,6 +168,20 @@ def compute_fitness_real(metrics: pd.DataFrame) -> dict:
     if n == 0:
         return {"total": 0.0, "criteria": {}}
 
+    # Decoder-collapse guard: if reconstruction error is below 1e-3 the
+    # diffusion decoder has found the trivial constant-output optimum.
+    # Score the run as 0 so the autoresearch loop discards it rather than
+    # rewarding the low loss (which is an artefact of recon -> 0).
+    if "recon" in metrics.columns:
+        final_recon = float(metrics["recon"].iloc[-1])
+        if final_recon < 1e-3:
+            return {
+                "total": 0.0,
+                "criteria": {"decoder_collapsed": 0.0},
+                "decoder_collapsed": True,
+                "final_recon": final_recon,
+            }
+
     tau = metrics["tau_n"].to_numpy()
     tau_range = float(tau[-1] - tau[0])
     scores["tau_monotone"] = 10.0 if np.all(np.diff(tau) >= -1e-12) else 0.0

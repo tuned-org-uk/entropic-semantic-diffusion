@@ -79,6 +79,7 @@ class ESDM(nn.Module):
         self.register_buffer("S_0", None)  # set on first forward pass
         self.register_buffer("_last_N_active", torch.tensor(0))
         self.register_buffer("_last_Q", None)  # previous raw vibrational state
+        self.register_buffer("_last_recon", None)  # last reconstruction error
 
         # rho buffers are updated from the vibrational block after each step
         # and fed back to the clock on the next step.
@@ -200,22 +201,24 @@ class ESDM(nn.Module):
             self.S_0 = (
                 spectral["kl_S"] + spectral["kl_tau"] + spectral["dark_entropy"]
             ).detach()
-            # Scale the entropic time horizon so alpha_bar starts near 1 and
-            # decreases gradually as entropy flows (docs/00-DESIGN.md §4).
-            self.clock.tau_max_est.fill_(10.0 * float(self.S_0.item()))
+            # tau_max_est is a fixed dimensionless horizon.  The clock
+            # accumulates raw |Δkl_tau| (not normalised by S_0), so the
+            # horizon is in nat units.  10 nats of cumulative KL change is
+            # sufficient for alpha_bar to complete its cosine decay.
+            self.clock.tau_max_est.fill_(10.0)
 
         # 4. Entropic clock: update tau, Lambda, delta_tau
-        # Normalize kl_tau by S_0 so the clock is scale-invariant w.r.t. the
-        # feature-space Laplacian's eigenvalue scale.
-        kl_tau_norm = spectral["kl_tau"] / (self.S_0 + 1e-8)
+        # Raw kl_tau (no S_0 normalisation): normalising by S_0 compressed
+        # the per-step deltas to ~3e-4 on CIFAR-10 (S_0~52), freezing the
+        # clock.  Raw kl_tau gives ~0.01-0.05/step, reaching tau_max_est=10
+        # within a few hundred steps.
+        kl_tau_raw = spectral["kl_tau"]
         # Initialize the clock's previous kl_tau on the first forward pass
         # so the first delta_tau is ~0 (not the full kl_tau magnitude).
-        # This prevents tau_n from jumping to ~1 on step 0 and collapsing
-        # alpha_bar to 0 immediately.
         if self.clock._prev_kl_tau.item() == 0.0 and self.clock.tau_n.item() == 0.0:
-            self.clock._prev_kl_tau.fill_(float(kl_tau_norm.item()))
+            self.clock._prev_kl_tau.fill_(float(kl_tau_raw.item()))
         clock_state = self.clock.step(
-            kl_tau_current=kl_tau_norm,
+            kl_tau_current=kl_tau_raw,
             phi_current=spectral["log_lam_s"],
             rho_plus=self._last_rho_plus,
             rho_minus=self._last_rho_minus,
@@ -260,6 +263,7 @@ class ESDM(nn.Module):
             dark_entropy=torch.tensor(clock_state.dark_entropy, device=x.device, dtype=x.dtype),
             S_0=self.S_0,
         )
+        self._last_recon = metrics.get("recon", torch.tensor(1.0)).detach().clone()
 
         return ESDMOutput(x_hat=x_hat, loss=loss, clock=clock_state, metrics=metrics)
 
@@ -268,12 +272,16 @@ class ESDM(nn.Module):
     def health_check(self) -> dict:
         """Diagnostic summary -- call every N batches, not every step."""
         c = self.clock
+        # Decoder-collapse: recon below 1e-3 means the diffusion decoder
+        # has collapsed to a constant output (trivial ELBO optimum).
+        last_recon = float(self._last_recon) if self._last_recon is not None else 1.0
         return {
-            "tau_n":      float(c.tau_n),
-            "tau_flat":   int(c._flat_steps),
-            "conserved":  float(c.conserved),
-            "rho_sign":   float(c.rho_sign),
-            "N_active":   int(self._last_N_active),
-            "Lambda_tau": float(c.Lambda_tau),
-            "heat_death": c.is_heat_death(),
+            "tau_n":            float(c.tau_n),
+            "tau_flat":         int(c._flat_steps),
+            "conserved":        float(c.conserved),
+            "rho_sign":         float(c.rho_sign),
+            "N_active":         int(self._last_N_active),
+            "Lambda_tau":       float(c.Lambda_tau),
+            "heat_death":       c.is_heat_death(),
+            "decoder_collapsed": last_recon < 1e-3,
         }

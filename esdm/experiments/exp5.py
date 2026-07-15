@@ -69,7 +69,7 @@ def run_single(
     a_tau_scale: float = A_TAU_SCALE,
     tau_decay_power: float = 1.0,
     wht_filter: str = "none",
-    lr: float = 1e-4,
+    lr: float = 3e-4,
     grad_clip: Optional[float] = 1.0,
     n_vibrational_steps: int = 2,
     gamma: float = 0.1,
@@ -132,6 +132,13 @@ def run_single(
         weight_decay=cfg["training"]["weight_decay"],
     )
 
+    # Linear warmup over the first 50 steps to avoid destabilising the
+    # spectral decoder's variance head (lr=0.05 blew up kl_S at step 1-3).
+    warmup_steps = 50
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / warmup_steps)
+    )
+
     rows: list[dict] = []
     logger.info(
         "Starting Exp5: n_steps=%d batch_size=%d lr=%g wht_filter=%s "
@@ -149,6 +156,7 @@ def run_single(
         if grad_clip is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
+        scheduler.step()
 
         hc = model.health_check()
         row = {
