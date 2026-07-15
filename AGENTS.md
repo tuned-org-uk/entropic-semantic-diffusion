@@ -284,21 +284,26 @@ The current kept baseline uses the moderate-barrier condition with an extended r
 
 The historical control used `n_steps=300` and scored 55.00; extending to 800 steps raised it to 68.58.
 
-### Known weak spots (as of current baseline)
+### Known weak spots (as of v0.2.0 assessment)
 
 | Criterion | Score | Gap | Diagnosis |
 |---|---|---|---|
-| `conservation` | 1.71/15 | 13.29 | `conserved_ratio=0.89` — Lambda forcing dominates H contraction. The two-sector partition is now active (median threshold) but the energy balance is off. |
-| `heat_death_timing` | 2.01/5 | 2.99 | Heat death fires at 92% of the run; target is 70%. |
-| `net_energy_flow` | 0.00/5 | 5.00 | Lambda pump dominates H contraction throughout. Balance needs tuning. |
+| `net_energy_flow` | 0.00/5 | 5.00 | **The real physics problem.** Lambda pump dominates H contraction throughout. nef stays at 36-176. This is the criterion that should replace the tautological conservation score. |
+| `recon_decrease` | 6.58/10 | 3.42 | Decoder near-collapsed. recon goes 0.011 -> 0.0006 -> 0.004. The metric rewards a tiny absolute decrease in an already-small quantity. |
+| `pi_contraction_ratio` | 3.94/5 | 1.06 | pcr passes through [0.01, 0.3] briefly but is >1.0 at start and ->0.02 at end. H operator too strong early, inert late. |
+| `heat_death_timing` | 4.38/5 | 0.62 | Tuned, not derived. eps_rel=0.002 and patience=50 were swept. |
+
+### Conservation tautology (acknowledged)
+
+`dark_entropy = max(0, S_0 - kl_S - kl_tau)` enforces conservation by construction. `conserved_ratio = 0.000000` is a mathematical identity, not a measurement. The +12.29 fitness jump from v0.1.0->v0.1.1 was an accounting constraint, not a physics improvement. The real conservation check is `net_energy_flow ≈ 0` (currently 0/5). See issue #29 for the metric redefinition pathway.
 
 ### Current baseline result
 
-Latest baseline (code commit `4ba15ed`, CIFAR-10 DINO-256, 800 steps, lr=0.05):
+Latest baseline (v0.2.0, CIFAR-10 DINO-256, 800 steps, lr=0.025):
 
 ```bash
-.venv/bin/python scripts/verify_fitness.py --dataset cifar10 --n-steps 800 --lr 0.05
-# 62.33
+.venv/bin/python scripts/verify_fitness.py --dataset cifar10 --n-steps 800 --lr 0.025
+# 74.90
 ```
 
 Fitness breakdown (max 85, real-data fitness):
@@ -308,27 +313,28 @@ Fitness breakdown (max 85, real-data fitness):
 | `tau_monotone` | 10.00 | 10 | OK |
 | `tau_range_bonus` | 5.00 | 5 | OK |
 | `alpha_bar_decrease` | 10.00 | 10 | OK |
-| `conservation` | 1.71 | 15 | Gap: conserved_ratio=0.89, Lambda/H imbalance |
-| `heat_death` | 10.00 | 10 | OK (fires at step 733/800) |
-| `heat_death_timing` | 2.01 | 5 | Fires at 92%, target 70% |
+| `conservation` | 15.00 | 15 | **Tautological** — enforced by construction, not measured |
+| `heat_death` | 10.00 | 10 | OK (fires at step 610/800) |
+| `heat_death_timing` | 4.38 | 5 | Tuned (eps_rel=0.002, patience=50) |
 | `rho_sign_stabilizing` | 10.00 | 10 | OK |
-| `recon_decrease` | 8.61 | 10 | Near full (recon improves) |
-| `net_energy_flow` | 0.00 | 5 | Lambda dominates H |
-| `pi_contraction_ratio` | 5.00 | 5 | OK (passes [0.01, 0.3]) |
-| **Total** | **62.33** | **85** | **73.3%** |
+| `recon_decrease` | 6.58 | 10 | Decoder near-collapsed |
+| `net_energy_flow` | 0.00 | 5 | **The real physics problem** — Lambda dominates H |
+| `pi_contraction_ratio` | 3.94 | 5 | Passes [0.01, 0.3] briefly, decays to 0.02 |
+| **Total** | **74.90** | **85** | **88.1%** |
 
 ### Issue completion status
 
 | Issue | Status | Notes |
 |---|---|---|
-| #20 — Complete entropic-clock track | **Complete** | Hybridisation operator H implemented (Phi+Diffuse+Pi). Fitness 62.33/85. Frozen-vs-learned ablation documented (delta +4.51). Dataset-agnostic plumbing fixed (median threshold, derived tau_max_est, derived eta from L_F). |
-| #21 — Real data loaders | **Complete** | MNIST PCA-16 and CIFAR-10 DINO-256 loaders implemented, wired into CLI, tested. Audio deferred to #25. |
-| #22 — Full training on real embeddings | **In progress** | Exp 4/5 training loops wired; CIFAR-10 baseline (lr=0.05, 800 steps on 2k-train subset) run. `scripts/verify_fitness.py` supports `--dataset {mnist,cifar10}`. Latent evaluation still pending. |
-| #19 — Physics-based conservation | **Addressed** | Conservation gap reduced from 1.73 pts (synthetic) to current real-data gap. Root cause was missing H operator; now implemented. Remaining drift from Lambda/H balance. |
-| #27 — Design validation vs Un-0 | **Complete** | Hybridisation operator (`docs/00-DESIGN_HYBRID.md`), phase-aware fitness criteria, diversity/quality metrics, Experiments 7–9 added to `docs/002-EXPERIMENTS.md`. |
-| #23 — Generation and sampling | Pending | Blocked on #22. |
-| #24 — 2.5-D dual-space track | Pending | Blocked on #20 (now unblocked). |
-| #25 — Audio generation | Pending | Blocked on #21 (audio loader) and #23. |
+| #20 — Complete entropic-clock track | **Complete** | H operator implemented. Fitness 74.90/85. |
+| #21 — Real data loaders | **Complete** | MNIST + CIFAR-10 loaders. Audio deferred to #25. |
+| #22 — Full training on real embeddings | **Complete** | Exp 4/5 operational. Latent eval module exists. |
+| #23 — Generation and sampling | **Complete** | Reverse-SDE sampler + pixel decoder + CLI shipped. **Untested on real data** — see #29 Phase 1. |
+| #19 — Physics-based conservation | **Closed** | Conservation enforced (tautological — see #29). net_energy_flow=0 is the real gap. |
+| #27 — Design validation vs Un-0 | **Open** | Ablations depend on #29 Phase 1 (generation validation). |
+| #29 — Post-v0.2.0 pathway | **Open** | Generation validation, Lambda/H imbalance, metric redefinition. |
+| #24 — 2.5-D dual-space track | **Open** | Unblocked, low priority. |
+| #25 — Audio generation | **Open** | Blocked on #23 + audio loader. |
 
 ### Architecture constants (from docs)
 
@@ -338,14 +344,20 @@ The following values are **constants**, not hyperparameters. They are set by the
 |---|---|---|
 | $q$ (spectral modes) | $F/4$ | `docs/00-DESIGN_HYBRID.md` §5 |
 | $\gamma$ (damping) | 0.1 | VDT default |
-| `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ (doc says 4, but 4 is unstable with ArrowSpace eigenvalues) |
+| `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ |
 | `lambda_clip` | 100.0 | `docs/00-DESIGN.md` §4.2 |
 | `grad_clip` | 1.0 | Training stability |
 | `seed` | 3407 | Project-wide rule |
 | `batch_size` | 64 | Standard |
-| `k` (ArrowSpace clusters) | 4 | Graph construction; tuning via `arrowspace_tuner` |
+| `k` (ArrowSpace clusters) | 4 | Graph construction |
+| $\sigma^2$ (diffusion coefficient) | 1.0 | `00-DESIGN_HYBRID.md` §5 |
+| $\eta$ (Rayleigh step size) | derived: $0.1 F / (2\lambda_\mathit{max})$ | `001-IMPLEMENTATION-PLAN.md` §5.2 |
+| `mode_threshold` | median($\omega$) per-batch | `001-IMPLEMENTATION-PLAN.md` §3.1 |
+| `tau_max_est` | $3 \cdot S_0$ (derived) | `001-IMPLEMENTATION-PLAN.md` §4.1 |
+| `eps_rel` | 0.002 (CIFAR-10) | `dataset_cifar10.yaml` |
+| `heat_death_patience` | 50 (CIFAR-10) | `dataset_cifar10.yaml` |
 
-The only free hyperparameters are `lr` and `n_steps` (governed by heat death).
+The only free hyperparameters are `lr` and `n_steps` (governed by heat death). Dataset-specific constants (`eps_rel`, `heat_death_patience`, `default_lr`, `graph_params`) come from per-dataset YAML configs (`esdm/_configs/dataset_*.yaml`).
 
 ### Feature-space Laplacian
 
@@ -357,9 +369,13 @@ $L_F$ is built via **ArrowSpace** (`esdm/graphs/wiring.py`), not a custom k-NN f
 
 ### Clock scaling
 
-The entropic clock normalizes `kl_tau` by $S_0$ before accumulation: $\tau_n = \sum |\Delta (\mathit{kl\_\tau} / S_0)|$. This makes the clock scale-invariant with respect to the feature-space Laplacian's eigenvalue scale. $S_0$ is the total entropy budget from the first forward pass.
+The entropic clock accumulates **raw** `kl_tau` (not normalised by $S_0$): $\tau_n = \sum |\Delta \mathit{kl\_\tau}|$. Normalising by $S_0$ compressed per-step deltas to ~3e-4 on CIFAR-10 ($S_0$~52), freezing the clock. Raw kl_tau gives ~0.2/step.
 
-`tau_max_est` is initialized to $10 \cdot S_0$ so that $\bar{\alpha}(\tau) = \cos^2(\pi/2 \cdot \tau / \tau_\mathit{max})$ starts near 1 and decreases as entropy flows.
+`tau_max_est` is derived as $3 \cdot S_0$ at initialisation. With $S_0 \approx 52$ on CIFAR-10, this gives $\tau_\mathit{max} \approx 156$, spreading the cosine schedule across the full run. This is a derived constant, not a parameter (see `001-IMPLEMENTATION-PLAN.md` §4.1).
+
+### Conservation tautology
+
+`dark_entropy = max(0, S_0 - kl_S - kl_tau)` structurally enforces conservation. This means `conserved_ratio = 0` by construction — it is a mathematical identity, not a measurement. The +12.29 fitness jump from v0.1.0->v0.1.1 was an accounting constraint. The real physics check is `net_energy_flow ≈ 0` (currently 0/5). See issue #29 for the metric redefinition pathway.
 
 ### No identity blending
 
@@ -371,20 +387,21 @@ The following macro-issues track the path from the current synthetic-diagnostic 
 
 | Phase | Issue | Goal | Depends on |
 |---|---|---|---|
-| A — Complete entropic-clock track | [#20](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/20) | Full ESDM forward pass, fitness gaps closed | #19 |
-| B — Real data loaders | [#21](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/21) | MNIST PCA-16, CIFAR-10 DINO-256, audio embeddings | independent |
-| C — Full training on real embeddings | [#22](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/22) | Exp 4 (MNIST) + Exp 5 (CIFAR-10), latent evaluation | A, B |
-| D — Generation and sampling | [#23](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/23) | Reverse-SDE sampler, pixel/audio decoder, FID/FAD evaluation | C |
-| E — 2.5-D dual-space track | [#24](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/24) | score3d vs score25d on minimal surfaces, ablation, spectral stability | A |
-| F — Audio generation | [#25](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/25) | Audio data loader, waveform/spectrogram diffusion, audible samples | B, D |
+| A — Complete entropic-clock track | [#20](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/20) | **Done** — H operator implemented | #19 |
+| B — Real data loaders | [#21](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/21) | **Done** — MNIST + CIFAR-10 | independent |
+| C — Full training on real embeddings | [#22](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/22) | **Done** — Exp 4/5 + latent eval | A, B |
+| D — Generation and sampling | [#23](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/23) | **Done** — sampler + decoder + CLI. Untested on real data. | C |
+| — Post-v0.2.0 pathway | [#29](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/29) | **Open** — generation validation, Lambda/H fix, metric redefinition | D |
+| E — 2.5-D dual-space track | [#24](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/24) | Open — unblocked | A |
+| F — Audio generation | [#25](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/25) | Open — blocked on D + audio | B, D |
 
-### Next phases
+### Next phases (see issue #29 for full pathway)
 
-1. **Close the conservation gap** (1.71/15) — the remaining drift comes from Lambda/H imbalance (`net_energy_flow` not near 0). Requires tuning the Lambda vs H equilibrium, not adding parameters.
-2. **Tune heat-death timing** to ~70% (currently 92%). Adjust `heat_death_patience` or the relative threshold.
-3. **Improve net_energy_flow** (0/5) — the Lambda pump dominates the H contraction. The balance may require a lower lr or longer warmup.
-4. **Latent evaluation** (#22) — reconstruction quality, downstream k-NN accuracy, FID/FAD metrics.
-5. **Generation pipeline** (#23) — reverse-SDE sampler, pixel decoder, FID evaluation.
+1. **Validate generation on real data** (#29 Phase 1) — train, save checkpoint, run sampler, decode to images, visual inspection + FID.
+2. **Fix the Lambda/H imbalance** (#29 Phase 2) — the pump starts at 100 (clipped) and dominates H. Design-level question, not tuning.
+3. **Redefine metrics** (#29 Phase 3) — split tautological conservation into energy_balance + diversity. Measure physics, not engineering.
+4. **#27 ablations** (#29 Phase 4) — step-count sweep, non-spectral baseline, diversity/quality decomposition.
+5. **New tracks** (#29 Phase 5) — #24 (2.5-D), #25 (audio).
 
 
 
