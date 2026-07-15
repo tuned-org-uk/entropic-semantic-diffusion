@@ -14,7 +14,7 @@ model:
   gamma: 0.1              # vibrational damping coefficient (VDT default)
 
 clock:
-  eps: 1.0e-8
+  eps: 1.0e-3  # entropy-flow threshold for heat death (1e-8 is unreachable in real training)
   heat_death_patience: 200
   lambda_clip: 100.0      # maximum allowed Lambda_tau
 
