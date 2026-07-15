@@ -16,6 +16,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+import time
 import torch
 
 from ..cli.train import _load_config
@@ -92,6 +93,12 @@ def run_single(
     torch.manual_seed(seed)
     np.random.seed(seed)
 
+    if not logging.getLogger().hasHandlers():
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
+
     cfg = _load_config("esdm/_configs/default.yaml")
     cfg["model"]["dim_input"] = DIM
     cfg["model"]["n_nodes"] = DIM
@@ -126,6 +133,14 @@ def run_single(
     )
 
     rows: list[dict] = []
+    logger.info(
+        "Starting Exp5: n_steps=%d batch_size=%d lr=%g wht_filter=%s "
+        "max_train_samples=%s max_test_samples=%s pca_fit_samples=%s device=%s",
+        n_steps, batch_size, lr, wht_filter,
+        max_train_samples, max_test_samples, pca_fit_samples,
+        str(next(model.parameters()).device),
+    )
+    run_start = time.perf_counter()
     for step in range(n_steps):
         x = loader.train_batch(batch_size, seed=seed + step).float()
         optimizer.zero_grad()
@@ -149,9 +164,14 @@ def run_single(
         for k, v in out.metrics.items():
             row[k] = float(v.detach())
         if step % cfg["training"].get("log_every", 10) == 0:
+            elapsed = time.perf_counter() - run_start
+            step_time = elapsed / (step + 1)
+            eta = step_time * (n_steps - step - 1)
             logger.info(
-                "Exp5 step=%d loss=%.4f tau_n=%.4f alpha_bar=%.4f heat_death=%s",
-                step, row["loss"], row["tau_n"], row["alpha_bar"], row["heat_death"]
+                "Exp5 step=%d/%d loss=%.4f tau_n=%.4f alpha_bar=%.4f Lambda_tau=%.4f heat_death=%s "
+                "%.2f s/step, ETA %.1f min",
+                step, n_steps, row["loss"], row["tau_n"], row["alpha_bar"],
+                row["Lambda_tau"], row["heat_death"], step_time, eta / 60.0
             )
         rows.append(row)
         if hc["heat_death"]:
@@ -159,6 +179,11 @@ def run_single(
             break
 
     metrics = pd.DataFrame(rows)
+    final = metrics.iloc[-1]
+    logger.info(
+        "Exp5 finished: n_steps=%d final_loss=%.4f tau_n=%.4f alpha_bar=%.4e heat_death=%s",
+        len(metrics), final["loss"], final["tau_n"], final["alpha_bar"], final["heat_death"]
+    )
     if output_dir is not None:
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)

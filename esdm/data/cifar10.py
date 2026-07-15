@@ -74,6 +74,7 @@ class CIFAR10DINOLoader:
         max_train_samples: Optional[int] = None,
         max_test_samples: Optional[int] = None,
         use_hf: bool = True,
+        device: Optional[str | torch.device] = None,
     ) -> None:
         self.output_dim = output_dim
         self.data_dir = Path(data_dir or "data/cifar10")
@@ -85,6 +86,14 @@ class CIFAR10DINOLoader:
         self.max_train_samples = max_train_samples
         self.max_test_samples = max_test_samples
         self.use_hf = use_hf
+        if device is None:
+            if torch.backends.mps.is_available():
+                device = torch.device("mps")
+            elif torch.cuda.is_available():
+                device = torch.device("cuda")
+            else:
+                device = torch.device("cpu")
+        self.device = torch.device(device)
 
         self._train: Optional[Tensor] = None
         self._test: Optional[Tensor] = None
@@ -183,8 +192,9 @@ class CIFAR10DINOLoader:
     def _load_dino(self) -> torch.nn.Module:
         """Lazy-load the frozen DINO encoder."""
         if self._dino is None:
-            logger.info("Loading frozen DINO encoder %s ...", self.dino_model_name)
+            logger.info("Loading frozen DINO encoder %s on %s ...", self.dino_model_name, self.device)
             self._dino = AutoModel.from_pretrained(self.dino_model_name)
+            self._dino.to(self.device)
             self._dino.eval()
             for p in self._dino.parameters():
                 p.requires_grad = False
@@ -193,7 +203,7 @@ class CIFAR10DINOLoader:
     def _dino_embed(self, images: np.ndarray) -> np.ndarray:
         """Encode a batch of preprocessed images to CLS embeddings."""
         model = self._load_dino()
-        device = next(model.parameters()).device
+        device = self.device
         embeddings: list[np.ndarray] = []
         n = images.shape[0]
         with torch.no_grad():
@@ -212,7 +222,11 @@ class CIFAR10DINOLoader:
         return x / norms
 
     def _fit(self) -> None:
-        """Download, encode, project, and cache train/test tensors."""
+        """Download, encode, project, and cache train/test tensors.
+
+        Full train/test splits are processed in chunks so that resizing all
+        CIFAR-10 images to 224x224 does not materialise a multi-gigabyte array.
+        """
         if self._train is not None:
             return
 
@@ -227,8 +241,9 @@ class CIFAR10DINOLoader:
             )
         pca_idx = rng.choice(available, size=min(self.pca_fit_samples, available), replace=False)
 
-        logger.info("Resizing CIFAR-10 images for DINO ...")
-        train_resized = self._resize(train_x[pca_idx])
+        logger.info("Resizing CIFAR-10 images for PCA fit ...")
+        # Use float32 for DINO preprocessing to keep memory modest.
+        train_resized = self._resize(train_x[pca_idx].astype(np.float32))
         train_resized = self._normalise(train_resized)
         logger.info("Encoding PCA-fit subset (%d images) ...", train_resized.shape[0])
         train_embed_pca = self._dino_embed(train_resized)
@@ -242,21 +257,23 @@ class CIFAR10DINOLoader:
             float(self._explained_variance_ratio.sum()),
         )
 
-        logger.info("Encoding full train split ...")
-        train_x = train_x[: self.max_train_samples]
-        train_y = train_y[: self.max_train_samples]
-        train_resized_full = self._resize(train_x)
-        train_resized_full = self._normalise(train_resized_full)
-        train_embed_full = self._dino_embed(train_resized_full)
-        train_proj = self._pca.transform(train_embed_full)
+        chunk_size = 512
 
-        logger.info("Encoding test split ...")
-        test_x = test_x[: self.max_test_samples]
-        test_y = test_y[: self.max_test_samples]
-        test_resized = self._resize(test_x)
-        test_resized = self._normalise(test_resized)
-        test_embed = self._dino_embed(test_resized)
-        test_proj = self._pca.transform(test_embed)
+        def _encode_split(images: np.ndarray, labels: np.ndarray, max_samples: Optional[int], desc: str) -> tuple[np.ndarray, np.ndarray]:
+            n = images.shape[0] if max_samples is None else min(max_samples, images.shape[0])
+            labels = labels[:n]
+            projs: list[np.ndarray] = []
+            logger.info("Encoding %s split (%d images, chunk_size=%d) ...", desc, n, chunk_size)
+            for i in range(0, n, chunk_size):
+                chunk = images[i : i + chunk_size].astype(np.float32)
+                chunk_resized = self._resize(chunk)
+                chunk_resized = self._normalise(chunk_resized)
+                chunk_embed = self._dino_embed(chunk_resized)
+                projs.append(self._pca.transform(chunk_embed))
+            return np.concatenate(projs, axis=0), labels
+
+        train_proj, train_y = _encode_split(train_x, train_y, self.max_train_samples, "train")
+        test_proj, test_y = _encode_split(test_x, test_y, self.max_test_samples, "test")
 
         self._train = torch.from_numpy(self._l2_normalise(train_proj).astype(np.float64))
         self._test = torch.from_numpy(self._l2_normalise(test_proj).astype(np.float64))
