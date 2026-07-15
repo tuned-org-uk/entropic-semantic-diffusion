@@ -1,8 +1,0 @@
-phase	timestamp	result	details
-identify	2026-07-15T17:40:00	OK	ship type: code-pr, target: main branch
-inventory	2026-07-15T17:40:00	OK	8 files changed, 384 insertions, 37 deletions
-checklist	2026-07-15T17:40:00	OK	all items pass except fitness>110 (re-calibrate for real-data max=85)
-prepare	2026-07-15T17:40:00	OK	78 tests passed, lint clean
-dry-run	2026-07-15T17:40:00	OK	commits 1bae020, c3b0f61 on main, 43 commits ahead of origin
-ship	2026-07-15T17:40:00	PENDING	awaiting user approval to push and create PR
-verify	2026-07-15T17:40:00	PENDING	post-ship verification
