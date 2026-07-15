@@ -12,14 +12,10 @@ Fixes applied during port from esdm_legacy/model.py:
   3. kl_z: the encoder now produces (mu, logvar) and kl_z is the standard
      Gaussian VAE KL (was: hard-coded to zero).
 
-The WHT filter is an optional, injectable component: pass a GraphWHTFilter
-instance via cfg["model"]["wht_filter"] (or None to disable). The CLI
-surfaces this as --wht-filter {none,basic,bivariate}.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -32,7 +28,6 @@ from .spectral_decoder import SpectralLoadingDecoder
 from .spectral_kl import tau_mode_kl_per_mode
 from .vibrational import VibrationalStateBlock
 from .._vendor.spectral import spectral_basis_kl
-from ..graphs.wht_filter import GraphWHTFilter
 
 
 @dataclass
@@ -61,13 +56,6 @@ class ESDM(nn.Module):
         self.mode_threshold = cfg["model"].get("mode_threshold", 0.01)
         self.lam_s = cfg["model"].get("lam_s", 1.0)
 
-        # Optional Graph-WHT spectral pre-filter for the diffusion state.
-        # When provided, the vibrational state Q is filtered with heat-kernel
-        # time equal to the current clock tau_n before diffusion decoding.
-        # None disables the filter (bare L_f @ Q in the wave recurrence).
-        self.wht_filter: Optional[GraphWHTFilter] = cfg["model"].get(
-            "wht_filter", None
-        )
 
         self.clock = EntropicClock(
             eps=cfg["clock"]["eps"],
@@ -97,7 +85,6 @@ class ESDM(nn.Module):
             n_heads=1,
             n_steps=cfg["model"]["n_vibrational_steps"],
             gamma=cfg["model"]["gamma"],
-            wht_filter=cfg["model"].get("wht_filter", None),
         )
         self.diffusion_decoder = EntropicDiffusionDecoder(
             dim=self.dim_input,
@@ -246,10 +233,7 @@ class ESDM(nn.Module):
         self._last_rho_minus = rho_minus.detach().clone()
         self._last_N_active.fill_(int(spectral["N_active"].item()))
 
-        # 6. The WHT filter is now applied INSIDE the vibrational recurrence
-        # (Phase 2 integration, docs/00-DESIGN.md §4.3).  No post-processing.
-        Q_raw = Q
-        self._last_Q = Q_raw.detach().clone()
+        self._last_Q = Q.detach().clone()
 
         # 7. Entropic diffusion decode: alpha_bar from clock
         x_hat = self.diffusion_decoder(Q, L_z, self.clock, noise=torch.zeros_like(Q))

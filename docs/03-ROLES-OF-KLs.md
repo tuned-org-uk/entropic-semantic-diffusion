@@ -41,7 +41,7 @@ The design file already hints at where each KL is doing real work vs. being “p
 One concrete ablation path that won’t wreck the model:
 
 1. Early prototyping / debugging: keep only reconstruction + KL_tau; set KL_z, KL_S, conservation weight to ~0.  
-2. Once the clock behaviour and WHT gate look sane, add KL_S and conservation back in for Exp 3.  
+2. Once the clock behaviour looks sane, add KL_S and conservation back in for Exp 3.  
 3. Only when you care about downstream quality (Exp 4–5) do you anneal KL_z into a proper VAE regime.
 
 ## The risk in “keep everything on”

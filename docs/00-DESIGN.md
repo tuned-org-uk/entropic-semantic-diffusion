@@ -115,64 +115,6 @@ where:
 - When $\partial_\tau \Lambda < 0$ (pump shrinking), energy is flowing *into* the bright sector — an expansion phase.
 - When $\partial_\tau \Lambda > 0$ (pump growing), energy is being extracted from the bright sector — a contraction phase heading toward "big crunch".
 
-### 4.3 WHT Spectral Filter on the Laplacian
-
-The feature-space Laplacian $L_f \in \mathbb{R}^{F \times F}$ (ArrowSpace GW eigenmaps) must be applied in the wave recurrence as $L_f Q_t$. For high-dimensional feature spaces ($F \gg 1$), this matrix–vector product is expensive and its spectrum may contain components that are irrelevant or harmful to the diffusion trajectory.
-
-The **Walsh–Hadamard Transform (WHT) spectral filter** offers an $O(F \log F)$ alternative that selectively zeroes out Laplacian spectral components outside a learned pass-band, using the Hadamard basis as a computationally cheap proxy for the eigenbasis.
-
-#### 4.3.1 WHT filter definition
-
-Let $H_F \in \{-1, +1\}^{F \times F}$ be the normalised Hadamard matrix:
-
-$$H_F = \frac{1}{\sqrt{F}} W_F$$
-
-where $W_F$ is the standard Walsh–Hadamard matrix of order $F$ (required: $F = 2^m$ for integer $m$, or padded to the nearest power of two). The WHT-filtered Laplacian action on state $Q \in \mathbb{R}^{B \times F}$ is computed as:
-
-$$\widetilde{L_f Q} = H_F^\top \bigl(g \odot (H_F L_f H_F^\top)\bigr) H_F Q$$
-
-where $g \in \mathbb{R}^F$ is a learnable **spectral gate vector** initialised to $\mathbf{1}$ (identity — no filtering) and applied element-wise to the WHT-domain Laplacian rows. In practice, since $L_f$ is fixed after `build_laplacian.py`, the WHT-domain Laplacian $\hat{L}_f = H_F L_f H_F^\top$ is **precomputed once** and cached alongside $L_f$.
-
-The recurrence term becomes:
-
-$$\Delta\tau^2 \, L_f Q_t \quad \longrightarrow \quad \Delta\tau^2 \, H_F^\top (g \odot (\hat{L}_f \cdot (H_F Q_t)^\top)^\top$$
-
-Simplified, letting $\hat{Q}_t = H_F Q_t$ (the WHT of $Q_t$, computed in $O(F \log F)$):
-
-$$\widetilde{L_f Q_t} = H_F^\top \bigl(g \odot (\hat{L}_f \hat{Q}_t^\top)^\top\bigr)$$
-
-#### 4.3.2 Frequency interpretation
-
-The Hadamard basis orders vectors by **sequency** (the number of sign changes), which is the Walsh-domain analogue of frequency. Low-sequency components of $Q_t$ correspond to smooth, globally-coherent vibrational modes; high-sequency components correspond to local, noisy oscillations.
-
-The spectral gate $g$ therefore acts as a **pass-band filter** on the Laplacian action:
-
-| Gate region | Effect on diffusion |
-|---|---|
-| $g_k \approx 1$ for low sequency | Smooth/global Laplacian modes preserved — slow semantic drift |
-| $g_k \approx 0$ for high sequency | Local/noisy modes suppressed — prevents diffusion from chasing noise |
-| $g_k$ learned end-to-end | Optimal pass-band co-adapted with entropic time schedule |
-
-This is the **Laplacian spectral filter directive for the diffusion process** identified as a core research driver: the WHT gate selects which frequency bands of the feature-space Laplacian are allowed to direct the diffusion trajectory.
-
-#### 4.3.3 Full wave recurrence with WHT filter
-
-The complete ESDM wave recurrence, incorporating the entropic time gating (§4.2) and the WHT spectral filter, is:
-
-$$\boxed{Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, \widetilde{L_f Q_t} \;-\; \gamma \Delta Q \;+\; \Lambda(\tau) \cdot \Delta\tau^2 \, B_t}$$
-
-where $\widetilde{L_f Q_t} = H_F^\top (g \odot (\hat{L}_f \hat{Q}_t^\top)^\top)$ and $g \in \mathbb{R}^F$ is a learnable parameter of `VibrationalStateBlock`.
-
-#### 4.3.4 Per-mode WHT scheduling
-
-Following the per-mode entropic time $\tau_k$ already used in the diffusion schedule (§5.3), the gate $g$ can be made **time-varying** by conditioning on $\tau_k$:
-
-$$g_k(\tau_k) = \sigma\!\left(w_k - s \cdot \frac{\tau_k}{\tau_{k,\mathit{max}}}\right)$$
-
-where $w_k$ is a learned bias, $s > 0$ is a sharpness parameter, and $\sigma$ is the sigmoid. This implements a soft **frequency annealing**: early in entropic time all frequencies are passed (global exploration); as $\tau_k$ accumulates, high-sequency components are progressively gated out (local noise suppressed), and the diffusion is channelled into smooth semantic basin descent.
-
----
-
 ### 4.4 The Entropic Clock as Principled Collocation Strategy
 
 Physics-informed neural networks (PINNs) are typically analysed as three separate design choices stacked together: architecture (what the model can represent), loss function (what the model is pushed toward), and **collocation strategy** (where in the domain the physics residual is evaluated, and therefore where the model is actually held accountable). The collocation choice is the least-discussed of the three but arguably the most consequential for convergence.
@@ -183,6 +125,6 @@ The ESDM differs from standard PINNs in a critical respect: the physics is not a
 
 The entropic clock implements **collocation by temporal gating** through three coupled mechanisms:
 
-1. **Temporal silencing.** When $\Delta\tau \approx 0$, the recurrence term $\Delta\tau^2\,\widetilde{L_f Q_t}$ vanishes algebraically. The wave equation is not evaluated — it is silenced. The model is not held accountable to physics in that region of $\tau$. This is collocation by exclusion: the clock tells you *where not* to evaluate the physics residual.
+1. **Temporal silencing.** When $\Delta\tau \approx 0$, the recurrence term $\Delta\tau^2\,L_f Q_t$ vanishes algebraically. The wave equation is not evaluated — it is silenced. The model is not held accountable to physics in that region of $\tau$. This is collocation by exclusion: the clock tells you *where not* to evaluate the physics residual.
 
 2. **Amplitude modulation via $\Lambda(\tau)$.** The entropic pump scales the stochastic forcing term $B_t$. High $\Lambda$ means the injection is large relative to the

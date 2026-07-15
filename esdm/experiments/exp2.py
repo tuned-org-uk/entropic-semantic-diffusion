@@ -121,7 +121,7 @@ def dark_entropy_from_spectrum(
     g_mean : float
         Mean of the normalised dark-mode probability vector ``g``.
     g_entropy : float
-        Alias for ``dark_entropy``, logged separately for the WHT-gate
+        Alias for ``dark_entropy``
         diagnostic convention.
     """
     if Q.dim() == 2:
@@ -265,7 +265,7 @@ def run_experiment(
             delta_tau=state.delta_tau,
         )
 
-        # Per-mode residual for the Path-A bivariate WHT gate.
+        # Per-mode residual for diagnostics.
         r_k = compute_mode_residuals(
             Q_t.detach(), Q_prev, bright_modes=bright_modes
         )

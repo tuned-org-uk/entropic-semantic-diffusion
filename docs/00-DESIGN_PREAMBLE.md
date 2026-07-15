@@ -27,39 +27,18 @@ Barontini derives his effective equation by Feshbach-Villars decomposition of th
 
 $$i\hbar \partial_\tau \psi = \Phi(\tau)\psi + \Lambda(\tau) H_\mathit{geom} \psi$$
 
-The ESDM analogue replaces this with the VDT wave recurrence , now gated by the entropic pump $\Lambda$ and filtered by the WHT spectral gate $g$:
+The ESDM analogue replaces this with the VDT wave recurrence , now gated by the entropic pump $\Lambda$:
 
-$$Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, \widetilde{L_f Q_t} - \gamma \Delta Q + \Lambda(\tau) \cdot \Delta\tau^2 \, B_t$$
+$$Q_{t+1} = 2Q_t - Q_{t-1} - \Delta\tau^2 \, L_f Q_t - \gamma \Delta Q + \Lambda(\tau) \cdot \Delta\tau^2 \, B_t$$
 
 where:
 
-- $$\widetilde{L_f Q_t} = H_F^\top (g \odot (\hat{L}_f \hat{Q}_t^\top)^\top)$$ is the **WHT-filtered Laplacian action** (see below)
-- $$\hat{L}_f = H_F L_f H_F^\top$$ is the WHT-domain Laplacian, precomputed once
-- $$\hat{Q}_t = H_F Q_t$$ is the Walsh–Hadamard transform of the state, computed in $O(F \log F)$
-- $$g \in \mathbb{R}^F$$ is a **learnable spectral gate** initialised to $\mathbf{1}$ — selects which Hadamard-basis (sequency) components of $L_f$ direct the diffusion
+- $$L_f$$ is the feature-space Laplacian (ArrowSpace)
 - $$B_t$$ is the attention forcing term (self-attention + FFN output)
 - $$\Lambda(\tau) = (\partial_\phi S)^{-1} k_B / \sigma\omega\phi$$ — the entropy derivative of the spectral sector, directly analogous to Barontini's pump[^1]
 - $$\Delta\tau$$ replaces $$dt$$ — steps are now measured in entropic units, not external integer steps
 
-When $$\Lambda(\tau) \approx 0$$ (no entropy exchange, modes stable), the recurrence reduces to free vibrational dynamics filtered through the WHT gate. When $$\Lambda(\tau)$$ is large (rapid mode activation or collapse), the attention forcing is amplified — the model is thermodynamically *forced* to attend harder precisely when the spectral geometry is changing.
-
-### WHT Spectral Filter
-
-The **Walsh–Hadamard Transform (WHT) filter** is the spectral filter directive for the diffusion process. It operates on the feature-space Laplacian $L_f \in \mathbb{R}^{F \times F}$ (ArrowSpace GW eigenmaps) and selects which frequency bands of the dark sector are allowed to propagate into the bright sector wave recurrence.
-
-Let $H_F = \frac{1}{\sqrt{F}} W_F$ be the normalised Hadamard matrix of order $F = 2^m$. The WHT filter transforms the Laplacian action as:
-
-$$L_f Q_t \;\longrightarrow\; \widetilde{L_f Q_t} = H_F^\top \bigl(g \odot (\hat{L}_f \hat{Q}_t^\top)^\top\bigr), \qquad \hat{L}_f = H_F L_f H_F^\top, \quad \hat{Q}_t = H_F Q_t$$
-
-The gate $g$ orders components by **sequency** (Walsh-domain analogue of frequency). Low-sequency components of $Q_t$ encode smooth, globally-coherent vibrational modes (slow semantic drift); high-sequency components encode local, noisy oscillations. The gate therefore implements a **pass-band filter** on the Laplacian action:
-
-| Gate region | Effect |
-|---|---|
-| $g_k \approx 1$ for low sequency | Smooth Laplacian modes preserved — global semantic organisation |
-| $g_k \approx 0$ for high sequency | Local noise suppressed — diffusion follows semantic basins |
-| $g_k$ learned end-to-end | Co-adapted with entropic schedule |
-
-The gate can be made **time-varying** via sigmoid annealing over per-mode entropic time $\tau_k$ (§4.3.4 of the full design doc), implementing progressive frequency narrowing as the model converges.
+When $$\Lambda(\tau) \approx 0$$ (no entropy exchange, modes stable), the recurrence reduces to free vibrational dynamics. When $$\Lambda(\tau)$$ is large (rapid mode activation or collapse), the attention forcing is amplified — the model is thermodynamically *forced* to attend harder precisely when the spectral geometry is changing.
 
 ### Architecture: Four Modules
 
@@ -71,7 +50,6 @@ Input x (B, D)
       |
       v
 [2. VibrationalStateBlock]  -- VDT wave recurrence, gated by Lambda(tau)
-      |                         L_f Q_t -> WHT-filtered L̃_f Q_t  [NEW]
       |    (Q_t, rho_+, rho_-)
       v
 [3. SpectralLoadingDecoder] -- VDT decoder: z, U_q -> W, omega, S
@@ -86,7 +64,7 @@ Input x (B, D)
 | Module | Source | New contribution |
 | :-- | :-- | :-- |
 | `EntropicClock` | **New** | Accumulates $\|\Delta \mathit{kl\_tau}\|$, computes $\Lambda(\tau)$, emits `dark_sector_entropy` |
-| `VibrationalStateBlock` | VDT | $\Lambda(\tau)$ gating of $B_t$ + **WHT spectral filter on $L_f Q_t$** |
+| `VibrationalStateBlock` | VDT | $\Lambda(\tau)$ gating of $B_t$ |
 | `SpectralLoadingDecoder` | VDT | Unchanged; `N_active` → bright-sector size proxy |
 | `EntropicDiffusionDecoder` | SDM | `cosine_alpha_bar` replaced by $\tau$-indexed schedule |
 
@@ -127,11 +105,9 @@ per batch:
   conserved  = |kl_bright + kl_dark - S_0| # should -> 0
   Lambda_tau  = d(kl_bright)/d(phi)        # entropic pump
   rho_sign   = rho_minus / (rho_plus + eps) # interference ratio -> confidence
-  g_mean     = g.mean()                    # WHT gate activity (1=open, 0=closed)
-  g_entropy  = gate entropy                # annealing progress
 ```
 
-A healthy training run shows `conserved → 0`, `tau_n` monotonically increasing, `rho_sign` oscillating then stabilising, and `g_mean` decreasing toward a selective pass-band (high-sequency components progressively gated out as training converges). A pathological run shows `tau_n` stalling — the system has reached its "heat death", and either the coupling strength $V$ (i.e., `kl_S` weight) needs reducing, or the ArrowSpace index $I$ needs reselecting via the ELBO Bayes factor.[^1]
+A healthy training run shows `conserved → 0`, `tau_n` monotonically increasing, and `rho_sign` oscillating then stabilising. A pathological run shows `tau_n` stalling — the system has reached its "heat death", and either the coupling strength $V$ (i.e., `kl_S` weight) needs reducing, or the ArrowSpace index $I$ needs reselecting via the ELBO Bayes factor.[^1]
 
 
 [^1] Testing the problem of time with cold atoms, Barontini, 2026, https://journals.aps.org/prresearch/abstract/10.1103/1h9j-df4k

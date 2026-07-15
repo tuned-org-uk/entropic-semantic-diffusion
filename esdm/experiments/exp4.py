@@ -22,7 +22,6 @@ import torch
 from ..cli.train import _load_config
 from ..data.mnist import DEFAULT_PCA_DIM
 from ..graphs.wiring import WireGraph
-from ..graphs.wht_filter import GraphWHTFilter
 from ..models.esdm import ESDM
 
 logger = logging.getLogger(__name__)
@@ -51,23 +50,12 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> 
     return wg.laplacian(normalized=True, sparse=False)
 
 
-def _build_wht_filter(
-    mode: str,
-    L_F: torch.Tensor,
-    a_tau_scale: float = A_TAU_SCALE,
-    tau_decay_power: float = 1.0,
-) -> GraphWHTFilter | None:
-    """Build a GraphWHTFilter from the real feature-space Laplacian."""
-    if mode == "none":
-        return None
-    from ..cli.wht_filter import build_wht_filter as _factory
-    return _factory(mode, L_F.numpy(), a_tau_scale=a_tau_scale, tau_decay_power=tau_decay_power)
+
 
 
 def run_single(
     n_steps: int = N_STEPS,
     lr: float = 3e-4,
-    wht_filter: str = "basic",
     lam_s: float = 1.0,
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
@@ -76,7 +64,7 @@ def run_single(
     """
     Run a single Exp-4 training loop on MNIST PCA-16 embeddings.
 
-    Free parameters: n_steps, lr, wht_filter, lam_s.
+    Free parameters: n_steps, lr lam_s.
     Architecture constants (gamma, n_vibrational_steps, batch_size, grad_clip)
     come from esdm/_configs/default.yaml and AGENTS.md — do not sweep.
     """
@@ -104,7 +92,6 @@ def run_single(
     loader = MNISTLoader(pca_dim=DEFAULT_PCA_DIM, data_dir=data_dir or "data/mnist", seed=seed)
     L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
     cfg["model"]["L_base"] = L_F
-    cfg["model"]["wht_filter"] = _build_wht_filter(wht_filter, L_F)
 
     model = ESDM(cfg)
 
@@ -123,8 +110,8 @@ def run_single(
 
     rows: list[dict] = []
     logger.info(
-        "Starting Exp4: n_steps=%d batch_size=%d lr=%g wht_filter=%s lam_s=%g device=%s",
-        n_steps, batch_size, lr, wht_filter, lam_s,
+        "Starting Exp4: n_steps=%d batch_size=%d lr=%g lam_s=%g device=%s",
+        n_steps, batch_size, lr, lam_s,
         str(next(model.parameters()).device),
     )
     run_start = time.perf_counter()
@@ -181,14 +168,12 @@ def run_single(
 
 def main_cli(
     n_steps: int = N_STEPS,
-    wht_filter: str = "basic",
     seed: int = 3407,
     output_dir: Optional[Path | str] = None,
 ) -> pd.DataFrame:
     """CLI entry point for a single Exp-4 run."""
     metrics = run_single(
         n_steps=n_steps,
-        wht_filter=wht_filter,
         seed=seed,
         output_dir=output_dir,
     )

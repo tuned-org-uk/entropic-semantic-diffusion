@@ -86,21 +86,14 @@ introducing new parameters.
 $$\text{Diffuse}_{L_F}:\; F_t \in \mathbb{R}^{B \times F}
   \;\longrightarrow\; \tilde{F}_t \in \mathbb{R}^{B \times F}$$
 
-$$\boxed{\tilde{F}_t = F_t - \frac{\sigma^2 \Delta\tau}{2}\,\widetilde{L_F F_t}}$$
+$$\boxed{\tilde{F}_t = F_t - \frac{\sigma^2 \Delta\tau}{2}\,L_F F_t}$$
 
-where $\widetilde{L_F F_t} = H_F^\top\!\left(g \odot
-\left(\hat{L}_F \hat{F}_t^\top\right)^\top\right)$ is the WHT-filtered
-Laplacian action (from `00-DESIGN.md` §4.3), with
-$\hat{L}_F = H_F L_F H_F^\top$ precomputed and cached,
-$\hat{F}_t = H_F F_t$, and $g \in \mathbb{R}^F$ the learnable spectral gate.
+where $L_F F_t$ is the feature-space Laplacian action.
 
 **Interpretation.** Each item's lifted feature signal diffuses along the
 F×F feature-space graph. Items whose feature signals are far from the
 graph's smooth modes are pulled toward them; items already in a smooth
-mode are held there. The WHT gate $g$ controls which sequency bands of
-$L_F$ are allowed to drive this diffusion — low sequency (globally coherent
-string modes) are preserved; high sequency (locally noisy modes) are
-progressively suppressed as $\tau$ increases.
+mode are held there.
 
 **Note on $\sigma^2$ vs $\Delta\tau^2$.** The diffusion coefficient here
 uses $\sigma^2 \Delta\tau / 2$ (a heat-equation step), not $\Delta\tau^2$
@@ -165,7 +158,7 @@ Expanding:
 $$Q_{t+1} = 2Q_t - Q_{t-1}
 \;+\; \eta\,\Delta\tau^2\,\nabla_{Q_t} R\!\left(
   Q_t U_q U_q^\top
-  - \tfrac{\sigma^2\Delta\tau}{2}\,\widetilde{L_F (Q_t U_q U_q^\top)}
+  - \tfrac{\sigma^2\Delta\tau}{2}\,L_F (Q_t U_q U_q^\top)
 \right)
 \;-\; \gamma \Delta Q
 \;+\; \Lambda(\tau)\cdot\Delta\tau^2\,B_t$$
@@ -189,7 +182,7 @@ made explicit. The three operators act in sequence:
               ▼                                        │
         F_t = Q_t U_q U_q^T  ∈  R^{B×F}              │
               │                                        │
-              │  Diffuse: WHT-filtered L_F heat step ◄─┘
+              │  Diffuse: L_F heat step ◄─┘
               ▼
         F̃_t  ∈  R^{B×F}
               │
@@ -209,8 +202,6 @@ made explicit. The three operators act in sequence:
 |---|---|---|---|
 | $U_q$ | $F \times q$ | `SpectralLoadingDecoder` eigenvectors | No (fixed after graph build) |
 | $q$ | scalar | hyperparameter ($1 \leq q \leq F$) | No |
-| $\hat{L}_F = H_F L_F H_F^\top$ | $F \times F$ | precomputed in `build_laplacian.py` | No |
-| $g$ | $F$ | learnable gate in `VibrationalStateBlock` | **Yes** |
 | $\sigma^2$ | scalar | diffusion coefficient (fixed or annealed) | Optional |
 | $\eta$ | scalar | Rayleigh gradient step size | Optional |
 | $\Lambda(\tau)$ | scalar | `EntropicClock` output | No (derived) |
@@ -221,11 +212,10 @@ made explicit. The three operators act in sequence:
 
 | Condition | Effect |
 |---|---|
-| $q = F$, $g = \mathbf{1}$ | $\Phi = \text{id}$, no WHT filtering → recovers the implicit `00-DESIGN.md` §4.2 formulation |
+| $q = F$ | $\Phi = \text{id}$, no projection → recovers the implicit `00-DESIGN.md` §4.2 formulation |
 | $\sigma^2 \to 0$ | Diffuse step vanishes → $\tilde{F}_t = F_t$ → hybridisation reduces to pure Rayleigh-gradient restoring force on the projected state |
 | $\eta \to 0$ | Projection step vanishes → feature-space diffusion has no effect on item dynamics → dark and bright sectors decouple |
 | $q = 1$ | Only the Fiedler vector is used → maximum compression; item dynamics are governed entirely by the graph's primary connectivity axis |
-| $g_k = 0$ for $k > k^*$ | Hard low-pass filter: only the $k^*$ lowest-sequency Laplacian modes are allowed to direct diffusion → deterministic pass-band |
 
 ---
 
@@ -252,7 +242,7 @@ differentiable $U_q$ is premature.
 - If learned-gate substantially outperforms frozen-gate: spectral frequency
   selection is real; differentiating $U_q$ becomes the natural Phase 3
   question — how much further gain comes from adapting the lifting subspace
-  itself vs. just the sequency gate $g$.
+  itself.
 
 **Implementation note:** if $U_q$ is eventually made differentiable, the
 correct approach is a Lanczos-based differentiable eigendecomposition
@@ -288,8 +278,8 @@ $q \approx F/4$ and collapses at both extremes, this is direct evidence
 for the optimal lifting subspace size. The $q = F$ condition is also
 the correct non-spectral baseline for $\Phi$ in isolation.
 
-**Default for implementation:** $q = F/4$, rounded to nearest power of 2
-for WHT compatibility. Override with `--q` flag in experiment configs.
+**Default for implementation:** $q = F/4$, rounded to nearest power of 2.
+Override with `--q` flag in experiment configs.
 
 ---
 
@@ -348,12 +338,6 @@ Un-0 the coupling matrix magnitude controls how hard oscillators pull each
 other toward synchrony vs. how hard the external input drives them apart.
 Issue \#27 Gap 1 asks for the frozen-vs-learned ablation precisely to
 isolate this balance.
-
-**`r_g_corr`** (residual-gate correlation, `03-FITNESS-CRITERIA.md` §B)
-measures the per-mode correlation between residual magnitude and gate
-activity — it is a proxy for whether $\mathcal{H}$ is responding to
-meaningful spectral activity. But it does not directly measure which force
-is winning globally.
 
 **Add `net_energy_flow` to the health check** (`00-DESIGN.md` §8.1):
 
@@ -428,11 +412,11 @@ Principled Collocation Strategy):
 
 > **§4.5 The Hybridisation Operator $\mathcal{H}$**
 > See `00-DESIGN_HYBRID.md` for the full derivation. In summary:
-> the term $\widetilde{L_F Q_t}$ in the wave recurrence is not a bare
+> the term $L_F Q_t$ in the wave recurrence is not a bare
 > matrix–vector product. It is the composition
 > $\mathcal{H}(Q_t) = \Pi \circ \text{Diffuse}_{L_F} \circ \Phi$
 > where $\Phi$ lifts $Q_t$ into the feature-space eigenbasis,
-> $\text{Diffuse}_{L_F}$ applies the WHT-filtered Laplacian heat step,
+> $\text{Diffuse}_{L_F}$ applies the Laplacian heat step,
 > and $\Pi$ converts the result into a Rayleigh-gradient restoring force
 > on the item-space state. The three operators together define the
 > mechanism by which the F×F feature-space spectral structure (dark sector)
@@ -444,9 +428,9 @@ Principled Collocation Strategy):
 
 ## References
 
-- `00-DESIGN.md` §4.2–4.4 — wave recurrence, WHT filter, collocation
+- `00-DESIGN.md` §4.2–4.4 — wave recurrence, collocation
 - `001-IMPLEMENTATION-PLAN.md` §4.2–4.3 — 2.5-D dual-space update equations
-- `00-DESIGN_PREAMBLE.md` — WHT spectral filter, two-sector partition
+- `00-DESIGN_PREAMBLE.md` — two-sector partition
 - `03-FITNESS-CRITERIA.md` §A–B — gate learning and interference scoring
 - `002-EXPERIMENTS.md` Experiment 4 Condition C, Experiments 7–9
 - Issue \#27: Benchmark ESDM against Un-0-style oscillator dynamics

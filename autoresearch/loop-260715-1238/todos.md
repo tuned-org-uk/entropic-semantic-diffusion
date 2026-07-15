@@ -47,6 +47,6 @@ Three fixes applied in commit 82a6a17:
 5. [ ] Iteration 1: tune heat-death detection (clock eps / patience)
 6. [ ] Iteration 2-5: sweep lr in {1e-4, 3e-4, 5e-4, 1e-3}
 7. [ ] Iteration 6-10: sweep n_steps in {400, 600, 800, 1200}
-8. [ ] Iteration 11-15: sweep wht_filter {none, basic, bivariate}
-9. [ ] Iteration 16-20: sweep a_tau_scale {1.0, 2.62, 5.0, 8.0}
-10. [ ] Iteration 21-25: best-combo + conservation tuning (kl_S_weight)
+8. [ ] Iteration 11-15: sweep n_steps finer grid
+9. [ ] Iteration 16-20: best-combo + conservation tuning (kl_S_weight)
+10. [ ] Iteration 21-25: latent evaluation metrics

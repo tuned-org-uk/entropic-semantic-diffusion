@@ -58,7 +58,6 @@ def test_exp5_run_single_smoke(fake_loader, monkeypatch, tmp_path):
     """Exp5 run_single should complete a few steps without error."""
     metrics = exp5.run_single(
         n_steps=2,
-        wht_filter="none",
         seed=3407,
         output_dir=tmp_path,
     )
@@ -77,7 +76,6 @@ def test_exp5_real_cifar10_short(tmp_path):
     """Slow: run a handful of steps on the real CIFAR-10 DINO-256 loader."""
     metrics = exp5.run_single(
         n_steps=2,
-        wht_filter="none",
         seed=3407,
         output_dir=tmp_path,
         data_dir=".pytest_cache/cifar10",

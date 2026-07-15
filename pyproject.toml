@@ -76,7 +76,6 @@ all = [
 # Console entry points
 # ---------------------------------------------------------------------------
 # CLI entry points registered after the migration completes.
-# The esdm.cli module exposes --wht-filter {none,basic,bivariate} etc.
 [project.scripts]
 esdm-train = "esdm.cli.train:main"
 esdm-sweep = "esdm.cli.sweep:main"

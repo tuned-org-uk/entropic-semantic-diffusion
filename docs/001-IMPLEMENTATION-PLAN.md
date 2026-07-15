@@ -169,23 +169,6 @@ determinant.
 
 This is the treatment condition under test.
 
-### 4.3 WHT-filtered 2.5-D update (Phase 2 integration)
-
-Once the entropic clock is wired (Macro-Phase A), the feature-signal update
-gains a WHT spectral gate $g \in \mathbb{R}^F$:
-
-$$
-f_{t-\Delta t} = f_t - \frac{\sigma^2 \Delta t}{2}\, \widetilde{L_F f_t}
-$$
-
-where $\widetilde{L_F f_t} = H_F^\top(g \odot \hat{L}_F \hat{f}_t)$ with
-$\hat{L}_F = H_F L_F H_F^\top$ and $\hat{f}_t = H_F f_t$. This replaces
-the plain $L_F f_t$ with a pass-band-filtered Laplacian action. Low-sequency
-components (globally-coherent string/spring modes) are preserved; high-
-sequency components (local noise) are progressively gated out as $\tau$
-increases. See `00-DESIGN_PREAMBLE.md` §WHT Spectral Filter for the full
-derivation.
-
 ## 5. Component breakdown
 
 | Component | Description | Owner module |
@@ -245,7 +228,7 @@ Every training run that reports a performance number from the 2.5-D ESDM
 must include a paired frozen-gate (Condition B) run under identical
 hyperparameters. The performance delta must be reported; if it is not
 statistically significant (3 seeds), the result is reported as "spectral
-filtering not isolable" rather than as evidence for the WHT gate mechanism.
+filtering not isolable" rather than as evidence for the spectral gate mechanism.
 
 ### 8.2 Step-count sweep
 
@@ -264,7 +247,7 @@ dual-space hypothesis, which predicts improved basin coverage.
 ### 8.4 Non-spectral baseline
 
 All comparisons involving the 2.5-D model must include a non-spectral MLP
-baseline (no $L_F$ term, no WHT gate, matched parameter count). This
+baseline (no $L_F$ term, matched parameter count). This
 baseline is the correct null hypothesis: improvements over it indicate that
 the spectral string/spring substrate contributes, not merely the additional
 parameters.

@@ -4,7 +4,7 @@
 Parses the loop configuration from AGENTS.md, establishes a baseline, then
 iterates: modify -> commit -> verify -> guard -> keep/discard -> log.
 
-The modification strategy is a bounded parameter sweep over the exp3
+The modification strategy is a bounded parameter sweep over the exp4/exp5
 hyperparameters exposed in scripts/verify_fitness.py.  Each iteration applies
 one atomic change to the verify script, tests it, and reverts if the composite
 fitness score does not improve.
@@ -148,9 +148,6 @@ def build_strategy() -> list[dict]:
     add("n_steps", 500, "increase n_steps to 500")
     add("n_steps", 200, "decrease n_steps to 200")
 
-    # WHT filter treatments (compared against none baseline)
-    add("wht_filter", '"basic"', "switch to basic WHT filter")
-    add("wht_filter", '"bivariate"', "switch to bivariate WHT filter")
 
     return changes
 

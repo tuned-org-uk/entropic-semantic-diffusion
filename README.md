@@ -14,7 +14,6 @@ metrics = exp5.run_single(
     n_steps=800,
     batch_size=64,
     lr=0.05,
-    wht_filter='none',
     seed=3407,
     output_dir=Path('results/cifar10_20k_baseline_800'),
     data_dir='data/cifar10',
@@ -50,7 +49,7 @@ See the [Autoresearch Loop](#autoresearch-loop) section below and `AGENTS.md` fo
 - `docs/00-DESIGN.md` — core entropic-clock ESDM design.
 - `docs/00-DESIGN_HYBRID.md` — explicit hybridisation operator (lifting, Laplacian diffusion, projection) that mixes feature-space and item-space dynamics.
 - `docs/03-FITNESS-CRITERIA.md` — composite fitness score, phase-aware ablation scoring, and diversity/quality criteria.
-- `docs/002-EXPERIMENTS.md` — experiment roadmap including 2.5-D dual-space validation and WHT gate ablations.
+- `docs/002-EXPERIMENTS.md` — experiment roadmap including 2.5-D dual-space validation.
 
 ---
 
@@ -322,8 +321,7 @@ The default `kl_decay=0.08` consumes the entropy budget quickly and matches the
 issue's heat-death timing.  The entropic-pump ceiling defaults to
 `lambda_clip=15.0` so that the Phase-3 pump explosion does not immediately
 saturate.  Slower decays spread the schedule but delay heat death.  The
-bright/dark mode split drives the spectral dark-entropy proxy, and the CSV
-also logs `g_mean` and `g_entropy` for the WHT-gate diagnostic convention:
+bright/dark mode split drives the spectral dark-entropy proxy:
 
 ```bash
 .venv/bin/python scripts/run_exp2.py --output-dir runs/exp2 --seed 42
@@ -352,7 +350,6 @@ The script asserts:
 - the fused item-space kernel remains symmetric and numerically stable;
 - `tau_n` advances monotonically and the entropic schedule stays within `[0, 1]`;
 - `Lambda_tau`, `dark_entropy`, and `conserved` remain finite throughout the run;
-- WHT-gate diagnostics (`g_mean`, `g_entropy`) are logged alongside the core clock signals;
 - no NaN/Inf values appear in model states or metrics, and no premature heat death occurs under the default configuration.
 
 Run a custom output directory or seed:
@@ -411,8 +408,6 @@ The baseline parameters are:
 | `n_steps` | 800 |
 | `kl_S_weight` | 0.5 |
 | `kl_decay` | 0.03 |
-| `wht_filter` | `basic` |
-| `a_tau_scale` | 2.62 |
 | `lambda_clip` | 10.0 |
 | `rho` | 3.0 |
 | `seed` | 3407 |

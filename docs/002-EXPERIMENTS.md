@@ -18,8 +18,8 @@
 > $L_F$ (ArrowSpace graph wiring), driven by the entropic clock $\tau$.
 > The two architectures share the same class of resonant physical dynamics
 > but differ in substrate: Un-0 learns a dense pairwise phase-coupling matrix
-> over oscillators; ESDM learns a WHT spectral gate $g \in \mathbb{R}^F$ that
-> selects which sequency bands of $L_F$ propagate into the wave recurrence.
+> over oscillators; ESDM uses a string/spring system on $L_F$ whose
+> modes propagate into the wave recurrence.
 > The experiments below are adapted to ESDM's design — no Kuramoto equations
 > are introduced.
 
@@ -148,35 +148,35 @@ real work, or whether the 2D item coordinate alone is sufficient.
 
 ---
 
-## Experiment 7 — Frozen WHT gate (reservoir) vs. learned gate _(new, issue #27)_
+## Experiment 7 — Frozen-gate (reservoir) vs. learned dynamics _(new, issue #27)_
 
-**Purpose**: prove that the *learned* spectral gate $g$ is doing real
-computational work, and that the ESDM string/spring dynamics are not merely
+**Purpose**: prove that the *learned* spectral dynamics are doing real
+computational work, and that the ESDM string/spring system is not merely
 a rich random-feature expander.
 
 **Design rationale**: Un-0 validates its Kuramoto backbone by freezing the
 coupling matrix at random initialisation and comparing FID against the
-trained model. ESDM's analogous control is to freeze the WHT gate $g$ at
-its initialisation value ($g = \mathbf{1}$, all sequency bands equally
-weighted) and compare against the co-trained gate.
+trained model. ESDM's analogous control is to freeze the feature-signal
+diffusion at its initialisation (no learned frequency selection) and compare
+against the co-trained dynamics.
 
-- **Condition A** (treatment): full ESDM with learned $g$, co-trained
+- **Condition A** (treatment): full ESDM with learned dynamics, co-trained
   end-to-end.
-- **Condition B** (reservoir / frozen): $g$ fixed at $\mathbf{1}$ throughout
-  training; all other parameters trained normally. The Laplacian action is
-  still applied — all string/spring modes propagate equally — but no
-  frequency selection is learned.
+- **Condition B** (reservoir / frozen): feature-signal diffusion fixed at
+  initialisation throughout training; all other parameters trained normally.
+  The Laplacian action is still applied — all string/spring modes propagate
+  equally — but no frequency selection is learned.
 - **What the comparison shows**:
   - If A significantly outperforms B: the model is learning a meaningful
     frequency selection over the feature-space Laplacian — the pass-band
-    behaviour described in `00-DESIGN_PREAMBLE.md` §WHT Spectral Filter is
-    real, not incidental.
-  - If A ≈ B: the gate is not contributing beyond its architectural role as
-    a scaling layer; the Laplacian diffusion itself (regardless of gate) is
-    doing the work. This is still a positive result for ESDM but changes
-    the claim about what the WHT filter adds.
+    behaviour described in `00-DESIGN.md` is real, not incidental.
+  - If A ≈ B: the spectral dynamics are not contributing beyond their
+    architectural role as a scaling layer; the Laplacian diffusion itself
+    (regardless of learned dynamics) is doing the work. This is still a
+    positive result for ESDM but changes the claim about what the spectral
+    substrate adds.
 - **Metrics**: Chamfer distance, Rayleigh/λτ energy gap, fitness score
-  (active phase only), `g_entropy` trajectory.
+  (active phase only).
 - **Procedure**: train both conditions on identical splits, same seed, same
   number of steps. Report mean ± std over 3 seeds.
 
@@ -221,7 +221,7 @@ Laplacian-guided diffusion should improve semantic basin coverage.
 **Design rationale**: aggregate metrics (Chamfer distance, FID) cannot
 distinguish a model that generates diverse but coarse samples from one that
 generates sharp but mode-collapsed samples. ESDM's design motivation —
-that $L_F$ encodes semantic basin structure and WHT-filtered diffusion
+that $L_F$ encodes semantic basin structure and Laplacian-guided diffusion
 follows basin geometry — predicts improved diversity relative to a
 non-spectral baseline, not merely improved per-sample fidelity.
 

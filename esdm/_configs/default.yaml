@@ -1,7 +1,7 @@
 # Default ESDM configuration
 # Architecture constants per AGENTS.md — do NOT sweep these.
 # The only free hyperparameters are lr and n_steps (governed by heat death).
-# lam_s and wht_filter are treatment variables for the autoresearch loop.
+# lam_s is the treatment variable for the autoresearch loop.
 
 model:
   dim_input: 256          # embedding dimension F (overridden per experiment)

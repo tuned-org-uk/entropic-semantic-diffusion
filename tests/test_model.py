@@ -2,7 +2,6 @@
 Phase 6 test — ESDM top-level model.
 Smoke-tests only until all sub-modules are implemented.
 """
-import numpy as np
 import yaml
 from pathlib import Path
 
@@ -44,35 +43,6 @@ def test_forward_pass():
 
 
 
-
-def test_forward_pass_with_wht_filter():
-    """Forward pass with a timestep-aware Graph-WHT filter remains stable."""
-    import torch
-    from esdm.models.esdm import ESDM
-    from esdm.graphs.wht_filter import GraphWHTFilter
-
-    cfg = _default_cfg()
-    F = 32
-    cfg["model"]["dim_input"] = F
-    cfg["model"]["dim_latent"] = 8
-    cfg["model"]["n_nodes"] = F
-    cfg["model"]["n_modes"] = 8
-
-    # Small symmetric PSD feature-space Laplacian for the WHT filter.
-    rng = np.random.default_rng(3407)
-    A = rng.standard_normal((F, F))
-    L_F = A.T @ A
-    np.fill_diagonal(L_F, L_F.diagonal() + 1e-3)
-    L_F = (L_F + L_F.T) / 2.0
-
-    cfg["model"]["wht_filter"] = GraphWHTFilter(L_matrix=L_F).fit()
-
-    model = ESDM(cfg)
-    x = torch.randn(4, F)
-    out = model(x)
-    assert out.x_hat.shape == x.shape
-    assert torch.isfinite(out.loss)
-    assert out.clock is not None
 
 
 def test_training_loop_advances_entropic_time():
