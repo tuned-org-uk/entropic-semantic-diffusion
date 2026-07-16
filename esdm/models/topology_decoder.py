@@ -101,14 +101,20 @@ def heat_kernel_sample(
     t: Tensor | float,
     n_samples: int = 64,
     seed: int = 3407,
+    lambdas: Tensor | None = None,
 ) -> Tensor:
     """
     Draw samples from the heat kernel prior on the spectral chart.
 
     The prior is N(0, exp(-2t * L_K)) where L_K is the projected Laplacian.
-    At t->0, samples concentrate near the origin (data-like, concentrated
-    in smooth modes). At t->inf, samples spread over the full smooth
-    submanifold. The alpha_bar schedule IS this t parameter.
+    At t->0, samples concentrate near the origin (data-like). At t->inf,
+    samples spread over the full smooth submanifold.
+
+    When ``lambdas`` is provided (per-mode ArrowSpace energy scores in [0,1],
+    projected onto the K-dim spectral chart), the prior covariance is
+    weighted: low-lambda (smooth) modes get higher variance, high-lambda
+    (rough) modes get suppressed. This biases sampling toward the regions
+    where real data concentrates on the energy landscape.
 
     Parameters
     ----------
@@ -118,6 +124,8 @@ def heat_kernel_sample(
         Diffusion time.
     n_samples : int
     seed : int
+    lambdas : Tensor (K,), optional
+        Per-mode ArrowSpace lambda scores in [0,1]. Low = smooth (on-manifold).
 
     Returns
     -------
@@ -130,6 +138,13 @@ def heat_kernel_sample(
     K = L_K.shape[0]
 
     cov = torch.matrix_exp(-2.0 * t * L_K)
+
+    if lambdas is not None:
+        lambdas = lambdas.to(dtype=cov.dtype, device=cov.device)
+        weight = torch.exp(-lambdas * 5.0)  # exponential decay: low lambda = high weight
+        weight = weight / weight.sum() * K  # normalise so mean weight = 1
+        cov = cov * weight.unsqueeze(0) * weight.unsqueeze(1)
+
     cov = cov + 1e-6 * torch.eye(K, dtype=cov.dtype, device=cov.device)
 
     try:
@@ -256,8 +271,20 @@ def topology_reverse_sde(
     L_F = model.L_base  # (F, F) — graph Laplacian
     L_K = build_projected_laplacian(U_q, L_F)  # (K, K)
 
+    # Project ArrowSpace lambdas onto the K-dim spectral chart.
+    # model.lambdas holds per-feature (F,) energy scores from
+    # aspace.lambdas(). We project to per-mode (K,) by energy-weighting
+    # each eigenvector: lambda_K^(k) = sum_f lambda_f * U_{f,k}^2.
+    # Low lambda_K = smooth mode = high variance in the prior.
+    lambdas_K = None
+    if getattr(model, "lambdas", None) is not None:
+        lambdas_F = model.lambdas.to(U_q.dtype)
+        lambdas_K = (lambdas_F.unsqueeze(1) * U_q.pow(2)).sum(dim=0)  # (K,)
+        lmax = lambdas_K.max().clamp(min=1e-8)
+        lambdas_K = lambdas_K / lmax  # normalise to [0, 1]
+
     # Initialise from the heat kernel prior at t = tau_max.
-    q_hat = heat_kernel_sample(L_K, float(tau_max), n_samples, seed)
+    q_hat = heat_kernel_sample(L_K, float(tau_max), n_samples, seed, lambdas=lambdas_K)
     q_hat = q_hat.to(device=device, dtype=U_q.dtype)
 
     for i in range(n_steps - 1):
@@ -284,7 +311,13 @@ def topology_reverse_sde(
         q_pred = Q_predicted @ U_q  # (n_samples, K)
 
         # DDIM-style update in spectral coordinates.
+        # Noise is scaled by lambda weights: more noise in smooth (low-lambda)
+        # directions, less in rough (high-lambda) directions.
         z_noise = torch.randn(n_samples, U_q.shape[1], device=device, generator=gen)
+        if lambdas_K is not None:
+            noise_weight = torch.exp(-lambdas_K.to(device) * 5.0)
+            noise_weight = noise_weight / noise_weight.sum() * len(noise_weight)
+            z_noise = z_noise * noise_weight.unsqueeze(0)
         a_sqrt_next = ab_next ** 0.5
         noise_sqrt_next = (1.0 - ab_next) ** 0.5
         q_hat = a_sqrt_next * q_pred + noise_sqrt_next * z_noise

@@ -180,3 +180,60 @@ def test_sample_from_prior_shape():
     samples = sample_from_prior(mean, cov, n_samples=8, seed=3407)
     assert samples.shape == (8, K)
     assert torch.all(torch.isfinite(samples))
+
+
+# ---------------------------------------------------------------------------
+# Lambda-weighted sampling tests (issue #31)
+# ---------------------------------------------------------------------------
+
+
+def test_topology_sampler_uses_lambdas_when_available():
+    """When model.lambdas is set, the topology sampler should produce
+    different samples than when lambdas is None (lambda weighting changes
+    the prior)."""
+    model = _build_small_model()
+    # Without lambdas (current behavior)
+    s_no_lambda = topology_reverse_sde(model, n_samples=4, n_steps=10, seed=3407)
+
+    # With lambdas set — simulate ArrowSpace lambdas
+    model.lambdas = torch.rand(model.L_base.shape[0])
+    s_with_lambda = topology_reverse_sde(model, n_samples=4, n_steps=10, seed=3407)
+
+    # Samples should differ because the lambda weighting changes the prior covariance.
+    assert not torch.allclose(s_no_lambda, s_with_lambda, atol=1e-4)
+    # Both should still be on S^{F-1}.
+    assert torch.allclose(s_no_lambda.norm(dim=-1), torch.ones(4), atol=1e-5)
+    assert torch.allclose(s_with_lambda.norm(dim=-1), torch.ones(4), atol=1e-5)
+
+
+def test_lambda_weighted_prior_concentrates_in_smooth_modes():
+    """The lambda-weighted prior should produce spectral coordinates with
+    lower variance in high-lambda (rough) directions and higher variance
+    in low-lambda (smooth) directions."""
+    from esdm.models.topology_decoder import build_projected_laplacian, heat_kernel_sample
+
+    F_dim, K = 16, 4
+    torch.manual_seed(3407)
+    # Build a graph Laplacian
+    A = torch.rand(F_dim, F_dim)
+    A = (A + A.T) / 2
+    A.fill_diagonal_(0)
+    L_F = torch.diag(A.sum(dim=-1)) - A
+    _, vecs = torch.linalg.eigh(L_F.double())
+    U_q = vecs.float()[:, :K]
+    L_K = build_projected_laplacian(U_q, L_F)
+
+    # Lambdas: low for first 2 modes (smooth), high for last 2 (rough)
+    lambdas_K = torch.tensor([0.01, 0.02, 0.9, 0.95])
+    n = 200
+
+    # Weighted prior: should concentrate variance in low-lambda directions
+    samples = heat_kernel_sample(L_K, t=1.0, n_samples=n, seed=3407, lambdas=lambdas_K)
+    var_per_mode = samples.var(dim=0)
+
+    # Low-lambda modes should have higher variance than high-lambda modes
+    assert var_per_mode[0] > var_per_mode[2], (
+        f"Expected smooth mode 0 (lambda=0.01) to have higher variance than "
+        f"rough mode 2 (lambda=0.9). Got var[0]={var_per_mode[0]:.4f}, var[2]={var_per_mode[2]:.4f}"
+    )
+    assert var_per_mode[1] > var_per_mode[3]
