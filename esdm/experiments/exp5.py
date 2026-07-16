@@ -70,13 +70,17 @@ def run_single(
     q: Optional[int] = None,
     sigma_sq: Optional[float] = None,
     freeze_h: bool = False,
-) -> pd.DataFrame:
+    return_model: bool = False,
+):
     """
     Run a single Exp-5 training loop on CIFAR-10 DINO-256 embeddings.
 
     Free parameters: n_steps, lr, lam_s, q, sigma_sq, freeze_h.
     Architecture constants (gamma, n_vibrational_steps, batch_size, grad_clip)
     come from esdm/_configs/default.yaml and AGENTS.md — do not sweep.
+
+    If ``return_model`` is True, returns ``(metrics, model, loader)`` so the
+    trained model can be used for generation (issue #29 Phase 1).
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -196,6 +200,8 @@ def run_single(
         metrics.to_csv(out / "metrics.csv", index=False)
         logger.info("Wrote metrics to %s", out / "metrics.csv")
 
+    if return_model:
+        return metrics, model, loader
     return metrics
 
 

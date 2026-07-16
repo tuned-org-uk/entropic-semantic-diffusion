@@ -1,0 +1,75 @@
+{
+  "version": "2.1.0",
+  "source": "ship",
+  "timestamp": "2026-07-16T10:56:00+01:00",
+  "status": "COMPLETE",
+  "issue": 29,
+  "phase": "baseline-handoff",
+  "findings": {
+    "blockers": [],
+    "warnings": [
+      "net_energy_flow = 0.00/5 — Lambda pump dominates H contraction throughout (#29 Phase 2 target)",
+      "recon_decrease = 6.58/10 — decoder near-collapsed, recon 0.011 -> 0.0006 -> 0.004",
+      "pi_contraction_ratio = 3.94/5 — pcr >1.0 at start, decays to 0.027 at end (H too strong early, inert late)",
+      "heat_death_timing = 4.38/5 — tuned (eps_rel=0.002, patience=50), not derived",
+      "conservation = 15.00/15 — tautological (enforced by construction via dark_entropy = max(0, S_0 - kl_S - kl_tau))"
+    ]
+  },
+  "baseline": {
+    "version": "v0.2.0",
+    "dataset": "cifar10",
+    "n_steps": 800,
+    "lr": 0.025,
+    "lam_s": 1.0,
+    "seed": 3407,
+    "max_train_samples": 2000,
+    "max_test_samples": 200,
+    "pca_fit_samples": 1000,
+    "total": 74.8954,
+    "max": 85,
+    "percent": 88.1,
+    "S_0": 52.1054,
+    "tau_range": 186.8889,
+    "alpha_bar_drop": 1.0,
+    "conserved_ratio": 2.13e-08,
+    "heat_death_fired": true,
+    "heat_death_step": 610,
+    "criteria": {
+      "tau_monotone": 10.0,
+      "tau_range_bonus": 5.0,
+      "alpha_bar_decrease": 10.0,
+      "conservation": 15.0,
+      "heat_death": 10.0,
+      "heat_death_timing": 4.375,
+      "rho_sign_stabilizing": 10.0,
+      "recon_decrease": 6.5801,
+      "net_energy_flow": 0.0,
+      "pi_contraction_ratio": 3.9403
+    }
+  },
+  "cleanup": {
+    "runs_dirs_removed": 56,
+    "criterion": "all dirs predated v0.1.0 tag (2026-07-15 18:33:28); newest mtime 2026-07-14 17:55:49",
+    "gitignored": true,
+    "tracked_files_affected": 0
+  },
+  "next_phase": {
+    "id": 1,
+    "title": "Validate generation on real data",
+    "steps": [
+      "Train a checkpoint on CIFAR-10 (real DINO-256 embeddings)",
+      "Save model state_dict to checkpoints/",
+      "Run reverse-SDE sampler (esdm/sampling/euler_maruyama.py) on the checkpoint",
+      "Decode samples to images via pixel decoder (esdm/cli/train.py generation path)",
+      "Visual inspection + FID against CIFAR-10 test set"
+    ]
+  },
+  "phase1_result": {
+    "verdict": "FAIL",
+    "summary": "Sampler collapses to zero on real data. All 64 generated embeddings are the zero vector. NN distance ratio = 58.72 (ideal: 1.0).",
+    "root_cause": "Three compounding failures: (1) sampler feeds noise (norm=15.87) to a model expecting L2-normalized embeddings (norm=1.0), (2) diffusion decoder outputs zero at alpha_bar=0 by design (Q fully diffused), (3) DDPM ancestral update formula does not apply to ESDM (diffusion is internal in Q-space, not external in input-space).",
+    "what_model_can_do": "Produces meaningful x_hat at alpha_bar > 0 (norm 0.43 at alpha_bar=0.15, 0.95 at 0.85, 0.996 at 0.9999). Decoder is functional but cannot denoise from alpha_bar=0.",
+    "required_fix": "Redesign sampler to operate in Q-space: reverse the wave recurrence (00-DESIGN.md section 4.2) from tau_max to 0, not apply DDPM in input-space. Design-level change, not parameter tuning.",
+    "connection_to_weak_spots": "recon_decrease=6.58, net_energy_flow=0, pi_contraction_ratio=3.94 all converge on the same failure: Lambda pump destroys Q-state at alpha_bar=0, making the decoder unable to recover."
+  }
+}
