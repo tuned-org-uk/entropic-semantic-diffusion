@@ -44,11 +44,16 @@ class WireGraph:
     The Laplacian is (F, F) where F is the feature dimension of the input
     data. ArrowSpace builds the graph from item co-occurrence structure:
     pass data as (N, F) where N = items, F = features.
+
+    ArrowSpace is the space defined by the graph Laplacian (gl) and the
+    energy distribution of the lambdas (lambdas()). Both are stored here
+    so the topology decoder can use the full ArrowSpace structure.
     """
     laplacian_dense: Tensor          # (F, F)
     laplacian_sym: Tensor            # (F, F) normalised, cached
     features: Tensor                 # (N, D) source items
     nnz: int
+    lambdas: Tensor | None = None    # (N,) per-item energy scores
 
     # ------------------------------------------------------------------ #
     @classmethod
@@ -74,46 +79,52 @@ class WireGraph:
             When None, runs the tuner (slow — should only happen once per
             dataset to discover the params, then cached in the config).
         """
+        lambdas = None
         if mode == "feature" and _HAS_ASP:
             items_np = features.detach().cpu().to(torch.float64).numpy()
-            L = cls._arrowspace_laplacian(items_np, k=k, seed=seed, graph_params=graph_params)
+            L, lambdas = cls._arrowspace_laplacian(items_np, k=k, seed=seed, graph_params=graph_params)
         else:
             L = cls._knn_laplacian_fallback(features, k=k, seed=seed)
         L = L.to(dtype=torch.float32)
         L_sym = _normalize_symmetric(L)
-        return cls(laplacian_dense=L, laplacian_sym=L_sym, features=features, nnz=int((L != 0).sum()))
+        return cls(laplacian_dense=L, laplacian_sym=L_sym, features=features,
+                   nnz=int((L != 0).sum()), lambdas=lambdas)
 
     @staticmethod
     def _arrowspace_laplacian(items_np: np.ndarray, k: int, seed: int,
-                               graph_params: dict | None = None) -> Tensor:
+                               graph_params: dict | None = None,
+                               ) -> tuple[Tensor, Tensor | None]:
         """Build L_F via the real ArrowSpace Rust bindings.
 
-        When graph_params is provided (eps, k, tau from the dataset config),
-        uses them directly — no tuner run. When None, runs arrowspace_tuner
-        to discover the best params (slow; should only happen once per dataset).
+        Returns (L_F, lambdas) where lambdas are the per-item ArrowSpace
+        energy scores. When graph_params is provided (eps, k, tau from the
+        dataset config), uses them directly. When None, runs arrowspace_tuner.
         """
-        if graph_params and graph_params.get("eps") is not None:
+        gp = dict(graph_params) if graph_params else None
+        if gp and gp.get("eps") is not None:
             import arrowspace as asp
-            # Use cached params directly — no tuner run.
-            del graph_params["tau"]
+            gp.pop("tau", None)
             builder = (asp.ArrowSpaceBuilder()
                        .with_seed(seed)
                        .with_sampling("simple", 1.0)
                        .with_dims_reduction(False, None))
-            _, gl = builder.build_full(graph_params=graph_params, items=items_np)
+            aspace, gl = builder.build_full(graph_params=gp, items=items_np)
             L_np = np.array(gl.to_dense())
+            lambdas_np = np.array(aspace.lambdas())
         else:
-            # First-time tuning: run arrowspace_tuner to discover params.
             import arrowspace_tuner as arrowspace
-            _, gl = arrowspace.optuna(
+            aspace, gl = arrowspace.optuna(
                 embeddings=items_np,
                 seed=seed,
                 k_low=max(3, k - 5),
                 k_high=k + 5,
             )
             L_np = np.array(gl.to_dense())
+            lambdas_np = np.array(aspace.lambdas())
 
-        return torch.from_numpy(L_np)
+        L = torch.from_numpy(L_np)
+        lambdas = torch.from_numpy(lambdas_np.astype(np.float32)) if lambdas_np is not None else None
+        return L, lambdas
 
 
     @staticmethod

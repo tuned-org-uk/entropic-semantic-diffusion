@@ -20,7 +20,7 @@ def _build_small_model():
             "n_modes": F // 4, "n_vibrational_steps": 2, "gamma": 0.1,
             "lam_s": 1.0, "sigma_sq": 1.0, "freeze_h": False,
         },
-        "clock": {"eps": 1e-8, "heat_death_patience": 200, "lambda_clip": 100.0, "eps_rel": 0.0},
+        "clock": {"eps": 1e-8, "heat_death_patience": 200, "eps_rel": 0.0},
         "training": {"batch_size": 8, "lr": 1e-3, "weight_decay": 0.0, "max_steps": 10},
     }
     # Build a random Laplacian for L_base.
@@ -51,7 +51,7 @@ def test_sampler_reproducible():
     model = _build_small_model()
     s1 = entropic_reverse_sde(model, n_samples=4, n_steps=10, seed=3407)
     s2 = entropic_reverse_sde(model, n_samples=4, n_steps=10, seed=3407)
-    assert torch.allclose(s1, s2, atol=1.0)
+    assert torch.allclose(s1, s2, atol=1e-4)
 
 
 def test_sampler_restores_clock():

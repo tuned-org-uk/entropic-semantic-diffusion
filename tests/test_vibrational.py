@@ -249,3 +249,52 @@ def test_hybridisation_q_equals_f_recovers_identity():
     Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
     assert Q.shape == x.shape
     assert torch.all(torch.isfinite(Q))
+
+
+# ---------------------------------------------------------------------------
+# S^{F-1} normalisation tests (issue #29, v0.3.2)
+# ---------------------------------------------------------------------------
+
+
+def test_q_normalised_to_unit_sphere():
+    """After the wave recurrence, each row of Q has unit L2 norm (S^{F-1})."""
+    torch.manual_seed(3407)
+    F = 16
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=2, dropout=0.0)
+    x = torch.nn.functional.normalize(torch.randn(8, F), dim=-1)
+    L_f = _random_L_f(F)
+    vals, vecs = torch.linalg.eigh(L_f.double())
+    U_q = vecs.float()[:, :4]
+
+    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    norms = Q.norm(dim=-1)
+    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
+
+
+def test_q_normalised_with_lambda_zero():
+    """Q is on S^{F-1} even with pump off (Lambda=0)."""
+    torch.manual_seed(3407)
+    F = 16
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=2, dropout=0.0)
+    x = torch.nn.functional.normalize(torch.randn(8, F), dim=-1)
+    L_f = _random_L_f(F)
+
+    Q, _, _ = block(x, L_f, Lambda_tau=0.0, delta_tau=0.1)
+    norms = Q.norm(dim=-1)
+    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
+
+
+def test_angular_displacement_nonzero_for_different_inputs():
+    """Angular displacement > 0 when input differs from the wave recurrence output."""
+    torch.manual_seed(3407)
+    F = 16
+    block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=2, dropout=0.0)
+    x = torch.nn.functional.normalize(torch.randn(4, F), dim=-1)
+    L_f = _random_L_f(F)
+    vals, vecs = torch.linalg.eigh(L_f.double())
+    U_q = vecs.float()[:, :4]
+
+    block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    diag = block.diagnostics()
+    assert diag["angular_displacement"] > 0.0
+    assert diag["gamma_mean"] > 0.0

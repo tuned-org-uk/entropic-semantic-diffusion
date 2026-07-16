@@ -114,6 +114,14 @@ class ESDM(nn.Module):
             )
             lambda_max = 2.0  # upper bound for normalised Laplacian
 
+        # ArrowSpace lambdas: per-item energy scores from the graph build.
+        # Defines the energy distribution on the Laplacian graph.
+        lambdas = cfg["model"].get("lambdas", None)
+        if lambdas is not None:
+            self.register_buffer("lambdas", torch.as_tensor(lambdas, dtype=torch.float32))
+        else:
+            self.register_buffer("lambdas", None)
+
         # Derive eta_init from L_F spectral scale (NOT a hardcoded constant).
         # The Rayleigh gradient magnitude scales as 2*lambda_max/||Q||^2.
         # For pi_contraction_ratio ~ 0.1 (healthy range), eta ~ 0.1*F/(2*lambda_max).

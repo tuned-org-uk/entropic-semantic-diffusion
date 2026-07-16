@@ -79,3 +79,33 @@ def test_training_loop_advances_entropic_time():
     assert alphas[-1] < alphas[0]
     # Loss stayed finite.
     assert all(torch.isfinite(torch.tensor(a)) for a in alphas)
+
+
+def test_lambdas_buffer_none_by_default():
+    """lambdas buffer is None when not provided in config."""
+    from esdm.models.esdm import ESDM
+    cfg = _default_cfg()
+    cfg["model"]["dim_input"] = 32
+    cfg["model"]["dim_latent"] = 8
+    cfg["model"]["n_nodes"] = 32
+    cfg["model"]["n_modes"] = 8
+    model = ESDM(cfg)
+    assert model.lambdas is None
+
+
+def test_lambdas_buffer_stored_when_provided():
+    """lambdas buffer is stored when provided in config."""
+    import torch
+    from esdm.models.esdm import ESDM
+    cfg = _default_cfg()
+    cfg["model"]["dim_input"] = 32
+    cfg["model"]["dim_latent"] = 8
+    cfg["model"]["n_nodes"] = 32
+    cfg["model"]["n_modes"] = 8
+    cfg["model"]["L_base"] = torch.eye(32)
+    cfg["model"]["lambdas"] = torch.rand(100)
+    model = ESDM(cfg)
+    assert model.lambdas is not None
+    assert model.lambdas.shape == (100,)
+    assert float(model.lambdas.min()) >= 0.0
+    assert float(model.lambdas.max()) <= 1.0

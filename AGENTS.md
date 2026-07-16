@@ -37,8 +37,10 @@ This package investigates the connection between vibrational systems as describe
 
 ### Driver of research
 - Feature-space Laplacian components as directive for the diffusion process via spectral filters
+- arrowspace is the space defined by the graph Laplacian (gl property) and the energy distribution of the lambdas (lambdas() method). Full arrowspace API at https://github.com/tuned-org-uk/pyarrowspace/blob/main/src/lib.rs
 - Optimization as recursive semantic search
 - Dual-space hypothesis of graph wiring: every vector space is a geometric item-space and a semantic feature-space as in https://www.tuned.org.uk/posts/020_arrowspace_semantic_basins_part2
+- All the details in docs/00-DESIGN.md
 
 ## Operational notes
 - Always answer in English

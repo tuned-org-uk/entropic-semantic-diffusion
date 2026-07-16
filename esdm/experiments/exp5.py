@@ -37,11 +37,12 @@ A_TAU_SCALE: float = 2.62
 GRAD_CLIP: float = 1.0
 
 
-def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> torch.Tensor:
+def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407):
     """Build a real feature-space Laplacian L_F from the loader's training data.
 
-    Uses cached graph_params from the dataset adapter config to skip the
-    arrowspace_tuner run (which should only happen once per dataset).
+    Returns the WireGraph (which contains both the Laplacian and the
+    ArrowSpace lambdas). Uses cached graph_params from the dataset
+    adapter config to skip the arrowspace_tuner run.
     """
     data = loader.train_data  # (N, F)
     n = data.shape[0]
@@ -52,7 +53,7 @@ def _build_l_f(loader, n_samples: int = 5000, k: int = 16, seed: int = 3407) -> 
     k_eff = min(k, data.shape[1] - 1)
     gp = loader.graph_params if hasattr(loader, "graph_params") else None
     wg = WireGraph.build(data, k=k_eff, seed=seed, graph_params=gp)
-    return wg.laplacian(normalized=True, sparse=False)
+    return wg
 
 
 
@@ -117,8 +118,10 @@ def run_single(
         lr = loader.default_lr
     cfg["clock"]["eps_rel"] = loader.eps_rel
     cfg["clock"]["heat_death_patience"] = loader.heat_death_patience
-    L_F = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
+    wg = _build_l_f(loader, n_samples=min(5000, len(loader.train_data)), seed=seed)
+    L_F = wg.laplacian(normalized=True, sparse=False)
     cfg["model"]["L_base"] = L_F
+    cfg["model"]["lambdas"] = wg.lambdas
 
     model = ESDM(cfg)
 
