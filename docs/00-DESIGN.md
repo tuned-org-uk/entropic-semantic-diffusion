@@ -1,6 +1,6 @@
 # 00 — Entropic Semantic Diffusion Model (ESDM): Design Document
 
-> **Status:** v0.3.0 — consolidated design (issue #29)
+> **Status:** v0.4.0 — topology-adaptive decoder (issue #24)
 > **Sources:** Barontini 2026 (Phys. Rev. Research 8, L022047), VDT repo, quantum-vibrational repo, spectral-diffusion repo, ArrowSpace graph wiring formalism (Moriondo 2024)
 > **Supersedes:** `00-DESIGN_PREAMBLE.md`, `00-DESIGN_HYBRID.md` (now in `docs/legacy/`)
 
@@ -47,6 +47,30 @@ The clock provides $\Delta\tau$ (when to step) and $\Lambda(\tau)$ (how much for
 The clock's cosine schedule $\bar{\alpha}(\tau) = \cos^2(\pi/2 \cdot \tau/\tau_\mathit{max})$ gates the diffusion decoder: at $\tau=0$ (start of training), $\bar{\alpha}=1$ and the decoder reconstructs directly from $Q$; as $\tau$ accumulates, $\bar{\alpha}\to 0$ and the decoder must reconstruct from an increasingly diffused $Q$-state. The semantic operator's job is to keep $Q$ recoverable throughout this trajectory — so that at generation time, reversing the trajectory produces on-manifold embeddings.
 
 **The key design constraint:** the pump force and the $\mathcal{H}$ restoring force must be the same order of magnitude throughout training. If the pump is too strong (as was the case with the original $\lambda_\mathit{clip}=100.0$), it destroys the $Q$-state before the decoder can learn to reconstruct. The derivation of $\lambda_\mathit{clip} = 0.1\,F$ from the $\Lambda/\mathcal{H}$ balance (§4.5) is the design-level fix for this constraint.
+
+### 1.4 The 2.5-D Dual-Space: Topology-Adaptive Decoding
+
+The ArrowSpace Laplacian defines an intrinsic metric on a lower-dimensional, non-Euclidean energy surface. The ambient hypersphere $S^{F-1}$ is the wrong reference geometry for generation — it is the ambient space, not the manifold where the data lives. The decoder must invert points on the ArrowSpace energy surface, not the ambient sphere.
+
+**The heat kernel manifold.** ArrowSpace constructs a graph Laplacian $L \in \mathbb{R}^{F \times F}$ with its energy distribution (the lambdas). The energy dispersion on this graph defines a heat kernel manifold:
+
+$$\mathcal{M}_t = \{ e^{-tL} x \mid x \in \mathbb{R}^F, \|x\|=1 \}$$
+
+This is not 3D, not a sphere, not flat — it is a 2.5-D structure with effective dimension between 2 and 3, governed by the spectral gap $\lambda_2$ and the clustering structure. The effective dimension is approximately:
+
+$$d_\mathit{eff} \approx \frac{\left(\sum_k e^{-\lambda_k}\right)^2}{\sum_k e^{-2\lambda_k}} \approx 2\text{–}4$$
+
+For CIFAR-10 DINO-256 with 15 clusters and mean $\lambda = 0.146$, this gives $d_\mathit{eff} \approx 2\text{–}4$ despite living in $\mathbb{R}^{256}$.
+
+**Spectral coordinates.** Any $Q \in \mathbb{R}^F$ decomposes as $Q = \sum_{k=1}^{K} \hat{q}_k \phi_k + Q_\perp$ where $\phi_k$ are the $K$ lowest-eigenvalue eigenvectors of $L_F$ (the smooth modes, i.e. $U_q$), $\hat{q}_k = \langle Q, \phi_k \rangle$ are spectral coefficients, and $Q_\perp$ is the off-manifold residual. The decoder operates on $\hat{q} \in \mathbb{R}^K$ — a K-dimensional spectral chart. **Sampling in spectral coordinates is sampling on the manifold by construction** — a point drawn from $\hat{q} \sim p(\hat{q})$ and lifted back via $\Phi_K \hat{q}$ always lies on the smooth submanifold. Off-manifold generation becomes geometrically impossible.
+
+**Heat kernel prior.** The natural prior on the spectral chart is $\hat{q} \sim \mathcal{N}(0, e^{-2t L_K})$ where $L_K = \Phi_K^\top L_F \Phi_K$ is the projected (reduced) Laplacian. At $t \to 0$, samples concentrate near data points. At $t \to \infty$, samples spread over the full smooth submanifold. The $\bar{\alpha}(\tau)$ schedule *is* this $t$ parameter — the two are directly coupled.
+
+**Connection to the semantic operator (§1.1).** The semantic operator $\mathcal{H} = \Pi \circ \text{Diffuse}_{L_F} \circ \Phi$ operates in the forward direction: it lifts $Q$ onto the spectral chart ($\Phi$), diffuses along the graph ($\text{Diffuse}_{L_F}$), and projects back as a restoring force ($\Pi$). The topology-adaptive decoder is the **inverse** path: it projects $Q$ onto the spectral chart, samples from the heat kernel prior on that chart, and lifts back to ambient space. Together, the semantic operator and the topology decoder form a complete forward-reverse pair on the ArrowSpace manifold.
+
+**The ArrowSpace lambda distribution.** ArrowSpace is the space defined by two components: the graph Laplacian ($L_F$, the `gl` property — structural connectivity) and the lambda distribution (`lambdas()` method — per-item energy scores in $[0, 1]$, the data's distribution within the graph topology). Low lambda = smooth (on-manifold), high lambda = rough (off-manifold). The empirical spectral prior uses the lambdas as weights to bias sampling toward the smooth regime.
+
+See §12 for the full topology-adaptive decoder architecture, the Fokker–Planck derivation, and the conformal gauge assumption.
 
 ---
 
@@ -402,22 +426,17 @@ The composite fitness score (higher is better; maximum 85) is computed from a si
 | `heat_death` | 10 | Heat death fires within the run |
 | `heat_death_timing` | 5 | Fires around 70% through (not too early/late) |
 | `rho_sign_stabilizing` | 10 | $\rho_-/\rho_+$ variance decreasing |
-| `recon_decrease` | 10 | Reconstruction loss decreases (NOT total ELBO) |
-| `net_energy_flow` | 5 | $\Lambda$ vs $\mathcal{H}$ balance ($\approx 0$) |
-| `pi_contraction_ratio` | 5 | $\Pi$ activity $\in [0.01, 0.3]$ |
+| `recon_decrease` | 10 | Median reconstruction loss during active phase ($\alpha_\mathit{bar} > 0.01$) |
+| `angular_displacement` | 5 | Angular displacement of $Q$ on $S^{F-1}$: $\arccos(Q_{t+1} \cdot Q_t)$ |
+| `pi_contraction_ratio` | 5 | $\Pi$ activity $\in [0.3, 3.5]$ (recalibrated for $\|Q\|=1$) |
 
 ### Diagnostics
 
 Two diagnostics are logged per step:
 
-- `net_energy_flow` $= \|Q_{t+1}\|_F^2 - \|Q_t\|_F^2$ — $\Lambda$ vs $\mathcal{H}$ balance
-- `pi_contraction_ratio` $= \|\Delta Q_t\| / \|Q_t\|$ — $\Pi$ activity
-
-| `net_energy_flow` | Interpretation |
-|---|---|
-| $\approx 0$ | Balanced: $\Lambda$ and $\mathcal{H}$ are in equilibrium |
-| $> 0.1 \cdot \|Q_0\|_F^2$ | Forcing dominates: $\mathcal{H}$ is not pulling back fast enough |
-| $< -0.5 \cdot \|Q_0\|_F^2$ | Contraction dominates: modes collapsing, generation diversity lost |
+- `angular_displacement` $= \arccos(Q_{t+1} \cdot Q_t)$ — how much $Q$ moves on $S^{F-1}$ per step. Replaces `net_energy_flow` (which was identically 0 with $S^{F-1}$ normalisation). Healthy range $[0.01, 0.5]$ radians.
+- `pi_contraction_ratio` $= \|\Delta Q_t\| / \|Q_t\|$ — $\Pi$ activity. With $\|Q\|=1$, this directly measures the Rayleigh gradient magnitude. Healthy range $[0.3, 3.5]$ (IQR-calibrated for the $S^{F-1}$ regime).
+- `gamma_mean` — mean damping coefficient. Monitored to detect gamma collapse (learned to zero).
 
 ### Diversity / quality criteria (for generative evaluation)
 
@@ -431,41 +450,82 @@ An improvement in `precision` without `coverage` is not a win for the dual-space
 
 ---
 
-## 12. The 2.5-D Dual-Space Track
+## 12. The Topology-Adaptive Decoder: Implementation Details
 
-The 2.5-D track tests whether a dual-space model (2D item coordinate + graph-Laplacian feature signal) can match full 3D volumetric diffusion without computing Jacobian determinants.
+The conceptual foundation is in §1.4. This section provides the implementation details: the decoder architecture, the Fokker–Planck derivation, and the conformal gauge assumption.
 
-### Why the determinant can be dropped
+### 12.1 The heat kernel manifold (expansion of §1.4)
+
+As stated in §1.4, the energy dispersion on the graph Laplacian defines a heat kernel manifold:
+
+$$\mathcal{M}_t = \{ e^{-tL} x \mid x \in \mathbb{R}^F, \|x\|=1 \}$$
+
+This is not 3D, not a sphere, not flat — it is a 2.5-D structure with fractal-like effective dimension between 2 and 3, governed by the spectral gap $\lambda_2$ of $L$ and the clustering structure. The Laplacian eigenvectors span a smooth low-dimensional surface embedded in $\mathbb{R}^F$, but its intrinsic dimension is far lower than $F$ and non-integer due to multi-scale clustering.
+
+The effective dimension is approximately:
+
+$$d_\mathit{eff} \approx \frac{\left(\sum_k e^{-\lambda_k}\right)^2}{\sum_k e^{-2\lambda_k}} \approx 2\text{–}4$$
+
+### 12.2 Spectral coordinates (expansion of §1.4)
+
+Any $Q \in \mathbb{R}^F$ decomposes as:
+
+$$Q = \sum_{k=1}^{K} \hat{q}_k \phi_k + Q_\perp$$
+
+where $\phi_k$ are the $K$ lowest-eigenvalue eigenvectors of $L_F$ (the smooth modes, i.e. $U_q$), $\hat{q}_k = \langle Q, \phi_k \rangle$ are spectral coefficients, and $Q_\perp$ is the off-manifold residual. The decoder operates on $\hat{q} \in \mathbb{R}^K$ — a K-dimensional spectral chart — rather than the full $F$-dim ambient $Q$.
+
+**Sampling in spectral coordinates is sampling on the manifold by construction.** A point drawn from $\hat{q} \sim p(\hat{q})$ and lifted back via $\Phi_K \hat{q}$ always lies on the smooth submanifold. Off-manifold generation becomes geometrically impossible — this is the key architectural insight that dissolves the NN ratio problem.
+
+### 12.3 Heat kernel as the natural prior
+
+The natural prior on the spectral chart is the heat kernel:
+
+$$\hat{q} \sim \mathcal{N}(0, e^{-2t L_K})$$
+
+where $L_K = \Phi_K^\top L_F \Phi_K \in \mathbb{R}^{K \times K}$ is the projected (reduced) Laplacian. At $t \to 0$, samples concentrate near data points. At $t \to \infty$, samples spread over the full smooth submanifold. The $\bar{\alpha}(\tau)$ schedule *is* this $t$ parameter — the two are directly coupled.
+
+### 12.4 Topology-adaptive decoder architecture
+
+The decoder path replaces the ambient-space decoder with one that respects the graph topology as a geometric prior:
+
+```
+Q ∈ R^F
+  │
+  ▼  project onto Φ_K (smooth eigenvectors = U_q)
+q̂ ∈ R^K          ← intrinsic manifold coordinates (spectral chart)
+  │
+  ▼  heat_kernel_sample(L_K, α_bar(τ))
+q̂_noisy ∈ R^K   ← manifold-aware noised sample
+  │
+  ▼  TopologyDecoder MLP
+x̂ ∈ R^F          ← reconstructed embedding
+```
+
+This is the implementation of the semantic operator's geometry: the frozen geometric prior ($U_q$, $L_F$) defines the manifold, the learned semantic structure ($\sigma^2$, $\eta$, $B_t$) shapes the dynamics on it, and the topology decoder inverts points on the manifold rather than the ambient space.
+
+### 12.5 Connection to the semantic operator (§1)
+
+The semantic operator $\mathcal{H} = \Pi \circ \text{Diffuse}_{L_F} \circ \Phi$ operates in the forward direction: it lifts $Q$ onto the spectral chart ($\Phi$), diffuses along the graph ($\text{Diffuse}_{L_F}$), and projects back as a restoring force ($\Pi$). The topology-adaptive decoder is the **inverse** path: it projects $Q$ onto the spectral chart, samples from the heat kernel prior on that chart, and lifts back to ambient space. Together, the semantic operator and the topology decoder form a complete forward-reverse pair on the ArrowSpace manifold.
+
+### 12.6 The ArrowSpace lambda distribution
+
+ArrowSpace is the space defined by two components:
+- **Graph Laplacian** ($L_F$, the `gl` property): structural connectivity, eigenvectors define smooth modes
+- **Lambda distribution** (`lambdas()` method): per-item energy scores in $[0, 1]$, the distribution of the data within the graph topology
+
+The lambdas encode where each item sits in the energy landscape: low lambda = smooth (on-manifold), high lambda = rough (off-manifold). The empirical spectral prior uses the lambdas as weights (low lambda = high weight) to bias the prior toward the smooth regime where real data lives.
+
+### 12.7 Why the determinant can be dropped
 
 The determinant/Jacobian machinery in continuous Fokker–Planck exists to track how *volume* changes under a flow map. But the graph wiring formalism replaces the ambient manifold with a discrete Laplacian $L_F$ whose Rayleigh quotient $R(x) = x^\top L_F x / x^\top x$ converges to the continuum Dirichlet energy. Because Dirichlet energy is a quadratic form on the graph rather than a measure of local volume distortion, tracking its evolution under noise never requires a determinant — only the Laplacian's spectrum and how mass redistributes across eigenmodes.
-
-### Graph Fokker–Planck
-
-The discrete analogue replaces the continuum Laplacian $\Delta$ with the graph Laplacian $L_F$:
-
-$$p_{t+\Delta t} \approx p_t - \Delta t \, \nabla_{\text{item}}\cdot(p_t v_t) + \frac{\sigma^2\Delta t}{2}\, L_F p_t$$
-
-Here $L_F p_t$ is a sparse matrix–vector product (no determinant, no volume element). This is the "2.5-D" trick: item-space transport (the divergence term, low-dimensional) plus feature-space diffusion (the Laplacian term, driven by the wired graph's spectrum).
-
-### Score as Rayleigh gradient
 
 The score function is redefined as the gradient of the $\lambda\tau$ energy rather than the log-density gradient in ambient space:
 
 $$s(x) \approx -\nabla_x R(x)$$
 
-since minimizing Rayleigh energy is variationally equivalent to following the score toward smoother (lower-Dirichlet-energy) configurations on the wired manifold. This keeps the entire generative trajectory inside the dual item/feature graph representation, using only sparse Laplacian operators — never requiring a 3D volume embedding.
+since minimizing Rayleigh energy is variationally equivalent to following the score toward smoother (lower-Dirichlet-energy) configurations on the wired manifold.
 
-### Update equations
-
-The 2.5-D dual-space update splits the state into a low-dimensional item-coordinate $z_t$ (≤2D) plus a feature-channel signal $f_t$ living on the wired graph:
-
-$$z_{t-\Delta t} = z_t + \eta\,\nabla_z R(f_t)\,\Delta t + \sigma\sqrt{\Delta t}\,\epsilon_z$$
-
-$$f_{t-\Delta t} = f_t - \frac{\sigma^2\Delta t}{2}\, L_F f_t$$
-
-The key structural claim: $(z_t, f_t)$ jointly carries the same generative information as $x_t \in \mathbb{R}^3$.
-
-### Conformal gauge assumption
+### 12.8 Conformal gauge assumption
 
 The "Dirichlet ⇒ minimal surface" chain is rigorous only under conformal-gauge assumptions, which are currently *imposed* rather than *derived* from the discrete wiring pipeline. Empirical validation (spectral stability under subsampling, $\lambda\tau$ tail-quality metrics) must confirm that the dual-space diffusion trajectory preserves the same low-frequency geometry that a volumetric diffusion model would recover.
 
