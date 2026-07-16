@@ -47,7 +47,7 @@ See the [Autoresearch Loop](#autoresearch-loop) section below and `AGENTS.md` fo
 ## Design Documents
 
 - `docs/00-DESIGN.md` — core entropic-clock ESDM design.
-- `docs/00-DESIGN_HYBRID.md` — explicit hybridisation operator (lifting, Laplacian diffusion, projection) that mixes feature-space and item-space dynamics.
+- `docs/00-DESIGN.md` — consolidated design document: two-sector partition, entropic clock, semantic operator (hybridisation), ELBO, architecture, 2.5-D track.
 - `docs/03-FITNESS-CRITERIA.md` — composite fitness score, phase-aware ablation scoring, and diversity/quality criteria.
 - `docs/002-EXPERIMENTS.md` — experiment roadmap including 2.5-D dual-space validation.
 

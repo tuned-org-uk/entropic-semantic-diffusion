@@ -10,7 +10,7 @@ model:
   lam_s: 1.0              # precision multiplier for spectral-basis prior (barrier height)
   n_vibrational_steps: 2  # VDT recurrence depth (CFL-safe for real L_F)
   gamma: 0.1              # vibrational damping coefficient (VDT default)
-  sigma_sq: 1.0           # diffusion coefficient for H operator (constant, 00-DESIGN_HYBRID.md §5)
+  sigma_sq: 1.0           # diffusion coefficient for H operator (constant, 00-DESIGN.md §4.3)
   freeze_h: false         # freeze H params for ablation (issue #20 §4)
 
 clock:

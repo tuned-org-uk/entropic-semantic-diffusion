@@ -26,7 +26,7 @@ recurrence can persist across forward calls.
 When ``U_q`` is not supplied to ``forward()``, the block falls back to the
 bare ``L_f @ Q_t`` product (backward-compatible with the original VDT).
 
-See docs/00-DESIGN_HYBRID.md for the full hybridisation operator derivation.
+See docs/00-DESIGN.md §4 for the full hybridisation operator derivation.
 """
 from __future__ import annotations
 
@@ -266,7 +266,7 @@ class VibrationalStateBlock(nn.Module):
         produce the restoring force, exactly as the bare L_f @ Q_t term
         does in the non-hybridised case.
 
-        The design doc (00-DESIGN_HYBRID.md) defines Pi = -eta * grad_R,
+        The design doc (00-DESIGN.md §4.4) defines Pi = -eta * grad_R,
         but the wave recurrence has -dt^2 * Pi which would give +eta*dt^2*grad_R
         (destabilising).  The physically correct sign keeps H_action =
         eta * grad_R (analogous to L*Q), so -dt^2 * H_action is the

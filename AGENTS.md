@@ -16,7 +16,7 @@ You are not my assistant. You are my advisor who happens to be smarter than me. 
 
 These principles govern all code changes. They were established during the issue #20 refactoring (2026-07-15) after discovering that ad-hoc parameters had accumulated in the model layer without design justification, breaking the two-sector partition and the clock scaling.
 
-1. **Preserve design decisions as first principles.** The design docs (`00-DESIGN.md`, `00-DESIGN_HYBRID.md`, `001-IMPLEMENTATION-PLAN.md`) define the architecture. If a code change contradicts the design, the code is wrong — not the design. Amend the design doc first if a change is genuinely needed.
+1. **Preserve design decisions as first principles.** The design docs (`00-DESIGN.md`, `001-IMPLEMENTATION-PLAN.md`) define the architecture. If a code change contradicts the design, the code is wrong — not the design. Amend the design doc first if a change is genuinely needed.
 
 2. **Do not add variables or parameters unless strictly necessary and justified by the design.** Every new parameter is a degree of freedom that can hide a bug. If the design says a quantity is a constant, it is a constant. If the design says it is derived, it is derived. Only make something a parameter if the design explicitly calls for it.
 
@@ -342,7 +342,7 @@ The following values are **constants**, not hyperparameters. They are set by the
 
 | Constant | Value | Source |
 |---|---|---|
-| $q$ (spectral modes) | $F/4$ | `docs/00-DESIGN_HYBRID.md` §5 |
+| $q$ (spectral modes) | $F/4$ | `docs/00-DESIGN.md` §4.2 |
 | $\gamma$ (damping) | 0.1 | VDT default |
 | `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ |
 | `lambda_clip` | derived: $0.1 F$ (was 100.0 — see §4.2 derivation) | `docs/00-DESIGN.md` §4.2 |
@@ -350,7 +350,7 @@ The following values are **constants**, not hyperparameters. They are set by the
 | `seed` | 3407 | Project-wide rule |
 | `batch_size` | 64 | Standard |
 | `k` (ArrowSpace clusters) | 4 | Graph construction |
-| $\sigma^2$ (diffusion coefficient) | 1.0 | `00-DESIGN_HYBRID.md` §5 |
+| $\sigma^2$ (diffusion coefficient) | 1.0 | `00-DESIGN.md` §4.3 |
 | $\eta$ (Rayleigh step size) | derived: $0.1 F / (2\lambda_\mathit{max})$ | `001-IMPLEMENTATION-PLAN.md` §5.2 |
 | `mode_threshold` | median($\omega$) per-batch | `001-IMPLEMENTATION-PLAN.md` §3.1 |
 | `tau_max_est` | $3 \cdot S_0$ (derived) | `001-IMPLEMENTATION-PLAN.md` §4.1 |

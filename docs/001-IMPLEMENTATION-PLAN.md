@@ -1,7 +1,7 @@
 # 001 — ESDM Implementation Plan
 
 > **Status:** Implementation-active (rewritten 2026-07-15, issue #20)
-> **Depends on:** `docs/00-DESIGN.md`, `docs/00-DESIGN_HYBRID.md`
+> **Depends on:** `docs/00-DESIGN.md`
 > **Target:** PyTorch >= 2.3, Python >= 3.12
 
 ## 1. Scope
@@ -21,7 +21,7 @@ amendment.
 
 | Constant | Value | Source |
 |---|---|---|
-| $q$ (spectral modes) | $F/4$ (rounded to nearest power of 2) | `00-DESIGN_HYBRID.md` §5 |
+| $q$ (spectral modes) | $F/4$ (rounded to nearest power of 2) | `00-DESIGN.md` §4.2 |
 | $\gamma$ (damping) | 0.1 | VDT default |
 | `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ |
 | `lambda_clip` | derived: $0.1 F$ | `00-DESIGN.md` §4.2 (Λ/H balance derivation) |
@@ -31,8 +31,8 @@ amendment.
 | `k` (ArrowSpace clusters) | 4 | Graph construction |
 | `mode_threshold` | median of $\omega$ at init | §3.1 below |
 | `tau_max_est` | $S_0 \cdot 3$ | §4.1 below |
-| $\sigma^2$ (diffusion coefficient) | 1.0 | `00-DESIGN_HYBRID.md` §5 |
-| $\eta$ (Rayleigh step size) | 10.0 | Sweep-derived constant, not a free parameter |
+| $\sigma^2$ (diffusion coefficient) | 1.0 | `00-DESIGN.md` §4.3 |
+| $\eta$ (Rayleigh step size) | derived: $0.1\,F / (2\lambda_\mathit{max})$ | `00-DESIGN.md` §4.4 |
 
 The only free hyperparameters are `lr` and `n_steps` (governed by heat death).
 
@@ -86,7 +86,7 @@ drops, and heat death fires naturally at ~70% through the run.
 
 ## 5. Hybridisation operator $\mathcal{H}$
 
-Defined in `00-DESIGN_HYBRID.md`. Three steps, applied in sequence in
+Defined in `00-DESIGN.md` §4. Three steps, applied in sequence in
 `VibrationalStateBlock._step()`:
 
 $$\mathcal{H}(Q_t) = \Pi\!\left(\text{Diffuse}_{L_F}\!\left(\Phi(Q_t)\right)\right)$$
@@ -103,11 +103,12 @@ restoring force toward low-energy modes. This is the implemented sign.
 
 ### 5.2 Parameters
 
-$\sigma^2 = 1.0$ and $\eta = 10.0$ are constants (not swept). $\eta = 10.0$
-was identified by parameter sweep as the value where
-`pi_contraction_ratio` enters the healthy $[0.01, 0.3]$ range. Both are
-learnable `nn.Parameter` objects so the optimizer can fine-tune them
-during training, but their initial values are fixed constants.
+$\sigma^2 = 1.0$ and $\eta$ are constants (not swept). $\eta$ is derived
+at init as $0.1\,F / (2\lambda_\mathit{max}(L_F))$ from the spectral scale
+of $L_F$, making the $\mathcal{H}$ operator's initial strength
+dataset-agnostic. Both are learnable `nn.Parameter` objects so the
+optimizer can fine-tune them during training, but their initial values
+are derived constants, not swept.
 
 ### 5.3 Diagnostics
 
@@ -116,7 +117,7 @@ Two diagnostics must be logged per step:
 - `net_energy_flow` $= \|Q_{t+1}\|_F^2 - \|Q_t\|_F^2$ — $\Lambda$ vs $\mathcal{H}$ balance
 - `pi_contraction_ratio` $= \|\Delta Q_t\| / \|Q_t\|$ — $\Pi$ activity
 
-Healthy ranges per `00-DESIGN_HYBRID.md` §7:
+Healthy ranges per `00-DESIGN.md` §11:
 - `net_energy_flow` $\approx 0$ (balanced)
 - `pi_contraction_ratio` $\in [0.01, 0.3]$
 
