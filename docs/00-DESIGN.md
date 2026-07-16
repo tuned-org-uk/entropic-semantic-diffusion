@@ -196,6 +196,8 @@ The three operators act in sequence:
 2. $\text{Diffuse}_{L_F}$ — smooth along feature-space graph (Laplacian heat flow)
 3. $\Pi$ — convert smoothed signal back to item-space restoring force (Rayleigh gradient)
 
+**Geometric constraint: $S^{F-1}$ manifold.** The input embeddings are L2-normalised ($\|x\| = 1$ per sample), so the ESDM state lives on the unit hypersphere $S^{F-1}$. The wave recurrence must preserve this constraint: after each recurrence step, $Q$ is projected back onto $S^{F-1}$ via L2 normalisation. Without this, $Q$ drifts off the manifold and the Rayleigh gradient in $\mathcal{H}$ shrinks (it is normalised by $\|\tilde{F}_t\|^2$), causing CFL instability — the wave recurrence becomes an energy amplifier rather than a bounded oscillator. The normalisation also ensures $\mathit{pcr} = \|\Delta Q_t\| / \|Q_t\|$ measures the true Rayleigh gradient magnitude (since $\|Q_t\| = 1$ always), and the diagnostic for energy flow becomes angular displacement on the sphere rather than norm-squared difference.
+
 ### 4.6 The $\Lambda/\mathcal{H}$ balance and $\lambda_\mathit{clip}$ derivation
 
 The pump $\Lambda(\tau) = |\partial_\phi \mathit{kl\_tau}|^{-1}$ diverges when the entropy derivative vanishes (stable modes at init). The clip $\lambda_\mathit{clip}$ bounds this divergence. The correct value is derived from the balance between the pump force and the $\mathcal{H}$ restoring force at the clip point:

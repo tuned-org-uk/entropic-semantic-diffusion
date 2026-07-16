@@ -309,6 +309,7 @@ class ESDM(nn.Module):
             "Lambda_tau":       float(c.Lambda_tau),
             "heat_death":       c.is_heat_death(),
             "decoder_collapsed": last_recon < 1e-3,
-            "net_energy_flow":  h_diag["net_energy_flow"],
+            "angular_displacement": h_diag.get("angular_displacement", 0.0),
             "pi_contraction_ratio": h_diag["pi_contraction_ratio"],
+            "gamma_mean": h_diag.get("gamma_mean", 0.0),
         }

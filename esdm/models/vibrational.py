@@ -34,6 +34,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
 
 from .._vendor.laplacian import DifferentiableLaplacian
@@ -238,7 +239,7 @@ class VibrationalStateBlock(nn.Module):
         self.register_buffer("Q_tm1", torch.zeros(0))
 
         # Diagnostics buffers for net_energy_flow and pi_contraction_ratio.
-        self.register_buffer("_last_net_energy_flow", torch.tensor(0.0))
+        self.register_buffer("_last_angular_displacement", torch.tensor(0.0))
         self.register_buffer("_last_pi_contraction_ratio", torch.tensor(0.0))
 
     # ------------------------------------------------------------------ #
@@ -376,11 +377,20 @@ class VibrationalStateBlock(nn.Module):
             + Lambda_tau_t * dt2 * B_t
         )
 
-        # Track net_energy_flow = ||Q_{t+1}||^2 - ||Q_t||^2
+        # Project Q back onto the unit hypersphere S^{F-1}. The input
+        # embeddings are L2-normalised (||x|| = 1), so the wave recurrence
+        # must preserve this constraint. Without normalisation, Q drifts
+        # off the manifold and the Rayleigh gradient in H shrinks (it is
+        # normalised by ||F_tilde||^2), causing CFL instability.
+        Q_tp1 = F.normalize(Q_tp1.squeeze(-1), dim=-1).unsqueeze(-1)
+
+        # Angular displacement on the sphere: how much Q moved this step.
+        # Replaces net_energy_flow (||Q_{t+1}||^2 - ||Q_t||^2) which is
+        # identically 0 with normalisation.
         with torch.no_grad():
-            energy_in = Q_t.norm().pow(2)
-            energy_out = Q_tp1.norm().pow(2)
-            self._last_net_energy_flow.fill_(float((energy_out - energy_in).item()))
+            cos_angle = (Q_t.squeeze(-1) * Q_tp1.squeeze(-1)).sum(dim=-1).clamp(-1.0, 1.0)
+            angle = torch.acos(cos_angle).mean()
+            self._last_angular_displacement.fill_(float(angle.item()))
 
         # Wire the signed density to the consecutive wave states.
         block.density.update(Q_t, Q_tp1, alpha=block.density_momentum)
@@ -419,7 +429,11 @@ class VibrationalStateBlock(nn.Module):
 
         # ESDM (B, F) -> VDT (B, F, 1)
         Q_t = x.unsqueeze(-1)
-        Q_tm1 = self._ensure_Q_tm1(Q_t)
+        # Reset Q_tm1 to Q_t at the start of each forward call so the wave
+        # recurrence starts from rest (zero initial velocity). Carrying Q_tm1
+        # from the previous batch injects energy through the 2*Q_t - Q_tm1
+        # inertial term because Q_tm1 is from a different input batch.
+        Q_tm1 = Q_t.clone()
         lap = _laplacian_from_dense(L_f)
 
         # Apply n_steps recurrence steps, carrying Q_tm1 through.
@@ -427,6 +441,12 @@ class VibrationalStateBlock(nn.Module):
             Q_tp1 = self._step(Q_t, Q_tm1, L_f, lap, Lambda_tau, delta_tau, U_q=U_q)
             Q_tm1 = Q_t
             Q_t = Q_tp1
+
+        # Measure angular displacement across the full forward call.
+        with torch.no_grad():
+            cos_full = (x.float() * Q_t.squeeze(-1).float()).sum(dim=-1).clamp(-1.0, 1.0)
+            angle_full = torch.acos(cos_full).mean()
+            self._last_angular_displacement.fill_(float(angle_full.item()))
 
         self.Q_tm1 = Q_tm1.detach().clone()
 
@@ -439,6 +459,7 @@ class VibrationalStateBlock(nn.Module):
     def diagnostics(self) -> dict[str, float]:
         """Return the last recorded H-operator diagnostics."""
         return {
-            "net_energy_flow": float(self._last_net_energy_flow),
+            "angular_displacement": float(self._last_angular_displacement),
             "pi_contraction_ratio": float(self._last_pi_contraction_ratio),
+            "gamma_mean": float(self._vdt_block.gamma.detach().mean()),
         }

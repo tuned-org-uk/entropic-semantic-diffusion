@@ -105,11 +105,19 @@ class EntropicClock(nn.Module):
         self.tau_n = self.tau_n + delta_tau_scalar
         self.tau_max_est = torch.maximum(self.tau_max_est, self.tau_n)
 
-        # Entropic pump Λ(τ) = 1 / |∂_φ kl_tau|  (discrete)
+        # Entropic pump Λ(τ) = 1 / |∂_φ kl_tau|  (discrete), gated by ᾱ(τ)
+        # The alpha_bar gate couples the pump to the diffusion schedule:
+        # full pump strength early (ᾱ ≈ 1, exploration), ramping to zero
+        # late (ᾱ ≈ 0, convergence). This lets H pull Q toward smooth modes
+        # without pump interference in the final phase, enabling net_energy_flow
+        # to go negative (H dominates) and oscillate ± around 0.
+        # See 00-DESIGN.md §5.2 and §4.6.
         d_phi = phi_current - self._prev_phi
         d_kl_scalar = delta_kl.sum() if delta_kl.dim() > 0 else delta_kl
         denom = (d_kl_scalar / (d_phi + self.eps)).abs() + self.eps
-        Lambda_tau = (1.0 / denom).clamp(0.0, self.lambda_clip)
+        Lambda_raw = (1.0 / denom).clamp(0.0, self.lambda_clip)
+        ab = self.alpha_bar()
+        Lambda_tau = Lambda_raw * ab
 
         # Heat death counter: dual absolute+relative threshold.
         # Absolute (eps) catches total stall on synthetic data; relative

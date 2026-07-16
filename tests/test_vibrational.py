@@ -41,7 +41,7 @@ def test_vibrational_matches_vdt_when_lambda_one():
     with torch.no_grad():
         Q_vdt, rho_p_vdt, rho_m_vdt = vdt_block(
             x.unsqueeze(-1),
-            torch.zeros_like(x.unsqueeze(-1)),
+            x.unsqueeze(-1).clone(),  # Q_tm1 = Q_t (zero initial velocity)
             L_f.unsqueeze(0).expand(x.shape[0], -1, -1),
             lap,
             recompute_cfl=True,
@@ -58,7 +58,9 @@ def test_vibrational_matches_vdt_when_lambda_one():
             x, L_f, Lambda_tau=1.0, delta_tau=float(dt)
         )
 
-    assert torch.allclose(Q_esdm, Q_vdt.squeeze(-1), atol=1e-5)
+    # ESDM wrapper normalises Q to S^{F-1} after each step.
+    Q_vdt_norm = torch.nn.functional.normalize(Q_vdt.squeeze(-1), dim=-1)
+    assert torch.allclose(Q_esdm, Q_vdt_norm, atol=1e-5)
 
 
 def test_vibrational_forcing_vanishes_when_lambda_zero():
@@ -75,14 +77,16 @@ def test_vibrational_forcing_vanishes_when_lambda_zero():
 
         # Expected: same recurrence but without the B_t term.
         Q_t = x.unsqueeze(-1)
-        Q_tm1 = torch.zeros_like(Q_t)
+        Q_tm1 = Q_t.clone()  # zero initial velocity (Q_tm1 = Q_t)
         dt = torch.tensor(0.05, dtype=Q_t.dtype, device=Q_t.device)
         dt2 = dt * dt
         L_term = torch.bmm(L_f.unsqueeze(0).expand(Q_t.shape[0], -1, -1), Q_t)
         damp = block._vdt_block.gamma.view(1, 1, -1) * (Q_t - Q_tm1)
         Q_expected = 2.0 * Q_t - Q_tm1 - dt2 * L_term - damp
 
-    assert torch.allclose(Q_zero, Q_expected.squeeze(-1), atol=1e-5)
+    # ESDM normalises Q after the step.
+    Q_expected_norm = torch.nn.functional.normalize(Q_expected.squeeze(-1), dim=-1)
+    assert torch.allclose(Q_zero, Q_expected_norm, atol=1e-5)
 
 
 def test_vibrational_output_finite_for_random_inputs():
@@ -190,9 +194,9 @@ def test_hybridisation_diagnostics_populated():
     U_q = vecs.float()[:, :q]
     block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
     diag = block.diagnostics()
-    assert "net_energy_flow" in diag
+    assert "angular_displacement" in diag
     assert "pi_contraction_ratio" in diag
-    assert isinstance(diag["net_energy_flow"], float)
+    assert isinstance(diag["angular_displacement"], float)
     assert isinstance(diag["pi_contraction_ratio"], float)
 
 

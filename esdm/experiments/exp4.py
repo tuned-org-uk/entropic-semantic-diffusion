@@ -150,7 +150,7 @@ def run_single(
             "Lambda_tau": hc["Lambda_tau"],
             "heat_death": int(hc["heat_death"]),
             "rho_sign": hc["rho_sign"],
-            "net_energy_flow": hc["net_energy_flow"],
+            "angular_displacement": hc.get("angular_displacement", 0.0),
             "pi_contraction_ratio": hc["pi_contraction_ratio"],
         }
         for k, v in out.metrics.items():
@@ -161,11 +161,11 @@ def run_single(
             eta_min = step_time * (n_steps - step - 1)
             logger.info(
                 "Exp4 step=%d/%d loss=%.4f tau_n=%.4f alpha_bar=%.4f Lambda_tau=%.4f heat_death=%s "
-                "nef=%.4e pcr=%.4f "
+                "ang=%.4f pcr=%.4f "
                 "%.2f s/step, ETA %.1f min",
                 step, n_steps, row["loss"], row["tau_n"], row["alpha_bar"],
                 row["Lambda_tau"], row["heat_death"],
-                row["net_energy_flow"], row["pi_contraction_ratio"],
+                row["angular_displacement"], row["pi_contraction_ratio"],
                 step_time, eta_min / 60.0
             )
         rows.append(row)

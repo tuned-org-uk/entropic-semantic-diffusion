@@ -42,9 +42,11 @@ def test_heat_death_triggers():
 
 
 def test_lambda_clipped():
-    """Lambda_tau is clipped when d_kl is near zero (stable mode)."""
+    """Lambda_tau is clipped when d_kl is near zero (stable mode), then gated by alpha_bar."""
     from esdm.models.clock import EntropicClock
     clock = EntropicClock(lambda_clip=100.0, eps=1e-8)
+    # Set tau_max_est high so alpha_bar ~ 1.0 at low tau_n (pump not yet gated down).
+    clock.tau_max_est.fill_(100.0)
     # First step establishes prev state.
     clock.step(
         kl_tau_current=torch.tensor(1.0),
@@ -53,8 +55,7 @@ def test_lambda_clipped():
         rho_minus=torch.tensor(0.5),
         dark_entropy=torch.tensor(0.1),
     )
-    # Stable mode: kl_tau unchanged (d_kl = 0) while phi moves freely.
-    # denom -> eps, Lambda -> 1/eps, which must be clipped to lambda_clip.
+    # Stable mode: Lambda_raw clipped to 100.0, then gated by alpha_bar ~ 1.0.
     state = clock.step(
         kl_tau_current=torch.tensor(1.0),
         phi_current=torch.tensor(1.0),
@@ -62,7 +63,8 @@ def test_lambda_clipped():
         rho_minus=torch.tensor(0.5),
         dark_entropy=torch.tensor(0.1),
     )
-    assert state.Lambda_tau == pytest.approx(100.0, abs=1e-4)
+    expected = 100.0 * float(clock.alpha_bar())
+    assert state.Lambda_tau == pytest.approx(expected, abs=1e-2)
 
 
 def test_lambda_small_when_entropy_flows():

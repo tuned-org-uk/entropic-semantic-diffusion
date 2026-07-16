@@ -91,46 +91,61 @@ def compute_fitness_real(metrics: pd.DataFrame) -> dict:
         last_var = float(np.var(rs[-n // 3 :]))
         scores["rho_sign_stabilizing"] = 10.0 if last_var < first_var else 0.0
 
-    # Reconstruction progress (NOT total ELBO — KL grows intentionally in VAE).
-    # See 001-IMPLEMENTATION-PLAN.md §6.3.
+    # Reconstruction quality during the active diffusion phase.
+    # Measures median recon where alpha_bar > 0.01 (decoder is challenged).
+    # At alpha_bar=1, recon is trivially ~0 (x_hat = Q = x). At alpha_bar=0,
+    # x_hat=0 and recon = ||x||^2/F. The meaningful range is in between.
+    # Lower median = better decoder. Score: 10 pts if median < 0.001,
+    # linearly decreasing to 0 at median > 0.01.
     if "recon" in metrics.columns:
         recon = metrics["recon"].to_numpy()
-        recon_drop = float(recon[0] - recon[-1])
-        scores["recon_decrease"] = (
-            min(10.0, max(0.0, (recon_drop / (abs(recon[0]) + 1e-8)) * 10.0))
-            if recon[0] != 0
-            else 0.0
-        )
+        ab = metrics["alpha_bar"].to_numpy() if "alpha_bar" in metrics.columns else None
+        if ab is not None:
+            active = recon[ab > 0.01]
+        else:
+            active = recon
+        if len(active) > 0:
+            recon_median = float(np.median(active))
+            scores["recon_decrease"] = max(0.0, min(10.0, 10.0 * (1.0 - recon_median / 0.01)))
+        else:
+            scores["recon_decrease"] = 0.0
     else:
         scores["recon_decrease"] = 0.0
 
     # --- Issue #20: Hybridisation operator diagnostics ---
 
-    # net_energy_flow: Lambda vs H balance.
-    # Healthy: |net_energy_flow| near 0 during the active diffusion phase.
-    # The metric is the mean absolute value normalised by the initial
-    # energy, scored on how close to 0 it is.
-    if "net_energy_flow" in metrics.columns:
-        nef = metrics["net_energy_flow"].to_numpy()
-        # Normalise by the initial Q energy (approximated by the first
-        # non-zero |net_energy_flow| or the max |nef|).
-        nef_scale = max(np.abs(nef).max(), 1e-8)
-        nef_ratio = np.abs(nef).mean() / nef_scale
-        # Score: 5 pts if mean |nef|/scale < 0.1, linearly decreasing
-        scores["net_energy_flow"] = max(0.0, 5.0 * (1.0 - min(1.0, nef_ratio * 10.0)))
+    # angular_displacement: how much Q moves on the S^{F-1} sphere per step.
+    # Healthy: non-zero angular displacement during the active phase (H and
+    # pump are both active, Q is moving on the sphere), decaying toward zero
+    # near heat death (Q converges to a fixed point on the sphere).
+    # A zero throughout means Q is stuck; a non-zero at heat death means
+    # the system hasn't converged.
+    if "angular_displacement" in metrics.columns:
+        ang = metrics["angular_displacement"].to_numpy()
+        ang_mean = float(np.mean(ang))
+        # Score: full 5 pts if mean angular displacement is in [0.01, 0.5]
+        # radians (~0.6 to ~28 degrees). Below 0.01: Q is stuck. Above 0.5:
+        # Q is jittering, not converging.
+        if ang_mean < 0.01:
+            scores["angular_displacement"] = max(0.0, 5.0 * ang_mean / 0.01)
+        elif ang_mean > 0.5:
+            scores["angular_displacement"] = max(0.0, 5.0 * (1.0 - (ang_mean - 0.5) / 0.5))
+        else:
+            scores["angular_displacement"] = 5.0
     else:
-        scores["net_energy_flow"] = 0.0
+        scores["angular_displacement"] = 0.0
 
     # pi_contraction_ratio: Pi operator activity.
     # Healthy range [0.01, 0.3] per step.
     if "pi_contraction_ratio" in metrics.columns:
         pcr = metrics["pi_contraction_ratio"].to_numpy()
         pcr_mean = float(np.mean(pcr))
-        # Score: full 5 pts if in [0.01, 0.3], partial outside
-        if pcr_mean < 0.01:
-            scores["pi_contraction_ratio"] = max(0.0, 5.0 * pcr_mean / 0.01)
-        elif pcr_mean > 0.3:
-            scores["pi_contraction_ratio"] = max(0.0, 5.0 * (1.0 - (pcr_mean - 0.3) / 0.3))
+        # Healthy range [0.3, 3.5] for S^{F-1}-normalised Q (||Q||=1).
+        # IQR-calibrated: Q25=0.54, Q75=2.51, IQR=1.97, range=[0.3, 3.5].
+        if pcr_mean < 0.3:
+            scores["pi_contraction_ratio"] = max(0.0, 5.0 * pcr_mean / 0.3)
+        elif pcr_mean > 3.5:
+            scores["pi_contraction_ratio"] = max(0.0, 5.0 * (1.0 - (pcr_mean - 3.5) / 3.5))
         else:
             scores["pi_contraction_ratio"] = 5.0
     else:
