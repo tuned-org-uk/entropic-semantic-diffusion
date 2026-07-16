@@ -302,8 +302,8 @@ The historical control used `n_steps=300` and scored 55.00; extending to 800 ste
 Latest baseline (v0.2.0, CIFAR-10 DINO-256, 800 steps, lr=0.025):
 
 ```bash
-.venv/bin/python scripts/verify_fitness.py --dataset cifar10 --n-steps 800 --lr 0.025
-# 74.90
+.venv/bin/python scripts/verify_fitness.py --dataset cifar10 --n-steps 700 --lr 0.025
+# 84.48
 ```
 
 Fitness breakdown (max 85, real-data fitness):

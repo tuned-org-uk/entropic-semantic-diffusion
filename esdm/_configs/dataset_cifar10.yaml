@@ -8,6 +8,6 @@ graph_params:
   tau: 0.166
 training:
   default_lr: 0.025
-  default_n_steps: 800
+  default_n_steps: 700
   eps_rel: 0.002
   heat_death_patience: 50
