@@ -119,7 +119,10 @@ def q_space_reverse_sde(
 
         # Step d: DDIM-style update.
         # Q_next = sqrt(ab_next) * Q_predicted + sqrt(1 - ab_next) * noise
-        noise = torch.randn(n_samples, model.dim_input, device=device, generator=gen)
+        # Noise constrained to U_q subspace (geometrically consistent with init).
+        z_noise = torch.randn(n_samples, U_q.shape[1], device=device, generator=gen)
+        noise = z_noise @ U_q.t()  # (n_samples, F) -- lifted to item space
+        noise = F.normalize(noise, dim=-1)
         a_sqrt_next = ab_next ** 0.5
         noise_sqrt_next = (1.0 - ab_next) ** 0.5
         Q = a_sqrt_next * Q_predicted + noise_sqrt_next * noise
