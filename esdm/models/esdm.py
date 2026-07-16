@@ -58,12 +58,19 @@ class ESDM(nn.Module):
         # Mode threshold is derived per-batch as median(omega), not a fixed constant.
         # See 001-IMPLEMENTATION-PLAN.md §3.1.
         self.lam_s = cfg["model"].get("lam_s", 1.0)
-        
+
+        # Derive lambda_clip from F (NOT a hardcoded constant).
+        # The pump force at clip: lambda_clip * ||B_t|| ~ lambda_clip (||Q||~1 for L2-normalised data).
+        # The H force: eta * ||grad_R|| ~ eta * 2*lambda_max / ||Q||^2 = 0.1*F.
+        # For balance at the clip point: lambda_clip = 0.1 * F.
+        # This follows the same derivation pattern as eta_init (same 0.1 factor, same F).
+        # See 00-DESIGN.md S4.2 for the full derivation.
+        lambda_clip_derived = 0.1 * self.dim_input
 
         self.clock = EntropicClock(
             eps=cfg["clock"]["eps"],
             heat_death_patience=cfg["clock"]["heat_death_patience"],
-            lambda_clip=cfg["clock"]["lambda_clip"],
+            lambda_clip=lambda_clip_derived,
             eps_rel=cfg["clock"].get("eps_rel", 1e-3),
         )
 

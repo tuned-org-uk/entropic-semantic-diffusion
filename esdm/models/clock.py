@@ -41,7 +41,7 @@ class EntropicClock(nn.Module):
         self,
         eps: float = 1e-8,
         heat_death_patience: int = 200,
-        lambda_clip: float = 100.0,
+        lambda_clip: float = 25.6,  # default for F=256; derived as 0.1*F in ESDM
         eps_rel: float = 0.0,  # 0 = disabled; set >0 for real stochastic data
     ) -> None:
         super().__init__()

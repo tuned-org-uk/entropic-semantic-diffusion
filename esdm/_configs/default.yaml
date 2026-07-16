@@ -17,7 +17,7 @@ clock:
   eps: 1.0e-8             # absolute entropy-flow threshold (synthetic data)
   eps_rel: 0.0            # relative threshold delta_tau/tau_n (0=disabled; set 1e-3 for real data)
   heat_death_patience: 200
-  lambda_clip: 100.0      # maximum allowed Lambda_tau
+  # lambda_clip: derived at init as 0.1 * F (see 00-DESIGN.md S4.2)
 
 training:
   batch_size: 64

@@ -277,7 +277,7 @@ The current kept baseline uses the moderate-barrier condition with an extended r
 |---|---|---|
 | `kl_S_weight` | 0.5 | Moderate barrier -- $$\tau_n$$ accumulates gradually, $$\bar{\alpha}$$ drops from ~1 to ~0.5 |
 | `kl_decay` | 0.03 | Slow decay -- signal persists, entropic time spreads across the run |
-| `lambda_clip` | 10.0 | Standard pump ceiling |
+| `lambda_clip` | 10.0 | **Legacy Exp 3 value** (synthetic R^64). CIFAR-10 used 100.0 from default config. Now derived as $0.1 F$ — see constants table. |
 | `rho` | 3.0 | Primary SNR condition |
 | `n_steps` | 800 | Extended run so heat death fires around the patience window |
 | `seed` | 3407 | Project-wide seed |
@@ -345,7 +345,7 @@ The following values are **constants**, not hyperparameters. They are set by the
 | $q$ (spectral modes) | $F/4$ | `docs/00-DESIGN_HYBRID.md` §5 |
 | $\gamma$ (damping) | 0.1 | VDT default |
 | `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ |
-| `lambda_clip` | 100.0 | `docs/00-DESIGN.md` §4.2 |
+| `lambda_clip` | derived: $0.1 F$ (was 100.0 — see §4.2 derivation) | `docs/00-DESIGN.md` §4.2 |
 | `grad_clip` | 1.0 | Training stability |
 | `seed` | 3407 | Project-wide rule |
 | `batch_size` | 64 | Standard |

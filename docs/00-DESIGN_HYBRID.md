@@ -14,6 +14,8 @@
 > - Issue #23 (2026-07-15): reverse-SDE generation pipeline added in
 >   `esdm/sampling/entropic_sampler.py`. The reverse path uses the DDPM
 >   ancestral update and does **not** call `_hybridisation()`.
+>   **INVALIDATED by Phase 1 (issue #29):** DDPM in input space is a category
+>   error — ESDM diffusion is internal to Q. See §7 Q3 for the revised status.
 > - Issue #29 (open): generation validation. Experiment 4 Condition C
 >   (unsigned lifting ablation) is blocked on this issue.
 
@@ -211,8 +213,8 @@ made explicit. The three operators act in sequence:
               ▼
         Q_{t+1} = wave recurrence(Q_t, ΔQ_t, Λ(τ)·B_t)
 
-        [Reverse path: entropic_sampler.py uses DDPM ancestral update.
-         H is NOT called during generation — see §7 Q3.]
+        [Reverse path: DDPM bypass INVALIDATED by Phase 1 (issue #29).
+         New Q-space score-approximation sampler pending — see §7 Q3.]
 ```
 
 ---
@@ -304,16 +306,24 @@ Override with `--q` flag in `verify_fitness.py`.
 
 ### Q3 — Asymmetry of $\Pi$ (contractive vs. reversible)
 
-> **RESOLVED (v0.2.0, issue #23). $\Pi_\pm$ is not needed and should not
-> be implemented.**
+> **RESOLUTION INVALIDATED by Phase 1 results (issue #29).** The DDPM
+> bypass was a category error — DDPM operates in input space $\mathbb{R}^F$
+> but ESDM diffusion is internal to $Q$. New resolution pending Track B
+> ($\Lambda/\mathcal{H}$ fix) and a score-approximation approach. See
+> issue #29.
 
 The concern was that the purely contractive $-\nabla R$ could not be inverted
-for the reverse diffusion direction. This is now a non-issue: the reverse
-path implemented in `esdm/sampling/entropic_sampler.py` uses the **DDPM
-ancestral update rule** modulated by $\Lambda(\tau)$. The vibrational block's
-`_hybridisation()` method is **not called during generation** — the model
-runs `forward()` as a denoising predictor and the DDPM rule handles the
-backward trajectory independently.
+for the reverse diffusion direction. The v0.2.0 resolution declared this a
+non-issue because the reverse path used the **DDPM ancestral update rule**
+in input space, bypassing `_hybridisation()` entirely. **Phase 1 proved
+this assumption wrong**: the DDPM sampler collapsed to all-zeros on real
+CIFAR-10 data because (1) the DDPM formula operates in $\mathbb{R}^F$ but
+the diffusion is internal to $Q$, (2) the decoder outputs zero at
+$\alpha_\mathit{bar} = 0$ where the sampler starts, and (3) feeding noise
+to a model expecting L2-normalised embeddings produces garbage. The
+reverse path must be redesigned to operate in $Q$-space using a
+score-approximation approach (not algebraic inversion — both $B_t$ and
+$\mathcal{H}$ are nonlinear in $Q_t$ and cannot be subtracted forward).
 
 The `pi_contraction_ratio` diagnostic remains relevant for monitoring
 forward-pass health:

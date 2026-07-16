@@ -19,6 +19,7 @@ import torch
 
 from esdm.experiments import exp5
 from esdm.sampling.entropic_sampler import entropic_reverse_sde
+from esdm.sampling.q_space_sampler import q_space_reverse_sde
 
 logger = logging.getLogger("esdm.validate_generation")
 
@@ -89,6 +90,8 @@ def main(argv=None):
     parser.add_argument("--max-train-samples", type=int, default=2000)
     parser.add_argument("--max-test-samples", type=int, default=200)
     parser.add_argument("--pca-fit-samples", type=int, default=1000)
+    parser.add_argument("--sampler", choices=["ddpm", "qspace"], default="qspace",
+                        help="Sampler to use (default: qspace)")
     parser.add_argument("--output-dir", default="results/phase1_generation/")
     args = parser.parse_args(argv)
 
@@ -136,15 +139,18 @@ def main(argv=None):
     logger.info("Checkpoint saved to %s", ckpt_path)
 
     # Step 3: Run reverse-SDE sampler
-    logger.info("=== Step 2: Running reverse-SDE sampler (%d samples, %d steps) ===",
-                args.n_samples, args.sampler_steps)
+    sampler_name = args.sampler
+    logger.info("=== Step 2: Running %s sampler (%d samples, %d steps) ===",
+                sampler_name, args.n_samples, args.sampler_steps)
     t0 = time.perf_counter()
-    generated = entropic_reverse_sde(
-        model,
-        n_samples=args.n_samples,
-        n_steps=args.sampler_steps,
-        seed=args.seed,
-    )
+    if sampler_name == "qspace":
+        generated = q_space_reverse_sde(
+            model, n_samples=args.n_samples, n_steps=args.sampler_steps, seed=args.seed,
+        )
+    else:
+        generated = entropic_reverse_sde(
+            model, n_samples=args.n_samples, n_steps=args.sampler_steps, seed=args.seed,
+        )
     sample_time = time.perf_counter() - t0
     logger.info("Sampling complete in %.1fs, output shape: %s", sample_time, tuple(generated.shape))
     torch.save(generated, out_dir / "generated_embeddings.pt")
@@ -186,6 +192,7 @@ def main(argv=None):
         "sampling_time_s": sample_time,
         "n_steps_trained": len(metrics),
         "n_samples_generated": args.n_samples,
+        "sampler": sampler_name,
         "sampler_steps": args.sampler_steps,
         "generated_stats": gen_stats,
         "real_test_stats": real_stats,

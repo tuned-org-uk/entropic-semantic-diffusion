@@ -54,13 +54,17 @@ def entropic_reverse_sde(
     gen = torch.Generator(device=device).manual_seed(seed)
     model.eval()
 
-    # Save clock state so we can restore it after sampling.
+    # Save clock and model state so we can restore after sampling.
     clock = model.clock
     saved_tau_n = float(clock.tau_n.item())
     saved_tau_max = float(clock.tau_max_est.item())
     saved_prev_kl = float(clock._prev_kl_tau.item())
     saved_flat = int(clock._flat_steps.item())
     saved_prev_phi = float(clock._prev_phi.item())
+    saved_rho_plus = model._last_rho_plus.clone()
+    saved_rho_minus = model._last_rho_minus.clone()
+    saved_N_active = int(model._last_N_active.item())
+    saved_Q_tm1 = model.vibrational.Q_tm1.clone()
 
     # Get the entropic time horizon from the trained clock.
     tau_max = saved_tau_max
@@ -70,8 +74,14 @@ def entropic_reverse_sde(
     # Reverse trajectory: tau_max -> 0
     taus = torch.linspace(tau_max, 1e-6, n_steps, device=device)
 
-    # Start from pure noise (alpha_bar = 0 at tau = tau_max).
-    x = torch.randn(n_samples, model.dim_input, device=device, generator=gen)
+    # Start from noise constrained to the U_q spectral subspace (issue #29 Phase 1).
+    # The forward pass projects Q through P = U_q @ U_q^T, so starting outside
+    # that subspace means the first projection destroys most of the signal.
+    # Q_init = U_q @ z where z ~ N(0, I_q), then L2-normalise to match data.
+    U_q = model.U_q  # (F, q) geometric prior eigenbasis
+    z = torch.randn(n_samples, U_q.shape[1], device=device, generator=gen)
+    x = z @ U_q.t()  # (n_samples, F) -- lifted to item space
+    x = torch.nn.functional.normalize(x, dim=-1)  # match L2-normalised data
 
     for i in range(n_steps - 1):
         tau_cur = float(taus[i])
@@ -122,11 +132,15 @@ def entropic_reverse_sde(
 
         x = mean + sigma * noise
 
-    # Restore clock state.
+    # Restore clock and model state.
     clock.tau_n.fill_(saved_tau_n)
     clock.tau_max_est.fill_(saved_tau_max)
     clock._prev_kl_tau.fill_(saved_prev_kl)
     clock._flat_steps.fill_(saved_flat)
     clock._prev_phi.fill_(saved_prev_phi)
+    model._last_rho_plus = saved_rho_plus
+    model._last_rho_minus = saved_rho_minus
+    model._last_N_active.fill_(saved_N_active)
+    model.vibrational.Q_tm1 = saved_Q_tm1
 
     return x

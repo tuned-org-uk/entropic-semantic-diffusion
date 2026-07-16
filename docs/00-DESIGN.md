@@ -115,6 +115,16 @@ where:
 - When $\partial_\tau \Lambda < 0$ (pump shrinking), energy is flowing *into* the bright sector — an expansion phase.
 - When $\partial_\tau \Lambda > 0$ (pump growing), energy is being extracted from the bright sector — a contraction phase heading toward "big crunch".
 
+**Derivation of $\lambda_\mathit{clip}$ (issue #29, Phase 1).** The pump $\Lambda(\tau) = |\partial_\phi \mathit{kl\_tau}|^{-1}$ diverges when the entropy derivative vanishes (stable modes at init). The clip $\lambda_\mathit{clip}$ bounds this divergence. The correct value is derived from the balance between the pump force and the $\mathcal{H}$ restoring force at the clip point:
+
+$$\underbrace{\lambda_\mathit{clip} \cdot \Delta\tau^2 \cdot \|B_t\|}_{\text{pump force at clip}} \;\sim\; \underbrace{\eta \cdot \Delta\tau^2 \cdot \|\nabla R\|}_{\mathcal{H} \text{ restoring force}}$$
+
+With L2-normalised data ($\|Q\| \approx 1$ per sample), $\|B_t\| \approx 1$ (residual network), and $\|\nabla R\| \approx 2\lambda_\mathit{max}/\|Q\|^2 = 2\lambda_\mathit{max}$ (worst-case Rayleigh gradient), substituting $\eta = 0.1\,F / (2\lambda_\mathit{max})$:
+
+$$\lambda_\mathit{clip} \;\approx\; \eta \cdot 2\lambda_\mathit{max} \;=\; \frac{0.1\,F}{2\lambda_\mathit{max}} \cdot 2\lambda_\mathit{max} \;=\; 0.1\,F$$
+
+This follows the same derivation pattern as $\eta$ (same $0.1$ factor, same $F$). For CIFAR-10 ($F=256$): $\lambda_\mathit{clip} = 25.6$. The previous hardcoded value of $100.0$ was $4\times$ too high, causing the pump to dominate $\mathcal{H}$ at init and destroy the Q-state before the decoder can learn to reconstruct — the root cause of the Phase 1 generation failure (issue #29).
+
 ### 4.4 The Entropic Clock as Principled Collocation Strategy
 
 Physics-informed neural networks (PINNs) are typically analysed as three separate design choices stacked together: architecture (what the model can represent), loss function (what the model is pushed toward), and **collocation strategy** (where in the domain the physics residual is evaluated, and therefore where the model is actually held accountable). The collocation choice is the least-discussed of the three but arguably the most consequential for convergence.

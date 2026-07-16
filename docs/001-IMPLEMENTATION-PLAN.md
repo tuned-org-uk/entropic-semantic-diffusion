@@ -24,7 +24,7 @@ amendment.
 | $q$ (spectral modes) | $F/4$ (rounded to nearest power of 2) | `00-DESIGN_HYBRID.md` §5 |
 | $\gamma$ (damping) | 0.1 | VDT default |
 | `n_vibrational_steps` | 2 | CFL-safe for real $L_F$ |
-| `lambda_clip` | 100.0 | `00-DESIGN.md` §4.2 |
+| `lambda_clip` | derived: $0.1 F$ | `00-DESIGN.md` §4.2 (Λ/H balance derivation) |
 | `grad_clip` | 1.0 | Training stability |
 | `seed` | 3407 | Project-wide |
 | `batch_size` | 64 | Standard |
