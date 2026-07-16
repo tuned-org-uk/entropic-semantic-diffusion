@@ -72,6 +72,24 @@ For CIFAR-10 DINO-256 with 15 clusters and mean $\lambda = 0.146$, this gives $d
 
 See §12 for the full topology-adaptive decoder architecture, the Fokker–Planck derivation, and the conformal gauge assumption.
 
+### 1.5 The Interplay: How the Five Ingredients Lock Together
+
+The five ingredients — geometric space, ArrowSpace, vibrational dynamics, encoding, and decoding — are not independent modules wired in sequence. They interlock through the 2.5-D dual-space principle. This section states the interplay concisely; the full treatment is in `docs/002-SEMANTIC-OPERATOR.md` §4.
+
+**Geometry ↔ ArrowSpace.** The geometric space is $L_F$ — the `gl` half of ArrowSpace. ArrowSpace adds the lambdas: the per-item energy distribution on that graph. Without the lambdas you have a graph Laplacian (a skeleton); with them you have ArrowSpace (the skeleton *plus* the data's position on it). The lambdas are not a weighting applied to $L_F$ after the fact — they are half the space. $L_F$ defines the landscape; the lambdas say where on the landscape the data lives.
+
+**ArrowSpace ↔ Vibrational.** The vibrational dynamics run on the ArrowSpace geometry, not on ambient $\mathbb{R}^F$. The $\Phi$ step of $\mathcal{H}$ projects onto $U_q$ — the smooth eigenbasis of $L_F$ — before the Laplacian acts. This restricts the wave recurrence to the semantically coherent subspace. The $\Pi$ step converts the Laplacian-diffused signal back into a Rayleigh-gradient restoring force. The lambdas enter the generative side: the heat kernel prior $\mathcal{N}(0, e^{-2t L_K})$ is weighted by the lambdas (low lambda = high variance = smooth modes amplified), biasing sampling toward the semantic basins where real data lives. Per-feature lambdas $(F,)$ are projected onto the $K$-dim spectral chart via $\lambda_K^{(k)} = \sum_f \lambda_f \, U_{f,k}^2$.
+
+**Vibrational ↔ Encoding/Decoding.** The encoder *is* the vibrational block — the wave recurrence with $\mathcal{H}$ as restoring force, shaping $Q_t$ toward smooth modes on $S^{F-1}$. The decoder *is* $\mathcal{H}$ inverted: it projects onto the spectral chart $\hat{q} \in \mathbb{R}^K$, samples from the heat kernel prior, and lifts back to $\mathbb{R}^F$. Both sides use the same $U_q$, the same $L_F$, the same eigenbasis. The encoder runs $\mathcal{H}$ deductively (forward); the decoder runs $\mathcal{H}^{-1}$ constructively (reverse).
+
+**Encoding/Decoding ↔ 2.5-D.** The vibrational state $Q_t: (B, F, 1)$ is already 2.5-D: $F$ feature-nodes each carrying one item-coordinate. The encoder is 2.5-D by construction, not by addition. The decoder completes the pair by operating on the $K$-dim spectral chart — the intrinsic manifold — rather than the ambient $\mathbb{R}^F$. The intentional encode/decode asymmetry (full-$F$ forward, 2.5-$D$ reverse) is a DDIM-style relaxation: the reverse process operates on a reduced chart, not the full ambient space. The `score25d.py` scaffold makes the 2.5-D split explicit (item coordinate $z_t$ + feature signal $f_t$ on the wired graph); the topology decoder is its natural generation side.
+
+$$
+\underbrace{L_F,\;U_q}_{\text{geometry}} \;\xrightarrow{\text{+lambdas}}\; \underbrace{\textit{gl}+\textit{lambdas}}_{\text{ArrowSpace}} \;\xrightarrow{\text{wave recurrence}}\; \underbrace{\mathcal{H}\;\text{on}\;S^{F-1}}_{\text{vibrational}} \;\xrightarrow{\text{forward/reverse}}\; \underbrace{\text{encode}\;/\;\text{decode}}_{\text{2.5-D}}
+$$
+
+The single chain: ArrowSpace builds $L_F$ and the lambdas from the data corpus; $L_F$'s eigenpairs define $U_q$, the spectral chart; the vibrational block runs $\mathcal{H}$ on that chart as the encoder; the topology decoder runs $\mathcal{H}^{-1}$ on the same chart as the decoder. Every ingredient flows through the 2.5-D dual-space — none is optional, none is bolted on.
+
 ---
 
 ## 2. The Two-Sector Partition
