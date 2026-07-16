@@ -1,11 +1,21 @@
 # 00-DESIGN_HYBRID — The Hybridisation Operator
 
-> **Status:** Design specification  
-> **Depends on:** `00-DESIGN.md` §4, `001-IMPLEMENTATION-PLAN.md` §4.2–4.3  
+> **Status:** Partially implemented — v0.2.0
+> **Depends on:** `00-DESIGN.md` §4, `001-IMPLEMENTATION-PLAN.md` §4.2–4.3
 > **Addresses:** the implicit mixing step between the F×F feature-space
 > Laplacian signal and the N×F geometric item-space state that was
 > embedded silently inside the wave recurrence in `00-DESIGN.md` §4.2/4.3
 > but never written as a named, closed-form operator.
+>
+> **Implementation history:**
+> - Issue #20 (2026-07-15): `_hybridisation()` fully implemented in
+>   `esdm/models/vibrational.py`. WHT filter removed as redundant.
+>   `eta` made a derived constant (not a free config parameter).
+> - Issue #23 (2026-07-15): reverse-SDE generation pipeline added in
+>   `esdm/sampling/entropic_sampler.py`. The reverse path uses the DDPM
+>   ancestral update and does **not** call `_hybridisation()`.
+> - Issue #29 (open): generation validation. Experiment 4 Condition C
+>   (unsigned lifting ablation) is blocked on this issue.
 
 ---
 
@@ -120,7 +130,15 @@ $$\nabla_{Q_t} R(\tilde{F}_t)
 
 with $R(\tilde{F}_t) = \tilde{F}_t^\top L_F \tilde{F}_t / \tilde{F}_t^\top
 \tilde{F}_t$ the Rayleigh quotient (ArrowSpace taumode score), computed
-row-wise across the batch, and $\eta > 0$ a learnable or fixed step size.
+row-wise across the batch, and $\eta > 0$ a step size derived from the
+spectral scale of $L_F$ (see §5).
+
+**Sign convention in code.** `_hybridisation()` returns
+`H_action = eta * grad_R` (analogous to `L*Q`). The wave recurrence
+applies `- dt² * H_action`, giving the restoring force
+$-\eta \Delta\tau^2 \nabla R$ toward low-energy modes. The design-doc
+sign $\Delta Q_t = -\eta \nabla R$ and the code are consistent when read
+together with the `-dt²` factor in `_step()`.
 
 **Interpretation.** $\Pi$ converts the diffused feature signal $\tilde{F}_t$
 back into a **gradient force** on the item-space state $Q_t$. Items whose
@@ -192,19 +210,22 @@ made explicit. The three operators act in sequence:
               │
               ▼
         Q_{t+1} = wave recurrence(Q_t, ΔQ_t, Λ(τ)·B_t)
+
+        [Reverse path: entropic_sampler.py uses DDPM ancestral update.
+         H is NOT called during generation — see §7 Q3.]
 ```
 
 ---
 
 ## 5. Parameter Summary
 
-| Symbol | Shape | Source | Learned? |
-|---|---|---|---|
-| $U_q$ | $F \times q$ | `SpectralLoadingDecoder` eigenvectors | No (fixed after graph build) |
-| $q$ | scalar | hyperparameter ($1 \leq q \leq F$) | No |
-| $\sigma^2$ | scalar | diffusion coefficient (fixed or annealed) | Optional |
-| $\eta$ | scalar | Rayleigh gradient step size | Optional |
-| $\Lambda(\tau)$ | scalar | `EntropicClock` output | No (derived) |
+| Symbol | Shape | Source | Learned? | Implementation status |
+|---|---|---|---|---|
+| $U_q$ | $F \times q$ | `SpectralLoadingDecoder` eigenvectors | No (buffer, not Parameter) | Frozen after graph build. Differentiable $U_q$ deferred to Phase 3. |
+| $q$ | scalar | `dim_latent` in config; default $F/4$ rounded to power of 2 | No | `--q` CLI flag available in `verify_fitness.py` |
+| $\sigma^2$ | scalar | `sigma_sq` in config; default `1.0` | Optional (`freeze_h=False`) | `nn.Parameter`, frozen when `freeze_h=True` |
+| $\eta$ | scalar | **Derived:** `0.1 * F / (2 * λ_max(L_F))` at init | Optional (`freeze_h=False`) | **Not a free config parameter** — removed from config/CLI in #20 refactor. Computed from spectral scale to be dataset-agnostic. |
+| $\Lambda(\tau)$ | scalar | `EntropicClock` output | No (derived) | Live output from `clock.Lambda_tau` |
 
 ---
 
@@ -219,12 +240,11 @@ made explicit. The three operators act in sequence:
 
 ---
 
-## 7. Open Questions — Resolved Against Issue \#27 Findings
+## 7. Open Questions — Status Against v0.2.0
 
 ### Q1 — Backpropagation through $\Phi$ (differentiable $U_q$)
 
-**Resolution: keep $U_q$ fixed through Experiments 7–9; differentiable $U_q$
-is a Phase 3 variant.**
+**Status: deferred to Phase 3. No change from original resolution.**
 
 Issue \#27 identifies the core empirical risk as not knowing whether the
 spectral machinery does real work *beyond a fixed basis*. Making $U_q$
@@ -255,8 +275,7 @@ needed. Mark as `# TEMPORAL: upstream issue` per `001-IMPLEMENTATION-PLAN.md`
 
 ### Q2 — Choice of $q$
 
-**Resolution: $q$ is not a free scalar hyperparameter — it must be swept
-jointly with the diversity/quality split (Experiment 9).**
+**Status: default implemented ($q = F/4$); sweep CLI wired; sweep not yet run.**
 
 Issue \#27 Gap 4 asks whether spectral diffusion improves *semantic basin
 coverage* or merely sharpens samples within dominant modes. The choice of $q$
@@ -279,39 +298,25 @@ for the optimal lifting subspace size. The $q = F$ condition is also
 the correct non-spectral baseline for $\Phi$ in isolation.
 
 **Default for implementation:** $q = F/4$, rounded to nearest power of 2.
-Override with `--q` flag in experiment configs.
+Override with `--q` flag in `verify_fitness.py`.
 
 ---
 
 ### Q3 — Asymmetry of $\Pi$ (contractive vs. reversible)
 
-**Resolution: the asymmetry is a feature for forward diffusion but must
-be explicitly parameterised for the Loschmidt echo test.**
+> **RESOLVED (v0.2.0, issue #23). $\Pi_\pm$ is not needed and should not
+> be implemented.**
 
-The Rayleigh gradient $-\nabla_{Q_t} R$ is purely contractive: it always
-pulls item states toward lower spectral energy. This is correct for the
-*forward* diffusion direction (smoothing, semantic basin descent) but
-incompatible with the *reverse* direction (reconstruction, generation
-from noise) if the reverse process must climb the Rayleigh surface.
+The concern was that the purely contractive $-\nabla R$ could not be inverted
+for the reverse diffusion direction. This is now a non-issue: the reverse
+path implemented in `esdm/sampling/entropic_sampler.py` uses the **DDPM
+ancestral update rule** modulated by $\Lambda(\tau)$. The vibrational block's
+`_hybridisation()` method is **not called during generation** — the model
+runs `forward()` as a denoising predictor and the DDPM rule handles the
+backward trajectory independently.
 
-Issue \#27 Gap 3 (endpoint-vs-trajectory supervision) is directly
-relevant: if supervising only terminal states is sufficient, the
-asymmetry is irrelevant during training — the reverse process never needs
-to invert $\Pi$. If intermediate states matter, the contraction must be
-reversible.
-
-**Resolution for the Loschmidt echo** (`00-DESIGN.md` §11.4): define a
-**signed projection** $\Pi_\pm$ controlled by the sign of $\Delta\tau$:
-
-$$\Pi_\pm(\tilde{F}_t,\, \text{sign}(\Delta\tau))
-  = -\,\text{sign}(\Delta\tau)\;\eta\,\nabla_{Q_t} R(\tilde{F}_t)$$
-
-This uses $-\nabla R$ in the forward direction (contraction, basin descent)
-and $+\nabla R$ in the reverse direction (expansion, basin ascent).
-Structurally this mirrors how score-based reverse SDEs flip the drift sign.
-The asymmetry is not resolved — it is made explicit and parameterised.
-
-**Monitoring:** add `pi_contraction_ratio` to the health check:
+The `pi_contraction_ratio` diagnostic remains relevant for monitoring
+forward-pass health:
 
 $$\text{pi\_contraction\_ratio} = \frac{\|\Delta Q_t\|}{\|Q_t\|}$$
 
@@ -323,9 +328,8 @@ $\Pi$ is inactive (feature diffusion not reaching item space).
 
 ### Q4 — Interaction between $\Lambda(\tau)$ and $\mathcal{H}$
 
-**Resolution: the $\Lambda$ vs $\mathcal{H}$ tension is the ESDM analogue
-of the Un-0 coupling-strength ablation; add `net_energy_flow` to the
-health check table.**
+**Status: both diagnostics implemented; `net_energy_flow = 0` identified as
+the current physics gap (fitness 0/5 at v0.2.0). Tracked in Issue #29.**
 
 In ESDM the tension between the two opposing forces is:
 
@@ -333,13 +337,11 @@ $$\underbrace{+\Lambda(\tau)\cdot\Delta\tau^2\cdot B_t}_{\text{exploration: driv
 \quad\text{vs}\quad
 \underbrace{-\eta\,\Delta\tau^2\,\nabla_{Q_t} R(\tilde{F}_t)}_{\mathcal{H}\text{: pulls }Q_t\text{ toward smooth modes}}$$
 
-This is structurally identical to the Un-0 coupling-strength parameter: in
-Un-0 the coupling matrix magnitude controls how hard oscillators pull each
-other toward synchrony vs. how hard the external input drives them apart.
-Issue \#27 Gap 1 asks for the frozen-vs-learned ablation precisely to
-isolate this balance.
-
-**Add `net_energy_flow` to the health check** (`00-DESIGN.md` §8.1):
+`net_energy_flow` and `pi_contraction_ratio` are both implemented in
+`VibrationalStateBlock.diagnostics()` and surfaced in `ESDM.health_check()`.
+The current known weakness is that `net_energy_flow` is persistently near 0
+rather than oscillating $\pm$ as theory predicts (Barontini Fig. 2 analogy).
+This is the primary target for Issue #29.
 
 $$\text{net\_energy\_flow}_t = \|Q_{t+1}\|_F^2 - \|Q_t\|_F^2$$
 
@@ -349,20 +351,12 @@ $$\text{net\_energy\_flow}_t = \|Q_{t+1}\|_F^2 - \|Q_t\|_F^2$$
 | $> 0.1 \cdot \|Q_0\|_F^2$ | Forcing dominates: $\mathcal{H}$ is not pulling back fast enough |
 | $< -0.5 \cdot \|Q_0\|_F^2$ | Contraction dominates: modes collapsing, generation diversity lost |
 
-The `kl_S` barrier-height sweep (`00-DESIGN.md` §9) will produce one
-`net_energy_flow` curve per barrier height, directly analogous to
-Barontini's Fig. 2 (entropic time vs. barrier height). Low `kl_S` should
-produce oscillating $\pm$ energy flow (cyclic expansion/contraction); high
-`kl_S` should produce monotonically negative flow (rapid heat death).
-
 ---
 
 ### Q5 — Relation to the signed density matrix ($\rho_-$ and negative Rayleigh curvature)
 
-**Resolution: $\rho_-$ is currently an interpretive analogy; it becomes a
-validated mechanism only if Experiment 4 Condition C (unsigned spectral gate)
-shows a measurable delta. Until then, the signed density matrix is flagged
-as unvalidated.**
+**Status: unvalidated analogy. Experiment 4 Condition C blocked on Issue #29.
+`rectify_lifting` toggle is the pending implementation prerequisite.**
 
 The geometric interpretation is that $\rho_- > \rho_+$ (destructive
 interference dominates) means item states are in the *negative-curvature*
@@ -382,25 +376,29 @@ no destructive interference). The `signed_vs_unsigned_delta` metric
 (`03-FITNESS-CRITERIA.md` §B) measures the Chamfer distance delta between
 the two conditions.
 
+**Implementation prerequisite (not yet done):** add
+`rectify_lifting: bool = False` to `VibrationalStateBlock.__init__()`.
+When `True`, replace `F_t = Q_2d @ P` with `F_t = (Q_2d @ P).abs()` in
+`_hybridisation()`. This is the Condition C toggle. No other code changes
+are needed. This should be implemented when Issue #29 closes and
+generation metrics are available to measure `signed_vs_unsigned_delta`.
+
 **Decision rule:**
 - `signed_vs_unsigned_delta` $\approx 0$ and `mode_separation` A ≈ C:
   $\rho_-$ is architecturally present but computationally inert. The
   quantum-interference framing should be replaced with a simpler
-  "Laplacian diffusion with learned gate" description. No action needed
-  on the signed density matrix.
+  "Laplacian diffusion with learned gate" description.
 - `signed_vs_unsigned_delta` $> 0$ (signed better) and
   `mode_separation` A $>$ C: anti-phase dynamics are contributing real
   discriminative capacity. The signed density matrix interpretation is
   validated and `rho_sign` should be promoted to a first-class training
   signal (not just a confidence flag).
-- `signed_vs_unsigned_delta` $< 0$ (unsigned better): the signed
-  coefficients are harmful — anti-phase interference is corrupting the
-  diffusion trajectory. In this case, apply a rectification layer
-  $|\cdot|$ after $\Phi$ as a permanent architectural fix.
+- `signed_vs_unsigned_delta` $< 0$ (unsigned better): apply a
+  rectification layer $|\cdot|$ after $\Phi$ as a permanent
+  architectural fix.
 
 **Until Experiment 4 Condition C is run, the signed density matrix
-interpretation is an analogy, not a validated mechanism.** This is the
-uncomfortable but correct reading of the issue \#27 findings.
+interpretation is an analogy, not a validated mechanism.**
 
 ---
 
@@ -421,8 +419,7 @@ Principled Collocation Strategy):
 > on the item-space state. The three operators together define the
 > mechanism by which the F×F feature-space spectral structure (dark sector)
 > directs the N×F geometric item-space dynamics (bright sector).
-> Open questions resolved against issue \#27 findings are in
-> `00-DESIGN_HYBRID.md` §7.
+> Open questions and their v0.2.0 status are in `00-DESIGN_HYBRID.md` §7.
 
 ---
 
@@ -433,7 +430,10 @@ Principled Collocation Strategy):
 - `00-DESIGN_PREAMBLE.md` — two-sector partition
 - `03-FITNESS-CRITERIA.md` §A–B — gate learning and interference scoring
 - `002-EXPERIMENTS.md` Experiment 4 Condition C, Experiments 7–9
+- Issue \#20: Hybridisation operator implementation (complete)
+- Issue \#23: Generation pipeline / reverse-SDE sampler (complete)
 - Issue \#27: Benchmark ESDM against Un-0-style oscillator dynamics
+- Issue \#29: Generation validation (open — blocks Experiment 4 Condition C)
 - ArrowSpace taumode: $R(f) = f^\top L_F f / f^\top f$, via `WireGraph.rayleigh_quotient`
 - Moriondo, L. (2024). *ArrowSpace: Semantic Basins*.
   tuned.org.uk/posts/020_arrowspace_semantic_basins_part2
