@@ -110,6 +110,7 @@ esdm/
     esdm.py             # ESDM top-level model (assembles all components)
     score3d.py          # 2.5-D track: 3D score network + DSM loss
     score25d.py         # 2.5-D track: dual-space score + graph diffusion step
+    topology_decoder.py # TopologyDecoder: reverse H (spectral-chart decoder, issue #24)
   graphs/
     wiring.py           # WireGraph: arrowspace adapter (build, laplacian, rayleigh)
     laplacian.py        # DualSpaceMatrix: fused item-space matrix M_N
@@ -335,7 +336,7 @@ Fitness breakdown (max 85, real-data fitness):
 | #19 — Physics-based conservation | **Closed** | Conservation enforced (tautological — see #29). net_energy_flow=0 is the real gap. |
 | #27 — Design validation vs Un-0 | **Open** | Ablations depend on #29 Phase 1 (generation validation). |
 | #29 — Post-v0.2.0 pathway | **Open** | Generation validation, Lambda/H imbalance, metric redefinition. |
-| #24 — 2.5-D dual-space track | **Open** | Unblocked, low priority. |
+| #24 — Topology-adaptive decoder | **Partial** | `TopologyDecoder` + heat-kernel prior implemented & tested; not wired into training or 2.5-D sampler loop. See `docs/002-SEMANTIC-OPERATOR.md`. |
 | #25 — Audio generation | **Open** | Blocked on #23 + audio loader. |
 
 ### Architecture constants (from docs)
@@ -394,7 +395,7 @@ The following macro-issues track the path from the current synthetic-diagnostic 
 | C — Full training on real embeddings | [#22](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/22) | **Done** — Exp 4/5 + latent eval | A, B |
 | D — Generation and sampling | [#23](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/23) | **Done** — sampler + decoder + CLI. Untested on real data. | C |
 | — Post-v0.2.0 pathway | [#29](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/29) | **Open** — generation validation, Lambda/H fix, metric redefinition | D |
-| E — 2.5-D dual-space track | [#24](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/24) | Open — unblocked | A |
+| E — Topology-adaptive decoder | [#24](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/24) | Partial — decoder + heat-kernel prior implemented, not yet wired | A |
 | F — Audio generation | [#25](https://github.com/tuned-org-uk/entropic-semantic-diffusion/issues/25) | Open — blocked on D + audio | B, D |
 
 ### Next phases (see issue #29 for full pathway)
