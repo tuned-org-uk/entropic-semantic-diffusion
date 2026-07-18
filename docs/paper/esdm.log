@@ -1,9 +1,9 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.5.22)  29 JUN 2026 13:35
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (TeX Live 2026) (preloaded format=pdflatex 2026.5.22)  18 JUL 2026 12:46
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
-**esd.tex
-(./esd.tex
+**esdm.tex
+(./esdm.tex
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
 (/usr/local/texlive/2026/texmf-dist/tex/latex/base/article.cls
@@ -366,51 +366,60 @@ Package: ifvtex 2019/10/25 v1.7 ifvtex legacy package. Use iftex instead.
 \Gm@layoutvoffset=\dimen185
 \Gm@dimlist=\toks33
 )
-Package hyperref Info: Option `colorlinks' set `true' on input line 23.
-\c@definition=\count316
-\c@proposition=\count317
-\c@conjecture=\count318
-\c@remark=\count319
+(/usr/local/texlive/2026/texmf-dist/tex/latex/enumitem/enumitem.sty
+Package: enumitem 2025/02/06 v3.11 Customized lists
+\labelindent=\skip59
+\enit@outerparindent=\dimen186
+\enit@toks=\toks34
+\enit@inbox=\box56
+\enit@count@id=\count316
+\enitdp@description=\count317
+)
+Package hyperref Info: Option `colorlinks' set `true' on input line 24.
+\c@definition=\count318
+\c@proposition=\count319
+\c@remark=\count320
+\c@conjecture=\count321
 
 (/usr/local/texlive/2026/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def
 File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
-\l__color_backend_stack_int=\count320
+\l__color_backend_stack_int=\count322
 )
-(./esd.aux)
-\openout1 = `esd.aux'.
+(./esdm.aux)
+\openout1 = `esdm.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 42.
-LaTeX Font Info:    ... okay on input line 42.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 43.
+LaTeX Font Info:    ... okay on input line 43.
 
 (/usr/local/texlive/2026/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count321
-\scratchdimen=\dimen186
-\scratchbox=\box56
-\nofMPsegments=\count322
-\nofMParguments=\count323
-\everyMPshowfont=\toks34
-\MPscratchCnt=\count324
-\MPscratchDim=\dimen187
-\MPnumerator=\count325
-\makeMPintoPDFobject=\count326
-\everyMPtoPDFconversion=\toks35
+\scratchcounter=\count323
+\scratchdimen=\dimen187
+\scratchbox=\box57
+\nofMPsegments=\count324
+\nofMParguments=\count325
+\everyMPshowfont=\toks35
+\MPscratchCnt=\count326
+\MPscratchDim=\dimen188
+\MPnumerator=\count327
+\makeMPintoPDFobject=\count328
+\everyMPtoPDFconversion=\toks36
 ) (/usr/local/texlive/2026/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
 Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
 Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
@@ -420,19 +429,19 @@ Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
 e
 ))
-Package hyperref Info: Link coloring ON on input line 42.
+Package hyperref Info: Link coloring ON on input line 43.
 
-(./esd.out) (./esd.out)
+(./esdm.out) (./esdm.out)
 \@outlinefile=\write3
-\openout3 = `esd.out'.
+\openout3 = `esdm.out'.
 
-LaTeX Info: Redefining \microtypecontext on input line 42.
-Package microtype Info: Applying patch `item' on input line 42.
-Package microtype Info: Applying patch `toc' on input line 42.
-Package microtype Info: Applying patch `eqnum' on input line 42.
-Package microtype Info: Applying patch `footnote' on input line 42.
-Package microtype Info: Applying patch `verbatim' on input line 42.
-LaTeX Info: Redefining \microtypesetup on input line 42.
+LaTeX Info: Redefining \microtypecontext on input line 43.
+Package microtype Info: Applying patch `item' on input line 43.
+Package microtype Info: Applying patch `toc' on input line 43.
+Package microtype Info: Applying patch `eqnum' on input line 43.
+Package microtype Info: Applying patch `footnote' on input line 43.
+Package microtype Info: Applying patch `verbatim' on input line 43.
+LaTeX Info: Redefining \microtypesetup on input line 43.
 Package microtype Info: Generating PDF output.
 Package microtype Info: Character protrusion enabled (level 2).
 Package microtype Info: Using default protrusion set `alltext'.
@@ -482,7 +491,7 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
-LaTeX Font Info:    Trying to load font information for U+msa on input line 61.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 53.
 
 (/usr/local/texlive/2026/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
@@ -490,7 +499,7 @@ File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 (/usr/local/texlive/2026/texmf-dist/tex/latex/microtype/mt-msa.cfg
 File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 61.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 53.
 
 
 (/usr/local/texlive/2026/texmf-dist/tex/latex/amsfonts/umsb.fd
@@ -506,80 +515,61 @@ Package microtype Info: Loading generic protrusion settings for font family
  [1
 
 {/usr/local/texlive/2026/texmf-var/fonts/map/pdftex/updmap/pdftex.map}{/usr/loc
-al/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc}] [2] (./es
-d.toc)
+al/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc}] (./esdm.t
+oc)
 \tf@toc=\write4
-\openout4 = `esd.toc'.
+\openout4 = `esdm.toc'.
 
 
-[3]
-
-Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `math shift' on input line 252.
-
-
-Package hyperref Warning: Token not allowed in a PDF string (Unicode):
-(hyperref)                removing `math shift' on input line 252.
-
-[4]
-Overfull \vbox (21.09782pt too high) has occurred while \output is active []
-
-
-[5]
-Underfull \hbox (badness 1152) in paragraph at lines 307--311
-[]\T1/cmr/m/n/10.95 (+20) L. Moriondo and I. Az-izi,  From Em-bed-ding Ge-om-e-
-try to Spec-tral Search: En-
- []
-
-
-Underfull \hbox (badness 3302) in paragraph at lines 307--311
+[2] [3] [4{/usr/local/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super
+-ts1.enc}] [5] [6] [7] [8] [9]
+Underfull \hbox (badness 2478) in paragraph at lines 466--470
 \T1/cmr/m/n/10.95 (+20) ergy Dis-per-sion Net-works for Vec-tor Re-trieval,  ar
 Xiv:2606.21535 [cs.IR], 2026.
  []
 
-[6] (./esd.aux)
+[10] (./esdm.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-01-19>
  ***********
-Package rerunfilecheck Info: File `esd.out' has not changed.
-(rerunfilecheck)             Checksum: C06AB31AD12E0658CBAFA1D70123C57C;6754.
+Package rerunfilecheck Info: File `esdm.out' has not changed.
+(rerunfilecheck)             Checksum: 0F93BBAB70F7316AE3599B09203E39E3;4576.
  ) 
 Here is how much of TeX's memory you used:
- 13448 strings out of 467525
- 206699 string characters out of 5418982
- 679694 words of memory out of 5000000
- 41988 multiletter control sequences out of 15000+600000
- 653071 words of font info for 168 fonts, out of 8000000 for 9000
+ 13798 strings out of 467525
+ 212945 string characters out of 5418982
+ 682965 words of memory out of 5000000
+ 42310 multiletter control sequences out of 15000+600000
+ 650770 words of font info for 164 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,7n,84p,1000b,461s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,11n,84p,2872b,594s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb
 ></usr/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb>
-</usr/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb><
-/usr/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></u
-sr/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr
-/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb></usr/lo
-cal/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/local
-/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/
-texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy7.pfb></usr/local/te
-xlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1000.pfb></usr/local/texl
-ive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1095.pfb></usr/local/texliv
-e/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1200.pfb></usr/local/texlive/
-2026/texmf-dist/fonts/type1/public/cm-super/sfbx1440.pfb></usr/local/texlive/20
-26/texmf-dist/fonts/type1/public/cm-super/sfbx1728.pfb></usr/local/texlive/2026
-/texmf-dist/fonts/type1/public/cm-super/sfcc1000.pfb></usr/local/texlive/2026/t
-exmf-dist/fonts/type1/public/cm-super/sfrm0700.pfb></usr/local/texlive/2026/tex
-mf-dist/fonts/type1/public/cm-super/sfrm1000.pfb></usr/local/texlive/2026/texmf
--dist/fonts/type1/public/cm-super/sfrm1095.pfb></usr/local/texlive/2026/texmf-d
-ist/fonts/type1/public/cm-super/sfrm1200.pfb></usr/local/texlive/2026/texmf-dis
-t/fonts/type1/public/cm-super/sfti1000.pfb></usr/local/texlive/2026/texmf-dist/
-fonts/type1/public/cm-super/sfti1095.pfb></usr/local/texlive/2026/texmf-dist/fo
-nts/type1/public/cm-super/sftt1000.pfb></usr/local/texlive/2026/texmf-dist/font
-s/type1/public/cm-super/sftt1200.pfb>
-Output written on esd.pdf (6 pages, 373899 bytes).
+</usr/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></
+usr/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></us
+r/local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/
+local/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/loc
+al/texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/local/
+texlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/t
+exlive/2026/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local/tex
+live/2026/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></usr/local
+/texlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1000.pfb></usr/local/t
+exlive/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1095.pfb></usr/local/tex
+live/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1200.pfb></usr/local/texli
+ve/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1440.pfb></usr/local/texlive
+/2026/texmf-dist/fonts/type1/public/cm-super/sfbx1728.pfb></usr/local/texlive/2
+026/texmf-dist/fonts/type1/public/cm-super/sfcc1095.pfb></usr/local/texlive/202
+6/texmf-dist/fonts/type1/public/cm-super/sfrm0800.pfb></usr/local/texlive/2026/
+texmf-dist/fonts/type1/public/cm-super/sfrm1000.pfb></usr/local/texlive/2026/te
+xmf-dist/fonts/type1/public/cm-super/sfrm1095.pfb></usr/local/texlive/2026/texm
+f-dist/fonts/type1/public/cm-super/sfrm1200.pfb></usr/local/texlive/2026/texmf-
+dist/fonts/type1/public/cm-super/sfti1095.pfb></usr/local/texlive/2026/texmf-di
+st/fonts/type1/public/cm-super/sftt1200.pfb>
+Output written on esdm.pdf (10 pages, 389147 bytes).
 PDF statistics:
- 326 PDF objects out of 1000 (max. 8388607)
- 269 compressed objects within 3 object streams
- 43 named destinations out of 1000 (max. 500000)
- 46329 words of extra memory for PDF output out of 51595 (max. 10000000)
+ 354 PDF objects out of 1000 (max. 8388607)
+ 294 compressed objects within 3 object streams
+ 58 named destinations out of 1000 (max. 500000)
+ 39665 words of extra memory for PDF output out of 42996 (max. 10000000)
 

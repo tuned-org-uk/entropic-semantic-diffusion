@@ -1,0 +1,485 @@
+\documentclass[11pt]{article}
+
+% ---------- packages ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage[dvipsnames, svgnames]{xcolor}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{geometry}
+\usepackage{enumitem}
+\geometry{a4paper, margin=2.5cm}
+
+% ---------- hyperref config ----------
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = blue!60!black,
+  citecolor  = teal,
+  urlcolor   = teal,
+  pdftitle   = {Entropic Semantic Diffusion: A Spectral Latent Diffusion Model},
+  pdfauthor  = {Lorenzo Moriondo},
+}
+
+% ---------- theorem environments ----------
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+\newtheorem{conjecture}{Conjecture}
+
+% ---------- custom commands ----------
+\newcommand{\ESDM}{\textsc{esdm}}
+\newcommand{\ALDSC}{\textsc{ald-sc}}
+\newcommand{\VDT}{\textsc{vdt}}
+\newcommand{\Lf}{L_F}
+\newcommand{\Uq}{U_q}
+\newcommand{\Lq}{\Lambda_q}
+\newcommand{\ed}{\lambda^{\mathrm{ED}}}
+\newcommand{\R}{\mathbb{R}}
+
+% ============================================================
+\begin{document}
+% ============================================================
+
+\title{%
+  \textbf{Entropic Semantic Diffusion:\\ A Spectral Latent Diffusion Model}
+}
+
+\author{%
+  Lorenzo Moriondo \\[2pt]   \small tuned.org.uk\\   \small ORCID: 0000-0002-8804-2963\\   \texttt{tunedconsulting@gmail.com} }  \date{July 2026 \\ \small Draft}
+    \maketitle  % ============================================================
+    \begin{abstract} %============================================================  
+    Most diffusion models generate images by denoising a latent or pixel-space state according to an externally prescribed noise schedule. While this design is effective, it leaves the semantic structure of the latent space largely unconstrained: smoothness, coherence, and global feature organisation emerge only indirectly from reconstruction and denoising losses. In this work we reframe diffusion generation through the ArrowSpace dual-space hypothesis, according to which every representation space is simultaneously an item-space and a feature-space endowed with its own graph geometry. We propose the \\emph{Entropic Semantic Diffusion Model} (\\ESDM), a spectrally conditioned latent diffusion architecture that combines a conventional spatial latent with a frozen feature-space geometric prior built from an ArrowSpace graph Laplacian.  The model is organised around a 2.5-D latent representation. A VAE-style encoder maps an image to (i) a spatial latent tensor carrying local visual detail and (ii) a feature field whose channels are projected onto the smooth eigenspace of a corpus-level ArrowSpace Laplacian. From this projected feature field, the model extracts a compact spectral chart consisting of low-mode coordinates, band-energy allocations, and an energy-dispersion prior. A latent diffusion backbone then denoises only the spatial latent, while a topology-adaptive decoder reconstructs the image under spectral conditioning from the frozen feature geometry. In this way, local image synthesis remains computationally efficient, but global semantic organisation is explicitly constrained by a feature-space manifold.  This design is informed by two prior lines of work. First, ArrowSpace and Energy Dispersion Networks show that feature-space Laplacians and bounded energy-dispersion scores provide stable semantic structure complementary to ordinary geometric similarity. Second, recent work on the problem of time in closed systems motivates the search for internal, state-derived control variables rather than purely external schedules. We retain this internal-time motivation, but simplify the architecture relative to earlier ESDM variants: instead of coupling a full wave recurrence and entropic pump into every training step, we preserve the central geometric insight in a cleaner form, using a frozen spectral prior, a heat-kernel chart, and a topology-adaptive decoder.  The resulting architecture is simpler than the original entropic formulation, closer to modern latent diffusion systems, and better matched to implementation. Its core claim is that image generation should not proceed in an unconstrained ambient latent space alone, but on a coupled spatial--spectral representation in which ArrowSpace geometry governs which global semantic modes are valid and how their energy is allocated during decoding. 
+    \end{abstract}  
+    
+    \vspace{1em} \noindent \textbf{Keywords:} diffusion models, ArrowSpace, graph Laplacian, spectral conditioning, latent diffusion, semantic search, energy dispersion, thermal time, spectral decoding.  \newpage \tableofcontents \newpage  % ============================================================
+    \section{Introduction} \label{sec:introduction} % ============================================================  
+    Latent diffusion models achieve high-quality image synthesis by moving the iterative denoising process from pixel space to a compressed latent space. This yields a decisive computational advantage, but it also changes the nature of the generative geometry: instead of denoising on the image manifold itself, the model denoises on an autoencoder latent whose global structure is usually only weakly constrained. The practical question is therefore not only how to compress images, but how to ensure that the compressed space preserves coherent semantic organisation.  This paper approaches that question through the ArrowSpace dual-space view. In ArrowSpace, a vector space is not merely a collection of items embedded in a metric ambient space; it is also a feature-space whose internal relations can be described by a graph Laplacian and corresponding spectral structure. The resulting geometry does not replace ordinary item-space similarity, but conditions it: item vectors may be projected, filtered, or interpreted relative to a feature-space manifold.  The original ESDM program pursued this idea through a stronger and more ambitious claim: time, schedule, and semantic diffusion should all emerge from the internal thermodynamics of a two-sector system, inspired by Barontini's experimental construction of entropic time in a closed cold-atom setting. That direction remains conceptually important. However, the recent design and implementation work shows that the most robust transferable contribution is more architectural than cosmological: a diffusion model should use a frozen feature-space prior to define its valid semantic subspace, and its decoder should reconstruct on that topology rather than on an unconstrained ambient sphere.  Accordingly, the present paper reformulates ESDM as a topology-adaptive latent diffusion model with three commitments: 
+    \begin{enumerate}[leftmargin=1.5em] 
+      \item a frozen ArrowSpace prior $(\Lf,\Uq,\Lq,\ed)$ built once from corpus feature statistics;
+      \item a 2.5-D latent consisting of a standard spatial latent plus a compact spectral chart;
+      \item a decoder conditioned by feature-space spectral geometry rather than only by Euclidean latent coordinates. 
+    \end{enumerate}  
+    This yields a model that is recognisably similar to modern latent diffusion systems, but whose semantic organisation is explicitly governed by graph Laplacian structure.  
+    % ============================================================
+    
+    \section{Background}
+    \label{sec:background}
+    
+    \subsection{ArrowSpace and feature-space geometry}
+    \label{sec:arrowspace} 
+    ArrowSpace introduces a graph-based treatment of vector spaces in which feature dimensions, rather than only data points, participate in a structural semantic geometry. Given a corpus of embeddings with feature dimension $F$, one constructs a feature-space graph and its Laplacian $\Lf \in \R^{F \\times F}$. The eigenvectors of $\Lf$ define smooth and rough directions in feature space, while associated bounded spectral scores quantify how individual items or signals inhabit this structure.  The more recent Energy Dispersion Networks formulation makes this perspective explicit by treating the feature columns of an embedding matrix as nodes in a semantic energy network. The resulting Laplacian spectrum and energy-dispersion statistics are not auxiliary diagnostics, but a representation of how semantic structure is distributed over the feature graph.  In this paper we treat ArrowSpace as a frozen semantic prior: \[ \mathcal{G}_{\mathrm{Arrow}} = (\Lf,\Uq,\Lq,\ed),\] where $\Uq \in \R^{F \times q}$ contains the retained smooth modes, $\Lq = \mathrm{diag}(\nu_1,\ldots,\nu_q)$ are the corresponding eigenvalues, and $\ed \in [0,1]^F$ is an empirical energy-dispersion distribution over feature nodes.
+
+\subsection{Latent diffusion}
+\label{sec:latent_diffusion}
+
+Latent diffusion models shift the forward and reverse diffusion processes from
+pixel space into a learned compressed latent representation. An image
+$x \in \R^{H \times W \times 3}$ is encoded into a latent tensor
+$z \in \R^{h \times w \times c}$, denoised there over a sequence of timesteps,
+and decoded back to RGB. This substantially reduces computation compared to
+pixel-space diffusion and is the basis of the latent-diffusion family.
+
+Standard latent diffusion typically assumes that the VAE latent is sufficient
+as the sole state on which the generative process must operate. Our claim is
+that this is incomplete: a spatial latent is effective for local visual detail,
+but a separate feature-space spectral state is needed to preserve global
+semantic organisation under compression.
+
+\subsection{Internal time and entropic motivation}
+\label{sec:internal_time}
+
+The original \ESDM framing was motivated by the problem of time in closed
+systems. Connes and Rovelli argued that in a generally covariant theory, the
+physical time-flow may arise from the thermodynamical state of the system
+rather than from a universal external parameter. Barontini's recent cold-atom
+experiment provides an operational testbed for this idea: a closed system
+partitioned into observed and unobserved sectors admits an entropic time
+constructed from internal entropy exchange, and an effective Schr\"odinger-like
+description parametrised by that internal time reproduces the measured
+dynamics.
+
+We retain this as a design principle: generative dynamics should be informed by
+state-derived geometry and energy flow rather than only by an arbitrary external
+counter. However, in the present architecture this principle is instantiated
+through a frozen spectral prior and a heat-kernel chart, rather than through a
+fully entropic recurrence at every step.
+
+% ============================================================
+\section{Design transition}
+\label{sec:transition}
+% ============================================================
+
+Earlier \ESDM drafts coupled five ingredients tightly: a dual-space semantic
+operator, a wave recurrence over item states, a bright--dark sector entropy
+clock, an entropic pump, and a topology decoder acting as an inverse spectral
+map. This unified picture was conceptually rich but implementation-heavy.
+Recent refactoring suggests a simpler separation of concerns.
+
+\begin{remark}
+The strongest reusable result of the earlier ESDM is not the full
+second-order entropic dynamics, but the geometric constraint that generation
+should be restricted to a smooth ArrowSpace subspace and decoded relative to a
+feature-space manifold.
+\end{remark}
+
+The revised design therefore keeps:
+
+\begin{itemize}[leftmargin=1.5em]
+\item the frozen ArrowSpace prior;
+\item the projection onto smooth spectral modes;
+\item the 2.5-D representation;
+\item the heat-kernel interpretation of the spectral chart;
+\item topology-adaptive decoding.
+\end{itemize}
+
+It defers, for now:
+
+\begin{itemize}[leftmargin=1.5em]
+\item the full wave recurrence;
+\item explicit Rayleigh-gradient restoring forces in the main forward pass;
+\item the bright--dark KL clock as the primary training schedule;
+\item the entropic pump as a learned forcing term.
+\end{itemize}
+
+This transition preserves the theoretical intent while producing a model that
+is easier to train, analyse, and compare to ordinary latent diffusion systems.
+
+% ============================================================
+\section{The 2.5-D latent}
+\label{sec:25d}
+% ============================================================
+
+\subsection{Dual representation}
+\label{sec:dual_representation}
+
+Let $x \in \R^{H \times W \times 3}$ be an image. The encoder produces two
+coupled outputs:
+\[x \xrightarrow{E_\phi} (z, A),\]
+where
+\[z \\in \R^{h \times w \times c}, \qquad A \in \R^{N \times F}, \qquad N = h \cdot w.\]
+
+The tensor $z$ is the ordinary spatial latent used by the diffusion backbone.
+The matrix $A$ is a feature field: each row corresponds to a spatial location
+or patch, and each column corresponds to one feature dimension in the same
+feature-space on which the ArrowSpace prior was built.
+
+\subsection{Smooth projection}
+\label{sec:smooth_projection}
+
+The ArrowSpace prior defines a smooth subspace through the projection
+\[\Pi_q = \Uq \Uq^\top.\]
+Applying this to the feature field yields
+\[A_{\parallel} = A \Pi_q, \qquad A_{\perp} = A(I - \Pi_q).\]
+The parallel component lies in the smooth semantic subspace defined by the
+lowest retained modes of $\Lf$, while the perpendicular component captures
+high-frequency or off-manifold residual structure.
+
+This gives the representation its 2.5-D character. The model preserves a full
+spatial latent for local image geometry, but constrains the semantic side of
+the representation to a lower-dimensional graph manifold.
+
+\subsection{Spectral chart}
+\label{sec:spectral_chart}
+
+From the projected feature field we extract a compact chart coordinate
+\[s = \mathrm{Pool}(A_{\parallel}) \Uq \in \R^q,\]
+together with per-mode band energies
+\[e_k = \frac{1}{N}\|A u_k\|_2^2, \qquad k=1,\ldots,q,\]
+where $u_k$ is the $k$-th retained eigenvector.
+
+We normalise these energies by
+\[\tilde e_k = \frac{e_k}{\sum_{j=1}^q e_j + \varepsilon}.\]
+The projected energy-dispersion prior is
+\[\ed_{k^{\mathrm{chart}}} = \sum_{f=1}^{F} \ed_f \, U_{f,k}^2.\]
+The full spectral conditioning vector is then
+\[c_{\mathrm{spec}} = \mathrm{MLP} \left( [\tilde e_1,\ldots,\tilde e_q,\; \ed_{1^{\mathrm{chart}}},\ldots,\ed_{q^{\mathrm{chart}}},\; \nu_1,\ldots,\nu_q] \right).\]
+
+% ============================================================
+\section{Model architecture}
+\label{sec:model}
+% ============================================================
+
+\subsection{Overview}
+\label{sec:overview}
+
+The revised \ESDM consists of four components:
+
+\begin{enumerate}[leftmargin=1.5em]
+\item a frozen ArrowSpace prior $(\Lf,\Uq,\Lq,\ed)$;
+\item a spectral VAE encoder producing a spatial latent $z$ and feature field $A$;
+\item a latent diffusion denoiser operating only on $z$;
+\item a topology-adaptive decoder conditioned on the spectral chart.
+\end{enumerate}
+
+The full pathway is
+\[x \;\xrightarrow{E\_\phi}\; (z, A) \;\xrightarrow{\text{chart}} (z, c_{\mathrm{spec}}) \;\xrightarrow{\text{diffusion}} \hat z \;\xrightarrow{D_\psi(\cdot \mid c_{\mathrm{spec}})} \hat x.\]
+
+\subsection{Encoder}
+\label{sec:encoder}
+
+The encoder is a shared visual trunk with two heads. The first head produces
+the spatial latent
+\[z \sim q_\phi(z \mid x),\]
+typically via a mean and log-variance field as in a standard VAE. The second
+head produces the feature field
+\[A = E_A(x) \in \R^{N \times F}.\]
+The feature field is not itself diffused; it is projected onto the ArrowSpace
+subspace and summarised into spectral tokens.
+
+\subsection{Diffusion backbone}
+\label{sec:backbone}
+
+We apply diffusion only to the spatial latent:
+\[q(z_t \mid z_0) = \mathcal{N} \left( \sqrt{\bar\alpha_t} z_0,\; (1-\bar\alpha_t)I \right).\]
+A denoiser predicts velocity or noise:
+\[v_\theta(z_t, t, c_{\mathrm{text}}, c_{\mathrm{spec}}).\]
+The spectral chart enters the denoiser through conditioning channels such as
+cross-attention or adaptive layer normalisation. In this way, the diffusion
+backbone remains computationally standard, while semantic topology enters as a
+side-channel rather than as a second full state to denoise.
+
+\subsection{Topology-adaptive decoder}
+\label{sec:decoder}
+
+The decoder reconstructs pixels from the denoised spatial latent under
+spectral control:
+\[\hat x = D_\psi(\hat z; c_{\mathrm{spec}}).\]
+At each resolution stage the decoder forms feature activations, projects them
+onto the chart basis $\Uq$, gates these modes according to
+$c_{\mathrm{spec}}$, and lifts them back to feature space. Abstractly, a
+decoder block has the form
+\[H^{(\ell+1)} = \mathrm{UpBlock} \left( H^{(\ell)} + (\hat H^{(\ell)} \odot g^{(\ell)})\Uq^\top \right),\]
+where $\hat H^{(\ell)} = H^{(\ell)}\Uq$ and
+$g^{(\ell)} = \sigma(W_\ell c_{\mathrm{spec}} + b_\ell)$.
+
+This construction makes the decoder topology-adaptive: reconstruction is not
+performed relative to an isotropic ambient prior alone, but relative to the
+smooth directions permitted by the ArrowSpace graph.
+
+% ============================================================
+\section{Heat-kernel prior}
+\label{sec:heat_kernel}
+% ============================================================
+
+The spectral chart admits a natural diffusion-geometric prior. Let
+$s = (s_1,\ldots,s_q)^\top$ denote the chart coordinates. We define
+\[p_t(s) = \mathcal{N} \left( 0,\; \mathrm{diag}\bigl[w_k e^{-2t\nu_k}\bigr]_{k=1}^q \right),\]
+where the weights $w_k$ are derived from the projected energy-dispersion prior:
+\[w_k = \frac{\exp(-\rho \ed_{k^{\mathrm{chart}}})} {\sum_j \exp(-\rho \ed_{j^{\mathrm{chart}}})}.\]
+
+This prior realises the heat-kernel view of the ArrowSpace manifold. Low
+eigenvalue modes persist under diffusion and therefore encode broad semantic
+structure; high eigenvalue modes decay more rapidly and correspond to rough or
+unstable directions. The energy-dispersion weights bias the chart toward the
+regions of spectral space actually occupied by corpus data.
+
+\begin{definition}[2.5-D manifold prior]
+The pair $(z,s)$ defines a 2.5-D manifold prior if $z$ carries local spatial
+degrees of freedom and $s$ is drawn from a heat-kernel distribution on the
+ArrowSpace spectral chart.
+\end{definition}
+
+% ============================================================
+\section{Objective}
+\label{sec:objective}
+% ============================================================
+
+The revised training objective is
+\[\mathcal{L} = \mathcal{L}\_{\mathrm{diff}} + \lambda_{\mathrm{rec}}\mathcal{L}_{\mathrm{rec}} + \lambda_{\mathrm{chart}}\mathcal{L}_{\mathrm{chart}} + \lambda_{\mathrm{smooth}}\mathcal{L}_{\mathrm{smooth}} + \lambda_{\mathrm{kl}}\mathcal{L}_{\mathrm{kl}}.\]
+
+\subsection{Latent diffusion loss}
+\label{sec:loss_diff}
+
+Using velocity prediction,
+\[\mathcal{L}_{\mathrm{diff}} = \mathbb{E}_{z_0,\epsilon,t} \left[ \left\| v - v_\theta(z_t,t,c_{\mathrm{text}},c_{\mathrm{spec}}) \right\|_2^2 \right].\]
+
+\subsection{Reconstruction and VAE regularisation}
+\label{sec:loss_rec}
+
+The image reconstruction term is
+\[\mathcal{L}_{\mathrm{rec}} = \|x-\hat x\|_1 + \lambda_{\mathrm{perc}}\mathcal{L}_{\mathrm{perc}}(x,\hat x),\]
+and the VAE regulariser is the usual latent KL:
+\[\mathcal{L}_{\mathrm{kl}} = D_{\mathrm{KL}}\bigl(q_\phi(z \mid x)\,\|\,p(z)\bigr).\]
+
+\subsection{Spectral consistency}
+\label{sec:loss_chart}
+
+To preserve global semantic organisation, the spectral-band allocation of the
+decoded image should match that of the source image. Re-encoding $\hat x$
+produces $\hat A$, and we define
+\[\mathcal{L}_{\mathrm{chart}} = \left\| \tilde e(x) - \tilde e(\hat x) \right\|_2^2.\]
+
+\subsection{Off-manifold penalty}
+\label{sec:loss_smooth}
+
+We penalise feature energy outside the smooth ArrowSpace subspace:
+\[\mathcal{L}_{\mathrm{smooth}} = \frac{ \|A(I-\Uq\Uq^\top)\|_F^2 }{ \|A\|_F^2 + \varepsilon }.\]
+
+This is the cleanest operational descendant of the earlier \ESDM claim that
+generation should be restricted to semantically coherent modes.
+
+% ============================================================
+\section{Relation to the original ESDM}
+\label{sec:relation}
+% ============================================================
+
+The present model is not a rejection of the original entropic program. Rather,
+it isolates its most robust architectural contribution.
+
+\subsection{What is retained}
+\label{sec:retained}
+
+We retain the following principles:
+
+\begin{itemize}[leftmargin=1.5em]
+\item the ArrowSpace dual-space hypothesis;
+\item the distinction between ambient coordinates and intrinsic semantic
+geometry;
+\item the use of a frozen feature-space Laplacian as structural prior;
+\item the restriction of generation to low-energy smooth modes;
+\item the interpretation of decoding as a manifold-aware inverse map.
+\end{itemize}
+
+\subsection{What is deferred}
+\label{sec:deferred}
+
+We defer, for a later stage:
+
+\begin{itemize}[leftmargin=1.5em]
+\item the explicit bright--dark sector entropy clock;
+\item the wave recurrence over item states;
+\item the entropic pump and force-balance constraints;
+\item a full thermodynamic stopping criterion.
+\end{itemize}
+
+These mechanisms remain scientifically interesting, but they are not required
+to test the central geometric hypothesis of the model.
+
+% ============================================================
+\section{Experimental programme}
+\label{sec:experiments}
+% ============================================================
+
+We propose a staged empirical evaluation.
+
+\subsection{Stage 1: spectral VAE}
+\label{sec:stage1}
+
+Train the spectral VAE without diffusion and compare it to a conventional VAE
+at equal latent capacity. The main questions are:
+
+\begin{itemize}[leftmargin=1.5em]
+\item Does spectral conditioning improve reconstruction fidelity?
+\item Does it reduce off-manifold energy?
+\item Does it preserve more stable global semantic organisation under
+interpolation and compression?
+\end{itemize}
+
+\subsection{Stage 2: full latent diffusion}
+\label{sec:stage2}
+
+Train the latent denoiser on the spatial latent while conditioning on the
+spectral chart. Compare against a baseline latent diffusion model without
+ArrowSpace conditioning.
+
+\subsection{Metrics}
+\label{sec:metrics}
+
+Beyond standard image-quality metrics, evaluation should include spectral
+diagnostics:
+
+\begin{itemize}[leftmargin=1.5em]
+\item chart-energy error;
+\item off-manifold energy ratio;
+\item chart interpolation smoothness;
+\item reconstruction agreement under re-encoding;
+\item global semantic coherence under low latent capacity.
+\end{itemize}
+
+The central claim is not merely improved image quality, but improved
+semantic coherence under compression.
+
+% ============================================================
+\section{Connection to internal time}
+\label{sec:internal_time_connection}
+% ============================================================
+
+Although the current model does not use the full entropic clock as its primary
+training schedule, the original motivation remains important. The conceptual
+bridge is that geometry and dynamics should be derived from internal state
+rather than imposed entirely from outside. In the original \ESDM this took the
+form of an entropy-derived temporal variable. In the present architecture it
+takes the form of a feature-space geometric prior that governs which semantic
+directions are valid and how their energy is distributed.
+
+This suggests a future synthesis: the spectral chart could itself support a
+state-derived adaptive schedule, for example by coupling noise level to
+off-manifold energy, chart entropy, or spectral-band redistribution. Such a
+development would reconnect the practical architecture to the stronger thermal
+time programme without entangling the initial implementation.
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ============================================================
+
+We presented a revised Entropic Semantic Diffusion Model in which the main
+innovation is not a fully endogenous clock, but a topology-adaptive latent
+diffusion architecture grounded in ArrowSpace feature geometry. The model
+combines a standard spatial latent with a frozen spectral prior and a decoder
+conditioned on a compact ArrowSpace chart. This realises the central 2.5-D
+claim: local image detail lives in a spatial latent plane, while global
+semantic coherence is governed by a lower-dimensional graph manifold.
+
+The original entropic formulation remains an important theoretical horizon.
+However, the present architecture offers a cleaner and more tractable route to
+testing the key scientific idea: that generative models should reconstruct and
+sample not only in compressed latent coordinates, but on a semantic manifold
+defined by the graph Laplacian structure of the feature space itself.
+
+% ============================================================
+\newpage
+\begin{thebibliography}{99}
+
+\bibitem{Barontini2026}
+G.~Barontini,
+\newblock {Testing the problem of time with cold atoms},
+\newblock {\em Physical Review Research}, 8:L022047, 2026.
+\newblock doi: \href{https://doi.org/10.1103/1h9j-df4k}{10.1103/1h9j-df4k}.
+
+\bibitem{ConnesRovelli1994}
+A.~Connes and C.~Rovelli,
+\newblock {Von Neumann Algebra Automorphisms and Time-Thermodynamics Relation in General Covariant Quantum Theories},
+\newblock {\em Classical and Quantum Gravity}, 11:2899--2918, 1994.
+\newblock \href{https://arxiv.org/abs/gr-qc/9406019}{arXiv:gr-qc/9406019}.
+
+\bibitem{Moriondo2025JOSS}
+L.~Moriondo,
+\newblock {ArrowSpace: introducing Spectral Indexing for vector search},
+\newblock {\em Journal of Open Source Software}, 10(113):9002, 2025.
+\newblock doi: \href{https://doi.org/10.21105/joss.09002}{10.21105/joss.09002}.
+
+\bibitem{MoriondoAzizi2026}
+L.~Moriondo and I.~Azizi,
+\newblock {From Embedding Geometry to Spectral Search: Energy Dispersion Networks for Vector Retrieval},
+\newblock arXiv:2606.21535 [cs.IR], 2026.
+\newblock \href{https://arxiv.org/abs/2606.21535}{https://arxiv.org/abs/2606.21535}.
+
+\bibitem{Rombach2022}
+R.~Rombach, A.~Blattmann, D.~Lorenz, P.~Esser, and B.~Ommer,
+\newblock {High-Resolution Image Synthesis with Latent Diffusion Models},
+\newblock in {\em CVPR}, 2022.
+\newblock \href{https://arxiv.org/abs/2112.10752}{arXiv:2112.10752}.
+
+\bibitem{NicholDhariwal2021}
+A.~Nichol and P.~Dhariwal,
+\newblock {Improved Denoising Diffusion Probabilistic Models},
+\newblock in {\em ICML}, 2021.
+\newblock \href{https://arxiv.org/abs/2102.09672}{arXiv:2102.09672}.
+
+\end{thebibliography}
+
+\end{document}
