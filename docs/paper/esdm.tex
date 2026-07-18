@@ -12,6 +12,20 @@
 \usepackage{geometry}
 \usepackage{enumitem}
 \geometry{a4paper, margin=2.5cm}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{subcaption}
+\usepackage{float}
 
 % ---------- hyperref config ----------
 \hypersetup{
@@ -197,6 +211,213 @@ The projected energy-dispersion prior is
 The full spectral conditioning vector is then
 \[c_{\mathrm{spec}} = \mathrm{MLP} \left( [\tilde e_1,\ldots,\tilde e_q,\; \ed_{1^{\mathrm{chart}}},\ldots,\ed_{q^{\mathrm{chart}}},\; \nu_1,\ldots,\nu_q] \right).\]
 
+
+% ============================================================
+\section{Entropic time from the ArrowSpace spectrum}
+\label{sec:entropic_clock}
+% ============================================================
+
+The heat-kernel prior of Section~\ref{sec:heat_kernel} admits a natural
+reading in terms of entropic time. We show that the ArrowSpace Laplacian
+eigenvalues play the role of Barontini's barrier-controlled entropy exchange
+rates, yielding a per-mode entropic clock that requires no additional learned
+parameters and no auxiliary model. This connects the frozen spectral prior
+directly to recent information-theoretic advances in diffusion scheduling.
+
+% ------------------------------------------------------------
+\subsection{Entropy rate of the heat-kernel chart}
+\label{sec:entropy_rate}
+% ------------------------------------------------------------
+
+Recall the per-mode variance under the heat-kernel prior:
+\[\sigma_k^2(t) = w_k \, e^{-2t\nu_k}, \qquad k = 1,\ldots,q,\]
+where \(\nu_k\) is the \(k\)-th ArrowSpace Laplacian eigenvalue and \(w_k\)
+is the projected energy-dispersion weight. The Shannon entropy of a
+one-dimensional Gaussian with variance \(\sigma_k^2\) is
+\[S_k(t) = \tfrac{1}{2}\log\!\bigl(2\pi e\, w_k\bigr) - t\,\nu_k.\]
+The entropy rate is therefore
+\[\boxed{\frac{dS_k}{dt} = -\nu_k.}\]
+Each Laplacian eigenvalue \(\nu_k\) \emph{is} the entropy exchange rate for
+mode~\(k\). Modes with small~\(\nu_k\) (smooth, globally coherent) exchange
+entropy slowly; modes with large~\(\nu_k\) (rough, locally varying) exchange
+entropy rapidly and reach equilibrium sooner.
+
+% ------------------------------------------------------------
+\subsection{Correspondence to Barontini's two-sector clock}
+\label{sec:barontini_mapping}
+% ------------------------------------------------------------
+
+Barontini partitions a closed Bose--Einstein condensate into a bright
+(observed) and dark (unobserved) sector, separated by a tunable potential
+barrier of height~\(V\). Entropic time is constructed from the absolute
+entropy exchange between sectors:
+\[\tau = \int \left|\frac{dS_{\mathrm{bright}}}{d\phi}\right| \,|d\phi|,\]
+where \\(\\phi\\) is a clock field. The barrier height controls the rate of
+entropy production and thus the speed of the emergent internal time.
+
+Table~\ref{tab:barontini} maps this construction onto the ALD-SC spectral
+chart.
+
+\begin{table}[ht]
+\centering
+\small
+\caption{Correspondence between Barontini's BEC experiment and the ALD-SC
+spectral chart.}
+\label{tab:barontini}
+\begin{tabular}{ll}
+\toprule
+\textbf{Barontini experiment} & \textbf{ALD-SC spectral chart} \\
+\midrule
+Bright sector (observed) & Active modes: low \(\nu_k\), high variance \\
+Dark sector (unobserved) & Inactive modes: high \(\nu_k\), collapsed variance \\
+Barrier height \(V\) & Laplacian eigenvalue \(\nu_k\) (per-mode barrier) \\
+Entropy exchange rate & \(|dS_k/dt| = \nu_k\) \\
+Entropic time \(\tau\) & Per-mode \(\tau_k(t) = \nu_k \cdot t\) \\
+Big bang / big crunch & Mode activation / collapse during denoising \\
+Heat death & All modes at equilibrium variance \\
+Barrier-height sweep & Varying \(q\) (number of retained modes) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The barrier-height sweep that Barontini uses to control the speed of entropic
+time maps to the choice of~\\(q\\). Fewer retained modes means higher average
+barrier and slower, more conservative diffusion; more modes means lower
+average barrier and faster, more permissive exchange.
+
+% ------------------------------------------------------------
+\subsection{Per-mode entropic schedule}
+\label{sec:per_mode_schedule}
+% ------------------------------------------------------------
+
+Instead of a single global schedule \(\bar\alpha(t)\), each mode receives its
+own entropic schedule driven by its internal clock:
+\[\tau_k(t) = \nu_k \cdot t, \qquad \bar\alpha_k(\tau_k) = \cos^2\!\left(\frac{\pi}{2}\cdot\frac{\tau_k}{\tau_{k,\max}}\right),\]
+where \(\tau_{k,\max} = \nu_k \cdot T\) for a reference horizon~\(T\).
+The external time at which mode~\(k\) reaches heat death is
+\[t_k^{\mathrm{death}} = \frac{\tau_{k,\max}}{\nu_k} = T.\]
+While all modes formally reach equilibrium at the same external time~\(T\),
+they traverse their entropic trajectories at different rates. High-\(\nu_k\)
+modes accumulate entropic time faster, so they pass through the critical
+transition regime (where \(\bar\alpha_k\) crosses~\(1/2\)) earlier in the
+denoising process. Low-\(\nu_k\) modes reach this transition later.
+
+\begin{remark}
+This yields a topology-adaptive ordering: global semantic structure (low
+\(\nu_k\)) persists throughout the denoising trajectory, while local detail
+(high \(\nu_k\)) is resolved or lost according to the graph geometry --- not
+by design choice, but by the spectral structure of the feature-space graph.
+\end{remark}
+
+% ------------------------------------------------------------
+\subsection{Connection to information-theoretic schedulers}
+\label{sec:stancevic}
+% ------------------------------------------------------------
+
+Stancevic et al.~prove that the conditional entropy
+\(\mathbf{H}[\mathbf{x}_0 \mid \mathbf{x}_t]\) is a schedule-invariant time
+reparameterisation for diffusion models, and provide a tractable estimator
+from the training loss via the I-MMSE identity. The entropy rate decomposes
+over modes when the chart covariance is diagonal:
+\[\dot{\\mathbf{H}}[s_0 \mid s_t] = \sum_{k=1}^{q} \nu_k \cdot \mathrm{mmse}_k(t),\]
+where \(\mathrm{mmse}_k(t)\) is the per-mode minimum mean-square error of
+recovering \(s_0\) from~\(s_t\). The total entropic time is
+\[\tau(t) = \int_0^t \sum_{k=1}^{q} \nu_k \cdot \mathrm{mmse}_k(t')\, dt'.\]
+Stancevic et al.~show that this quantity can be estimated from the unweighted
+denoising loss without auxiliary models. The ALD-SC contribution is that the
+ArrowSpace spectrum provides the decomposition basis a priori: the
+\(\nu_k\) are frozen graph eigenvalues, not empirically discovered
+frequencies.
+
+Table~\ref{tab:scheduler_comparison} contrasts ALD-SC with prior
+information-theoretic and spectral scheduling approaches.
+
+\begin{table}[ht]
+\centering
+\small
+\caption{Comparison of noise-scheduling approaches.}
+\label{tab:scheduler_comparison}
+\begin{tabular}{llll}
+\toprule
+\textbf{Feature} & \textbf{Stancevic} & \textbf{Spectrally-Guided} & \textbf{ALD-SC} \\
+ & \textbf{et al.} & \textbf{(Esteves)} & \textbf{(this work)} \\
+\midrule
+Time variable & Cond.\ entropy & RAPSD profile & Per-mode \(\tau_k\) \\
+Spectral basis & Fourier (pixel) & Fourier (pixel) & ArrowSpace (semantic) \\
+Per-mode schedule & Spectral variant & No & Yes, by construction \\
+Geometry source & Image frequency & Image spectrum & Feature-space graph \\
+Online adaptation & No (post-train) & No & Yes (MMSE online) \\
+Barrier analogue & None & None & \(q\) (retained modes) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ------------------------------------------------------------
+\subsection{Training: entropic noise allocation}
+\label{sec:training_clock}
+% ------------------------------------------------------------
+
+Following the information-guided noise allocation principle, the per-mode
+information rate is estimated online as
+\[\hat\rho_k(t) \propto \nu_k \cdot \hat{m}_k(t),\]
+where \(\hat{m}_k(t)\) is the running average of the per-mode denoising loss.
+The training noise distribution is adapted so that
+\[\pi(t) \propto \frac{\hat\rho(t)}{w(t)},\]
+concentrating training effort at noise levels where spectral modes are
+resolving information fastest. This operationalises the Barontini principle
+that time advances fastest where entropy is flowing most rapidly.
+
+A warm-up period with a fixed cosine schedule is recommended during early
+training, when per-mode losses are noisy. The entropic clock is activated
+once the running loss estimates stabilise.
+
+% ------------------------------------------------------------
+\subsection{Inference: entropic step placement}
+\label{sec:inference_clock}
+% ------------------------------------------------------------
+
+At sampling time, steps are placed equidistantly in the rescaled entropic time
+\[\tau_{\mathrm{rescaled}}(t) = \int_0^t \sigma(\tau)\, \dot{\mathbf{H}}[s_0 \mid s_\tau]\, d\tau,\]
+rather than in external time~\(t\). This ensures each step contributes equal
+information, with more steps allocated to the critical windows where modes
+are actively resolving.
+
+\begin{remark}
+Stancevic et al.~report that entropic time schedules perform best with
+first-order solvers (DDIM, flow matching). Second-order solvers may require
+adjustment because the lookahead step changes the effective entropy rate.
+\end{remark}
+
+% ------------------------------------------------------------
+\subsection{Heat death as a stopping criterion}
+\label{sec:heat_death_clock}
+% ------------------------------------------------------------
+
+Barontini observes that entropic time stops advancing when no entropy is
+exchanged between sectors. In ALD-SC, this corresponds to all modes reaching
+equilibrium variance:
+\[\mathrm{heat\ death} \iff \sum_{k=1}^{q} \nu_k \cdot \mathrm{mmse}_k(t) < \varepsilon.\]
+This provides an intrinsic stopping criterion for sampling: the denoising
+process terminates when no further information is being resolved by any
+spectral mode, rather than at a fixed step count. The number of effective
+sampling steps is therefore data-dependent and spectrally determined.
+
+% ------------------------------------------------------------
+\subsection{Summary}
+\label{sec:clock_summary}
+% ------------------------------------------------------------
+
+The ArrowSpace Laplacian spectrum provides a per-mode entropic clock that is
+derived from the same frozen geometric prior that defines the semantic
+manifold. No additional learned parameters are required: the eigenvalues
+\(\nu_k\) are computed once from the corpus feature graph and remain fixed
+throughout training and inference. The schedule is not externally prescribed
+but emerges from the interaction between the graph geometry and the current
+denoising state, connecting the practical architecture to the stronger
+thermal-time programme without entangling the implementation.
+
+
+
 % ============================================================
 \section{Model architecture}
 \label{sec:model}
@@ -215,7 +436,7 @@ The revised \ESDM consists of four components:
 \end{enumerate}
 
 The full pathway is
-\[x \;\xrightarrow{E\_\phi}\; (z, A) \;\xrightarrow{\text{chart}} (z, c_{\mathrm{spec}}) \;\xrightarrow{\text{diffusion}} \hat z \;\xrightarrow{D_\psi(\cdot \mid c_{\mathrm{spec}})} \hat x.\]
+\[x \;\xrightarrow{E_\phi}\; (z, A) \;\xrightarrow{\text{chart}} (z, c_{\mathrm{spec}}) \;\xrightarrow{\text{diffusion}} \hat z \;\xrightarrow{D_\psi(\cdot \mid c_{\mathrm{spec}})} \hat x.\]
 
 \subsection{Encoder}
 \label{sec:encoder}
@@ -288,7 +509,7 @@ ArrowSpace spectral chart.
 % ============================================================
 
 The revised training objective is
-\[\mathcal{L} = \mathcal{L}\_{\mathrm{diff}} + \lambda_{\mathrm{rec}}\mathcal{L}_{\mathrm{rec}} + \lambda_{\mathrm{chart}}\mathcal{L}_{\mathrm{chart}} + \lambda_{\mathrm{smooth}}\mathcal{L}_{\mathrm{smooth}} + \lambda_{\mathrm{kl}}\mathcal{L}_{\mathrm{kl}}.\]
+\[\mathcal{L} = \mathcal{L}_{\mathrm{diff}} + \lambda_{\mathrm{rec}}\mathcal{L}_{\mathrm{rec}} + \lambda_{\mathrm{chart}}\mathcal{L}_{\mathrm{chart}} + \lambda_{\mathrm{smooth}}\mathcal{L}_{\mathrm{smooth}} + \lambda_{\mathrm{kl}}\mathcal{L}_{\mathrm{kl}}.\]
 
 \subsection{Latent diffusion loss}
 \label{sec:loss_diff}
@@ -484,6 +705,18 @@ A.~Nichol and P.~Dhariwal,
 L.~Moriondo,
 \newblock {entropic-semantic-diffusion},
 \newblock \href{https://github.com/tuned-org-uk/entropic-semantic-diffusion}{Github}
+
+\bibitem{Stancevic2025}
+D.~Stancevic, F.~Handke, and L.~Ambrogioni,
+\newblock {Entropic Time Schedulers for Generative Diffusion Models},
+\newblock arXiv:2504.13612 [cs.LG], 2025.
+\newblock \href{https://arxiv.org/abs/2504.13612}{arXiv:2504.13612}.
+
+\bibitem{Esteves2026}
+C.~Esteves and A.~Makadia,
+\newblock {Spectrally-Guided Diffusion Noise Schedules},
+\newblock in {\em ICML}, 2026.
+\newblock \href{https://arxiv.org/abs/2603.19222}{arXiv:2603.19222}.
 
 \end{thebibliography}
 
