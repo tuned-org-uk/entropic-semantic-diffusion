@@ -334,7 +334,7 @@ Stancevic et al.~\cite{Stancevic2025} prove that the conditional entropy
 reparameterisation for diffusion models, and provide a tractable estimator
 from the training loss via the I-MMSE identity. The entropy rate decomposes
 over modes when the chart covariance is diagonal:
-\[\dot{\\mathbf{H}}[s_0 \mid s_t] = \sum_{k=1}^{q} \nu_k \cdot \mathrm{mmse}_k(t),\]
+\[\dot{\mathbf{H}}[s_0 \mid s_t] = \sum_{k=1}^{q} \nu_k \cdot \mathrm{mmse}_k(t),\]
 where \(\mathrm{mmse}_k(t)\) is the per-mode minimum mean-square error of
 recovering \(s_0\) from~\(s_t\). The total entropic time is
 \[\tau(t) = \int_0^t \sum_{k=1}^{q} \nu_k \cdot \mathrm{mmse}_k(t')\, dt'.\]
