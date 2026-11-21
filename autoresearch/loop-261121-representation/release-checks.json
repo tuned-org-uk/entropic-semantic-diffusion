@@ -1,0 +1,20 @@
+{
+  "version": "2.0.1",
+  "code_commit": "0495d0c30a841c5fc541253d0f54713cde71dd6b",
+  "tests": {
+    "passed": 143,
+    "skipped_optional": 5
+  },
+  "ruff": "passed",
+  "osv_audit": {
+    "audited_packages": 141,
+    "vulnerabilities": 0,
+    "adverse_statuses": 0
+  },
+  "lock_sha256": "eb23f1f63c920b585906e2695e3ca9d5d1694e75e7e5254961864bc8eec77b99",
+  "artifacts": {
+    "dist/esdm-2.0.1-py3-none-any.whl": "65ac0b1fff8cd46d42132c3ca71d4adced003a1ac8752b993c786c9f861b9473",
+    "dist/esdm-2.0.1.spdx.json": "f111d5d7b7afc6b9bec11cd356caad41fbca8d891e27d852711988646cff55ad",
+    "dist/esdm-2.0.1-audit-fixed.json": "93ec411469862b44392d0904eee3eebb8c071fef89888ce9f451cea99b7591ca"
+  }
+}
