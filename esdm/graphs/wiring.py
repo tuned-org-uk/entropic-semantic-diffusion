@@ -84,7 +84,9 @@ class WireGraph:
             items_np = features.detach().cpu().to(torch.float64).numpy()
             L, lambdas = cls._arrowspace_laplacian(items_np, k=k, seed=seed, graph_params=graph_params)
         else:
-            L = cls._knn_laplacian_fallback(features, k=k, seed=seed)
+            # The readout's nodes are feature dimensions in feature mode.
+            rows = features.T if mode == "feature" else features
+            L = cls._knn_laplacian_fallback(rows, k=k, seed=seed)
         L = L.to(dtype=torch.float32)
         L_sym = _normalize_symmetric(L)
         return cls(laplacian_dense=L, laplacian_sym=L_sym, features=features,
