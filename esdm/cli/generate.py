@@ -15,6 +15,7 @@ import argparse
 from copy import deepcopy
 import logging
 from pathlib import Path
+import re
 
 import numpy as np
 import torch
@@ -82,8 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         img_channels, img_size = 1, 28
 
     ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
-    if "model_version" in ckpt and ckpt["model_version"] != "2.0.0":
-        raise ValueError(f"Expected an ESDM v2.0.0 checkpoint, got {ckpt['model_version']}.")
+    if "model_version" in ckpt and not re.fullmatch(r"2\.0\.\d+", str(ckpt["model_version"])):
+        raise ValueError(f"Expected an ESDM v2.0.x checkpoint, got {ckpt['model_version']}.")
     state = ckpt.get("model_state_dict", ckpt)
     if "model_config" in ckpt:
         cfg = ckpt["model_config"]

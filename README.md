@@ -1,4 +1,16 @@
-# Entropic Semantic Diffusion Model (ESDM) — v2.0.0
+# Entropic Semantic Diffusion Model (ESDM) — v2.0.1
+
+**v2.0.1:** initialise the trainable encoder mean from the existing graph chart.
+The completed 25-candidate search reduced held-out linear-probe MSE from
+0.093319 to 0.045821 on fresh synthetic signals, a 50.9% reduction.
+The untrained chart was statistically indistinguishable from the winner:
+this is a better initial representation, not evidence of better learning.
+[Protocol](autoresearch.md) · [Results and reproduction](docs/representation-search.md) ·
+[Research addendum](docs/paper/esdm-v2.0.1-addendum.pdf).
+
+The original v2.0.0 paper, notebooks and receipt below are historical evidence
+for that tag. Their original numerical results require checking out
+`v2.0.0`; running those notebooks with v2.0.1 measures the new initialisation.
 
 The entropic clock determines **when** reconstruction occurs. A new spectral
 readout determines **how much** each retained graph mode contributes. Its
@@ -21,6 +33,12 @@ frequencies come from the graph, not from primes.
 uv sync --locked --extra dev --group notebooks
 uv run --no-sync python notebooks/run.py
 uv run --no-sync pytest tests/ -q
+```
+
+Reproduce the completed representation search in a fresh output directory:
+
+```bash
+bash autoresearch.sh --output-dir results/representation-reproduction
 ```
 
 To inspect the trained decoder separately from the entropy clock:

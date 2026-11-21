@@ -1,0 +1,32 @@
+{
+  "source_commit": "55e830d17af8a8d78a3ac1a1e7573cfd2292b72a",
+  "source_hashes": {
+    "esdm/experiments/representation_search.py": "60452d76c721aed57e81d32aaa8d0d0910004527a40eb490092a55f80cb59724",
+    "esdm/models/esdm.py": "4e52efec9c2561711c6872ed332728fe5a142e39758b4938c5352d1bbef2da70",
+    "autoresearch.md": "1dab7df6ea12c4ad44b96ea68591f4beabf0168d898a3b020623fbd4a8480524",
+    "autoresearch/loop-261121-representation/baseline-encoder.json": "101a9d1c18790d6d334093e16bd442f7279e0a34e9438e87f5a804e5351f6d87",
+    "uv.lock": "f3f3a730d1c51f7e78442559c59d193ddaaaba47ee5e3021c8ee7b4e217278ee"
+  },
+  "seed": 3407,
+  "rates": [
+    3e-05,
+    0.0001,
+    0.0003,
+    0.001,
+    0.003
+  ],
+  "budgets": [
+    16,
+    32,
+    64,
+    128,
+    256
+  ],
+  "training_sha256": "b46755d1f4f668602f46fdade0a0343fb1364892fcd380d3809d2a76d48d8c23",
+  "validation_sha256": "111219575ba57f6ba9250a877fdbc98a6d3b3150647726b5c368fb81624fd9ef",
+  "confirmation_stream": 101,
+  "confirmation_cases": 2048,
+  "torch": "2.12.1",
+  "numpy": "2.5.0",
+  "scope": "Synthetic smooth path; one training seed; conditional case intervals."
+}

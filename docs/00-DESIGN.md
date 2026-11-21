@@ -1,10 +1,28 @@
 # 00 — Entropic Semantic Diffusion Model (ESDM): Design Document
 
-> **Status:** v2.0.0 — free wave amplitudes and bounded reconstruction gains.
+> **Status:** v2.0.1 — graph-initialised mean, free amplitudes and bounded gains.
 > The following contract supersedes the unit-sphere projection and identity
 > readout in the historical sections below for the entropic-clock ESDM.
 
 ### v2 reconstruction contract
+
+#### v2.0.1 encoder initialisation
+
+The posterior mean should initially express coordinates in the same frozen
+chart used by the reconstruction operator:
+
+$$\mu(x)=xU_q,\qquad W_\mu^{(0)}=U_q^\top,\qquad b_\mu^{(0)}=0.$$
+
+The mean map remains trainable. This derives its initial state from the
+existing graph without adding a parameter or constraining latent amplitudes.
+The log-variance head and Gaussian reparameterisation are unchanged. A saved
+checkpoint replaces these initial weights normally. The change passed the
+frozen [autoresearch protocol](../autoresearch.md), including fresh confirmation
+and regression guards; see the [results](representation-search.md). On smooth graph
+signals the prior is intentionally informative; its benefit is not evidence
+that training discovers the graph geometry.
+
+#### Signal readout
 
 The Gaussian posterior still controls the distribution of latent samples.
 Neither those samples nor the raw wave state are clipped or projected to unit

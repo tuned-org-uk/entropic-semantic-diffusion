@@ -1,0 +1,222 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,microtype}
+\usepackage[hmargin=25mm,vmargin=23mm]{geometry}
+\usepackage{amsmath,amssymb,booktabs}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+  pdftitle={ESDM v2.0.1: Graph-informed encoder initialisation},
+  pdfauthor={Lorenzo Moriondo}}
+\title{\textbf{ESDM v2.0.1: Graph-informed encoder initialisation}\\
+  \large A synthetic follow-up to v2.0.0}
+\author{Lorenzo Moriondo\\[-1pt]
+  \small tuned.org.uk \quad\textbar\quad
+  \href{https://orcid.org/0000-0002-8804-2963}{ORCID 0000-0002-8804-2963}}
+\date{21 November 2026}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+Initialising the posterior-mean encoder from an existing graph chart
+improves clean-feature affine recoverability on synthetic smooth path
+signals. A frozen 25-candidate search selected 16 updates at learning rate
+$3\times10^{-5}$. On 2048 fresh confirmation cases, mean squared error
+fell from $0.09331875$ for the default-budget random control to
+$0.04582097$, a 50.898\% reduction. The reduction against a budget-matched
+random control was 48.449\%. However, the selected model was
+indistinguishable from its untrained chart-initialised counterpart under
+the paired case interval. The evidence supports an informative
+initialisation, not improved representation learning through training.
+This addendum documents the v2.0.1 follow-up; the original v2.0.0 manuscript
+and its historical results remain available at that release tag.
+\end{abstract}
+
+\section{The intervention}
+The Entropic Semantic Diffusion Model (ESDM) already retains an orthonormal
+chart $U_q$ consisting of the lowest-frequency eigenvectors of its frozen
+feature Laplacian. Version 2.0.1 uses that chart to initialise the existing
+trainable posterior-mean layer. With row-vector observations,
+\[
+  \mu(x)=xW_\mu^\top+b_\mu,\qquad
+  W_\mu^{(0)}=U_q^\top,\qquad b_\mu^{(0)}=0.
+\]
+In \texttt{esdm/models/esdm.py}, this is a copy into
+\texttt{enc\_mu.weight} and a zeroing of \texttt{enc\_mu.bias}, performed
+without gradient tracking at construction. The layer remains trainable;
+it is not tied to the frozen chart thereafter. No parameters, dimensions,
+loss terms or inference constraints are added. The log-variance head and
+Gaussian sampling rule retain their previous initialisation and behaviour.
+Latent samples and vibrational amplitudes remain free, while reconstruction
+modal gains retain the v2.0.0 bounds. Checkpoint loading replaces the
+initial weights normally.
+
+\section{Frozen search and measurement}
+The experiment follows \texttt{autoresearch.md}, with v2.0.0 commit
+\texttt{c674a5c} as the baseline. It uses an unweighted 32-node path and
+rank $q=8$. Clean signals are drawn in its analytic discrete cosine
+transform (DCT-II) eigenbasis $U$:
+\[
+  x=aU^\top,\qquad
+  a_k\sim\mathcal N\!\left(0,\frac{1}{1+(k/4)^2}\right),
+  \quad k=0,\ldots,31,
+\]
+with independent coefficients. Consequently the graph prior is informative
+by construction. Both model training and probe evaluation use clean
+signals; the observation noise used in the earlier readout experiment is
+not used here.
+
+All runs use CPU execution and seed 3407. NumPy
+\texttt{SeedSequence} spawn keys distinguish 512 training cases (stream 0),
+512 fresh validation cases (100), and 2048 fresh confirmation cases (101).
+The old stream-1 test set is development evidence only. The search crosses
+five learning rates, $3\times10^{-5}$, $10^{-4}$, $3\times10^{-4}$,
+$10^{-3}$ and $3\times10^{-3}$, with maximum update counts
+16, 32, 64, 128 and 256. These are experimental budgets, not new model
+constants. Every candidate trains the full model using its actual ESDM
+loss, Adam, weight decay $10^{-5}$, batch size 64 and gradient clipping
+at 1.0. Stream 102 supplies shared epoch permutations; model and training
+randomness are reset identically across runs. Training stops at heat death
+or the budget; all 25 recorded candidates reached their budgets.
+
+The primary metric is mean squared error (MSE) per original feature from
+an affine least-squares probe of the posterior mean. Each probe is fitted
+only on the 512 training cases, including an intercept, and then evaluated
+without refitting. This measures linear recoverability, not the model's
+forward reconstruction, diffusion quality or generation. The selected
+candidate minimises validation MSE; exact ties favour fewer updates and
+then a lower rate. Its checkpoint is saved before confirmation cases are
+generated, with no subsequent retuning.
+
+Two additional training runs provide random-mean controls: the baseline
+rate $3\times10^{-4}$ with 32 updates, and the selected rate and budget.
+Their mean weights and biases are restored from the frozen v2.0.0
+initialisation; other initial parameters are shared. The baseline reported
+below is this protocol's control, not a relabelling of the original
+manuscript's differently batched diagnostic.
+
+Acceptance requires at least a 1\% confirmation MSE reduction against
+\emph{each} trained random control, with the upper endpoint of each paired
+95\% interval below zero. Differences are selected-model minus control
+per-case errors. The intervals are percentile case-bootstrap intervals
+from 2000 resamples of the 2048 paired cases (stream 103), without probe
+refitting. They are conditional on one training seed, the fitted models
+and probes, and the fixed training data. They do not quantify training-seed
+uncertainty and are not simultaneous, multiplicity-adjusted intervals.
+
+\section{Confirmation results}
+The selected candidate used $3\times10^{-5}$ and 16 updates, obtaining
+validation MSE $0.04509079082$. Table~\ref{tab:mse} reports confirmation
+errors; Table~\ref{tab:contrasts} gives the paired contrasts. Both random
+controls satisfy the frozen acceptance rule, with relative reductions of
+50.898426\% and 48.448689\%, respectively.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Representation or reconstruction & Updates & Confirmation MSE\\
+\midrule
+Random mean, baseline rate & 32 & 0.09331874676\\
+Random mean, matched rate & 16 & 0.08888420540\\
+Chart-initialised mean, selected & 16 & 0.04582097311\\
+Chart-initialised mean, untrained & 0 & 0.04582100595\\
+Fixed chart, transpose synthesis & 0 & 0.04505789528\\
+\bottomrule
+\end{tabular}
+\caption{The first four rows use separately fitted training-only affine
+probes. The last reconstructs $xU_qU_q^\top$ directly, with no fitted
+probe, and is a distinct estimator.}
+\label{tab:mse}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Comparator & Mean difference & Paired 95\% interval\\
+\midrule
+Baseline random & $-0.04749777365$ & $[-0.04929368082,\,-0.04575577022]$\\
+Matched random & $-0.04306323229$ & $[-0.04475371834,\,-0.04142955549]$\\
+Untrained chart & $-3.2835133\times10^{-8}$ &
+$[-2.3961762,\,1.6180500]\times10^{-7}$\\
+\bottomrule
+\end{tabular}
+\caption{Negative differences favour the selected model. The untrained-chart
+contrast is an attribution check, not an acceptance comparator.}
+\label{tab:contrasts}
+\end{table}
+
+The selected and untrained chart means differ by only
+$-3.28\times10^{-8}$ MSE, with an interval crossing zero. This does not
+prove exact equivalence, but supplies no evidence that training improved
+on the initial chart. Direct fixed-chart synthesis has still lower error,
+$0.04505789528$, without a fitted decoder. It should not be conflated with
+the train-only affine-probe estimator.
+
+Every other chart candidate had worse validation error than the selected
+one. At 16 updates, increasing the rate to $0.003$ raised MSE to
+$0.04515054$; at the selected rate, extending to 256 updates raised it to
+$0.04509290$. More aggressive training could be much worse: rate $0.003$
+gave $0.12535620$ at 128 updates and $0.11977122$ at 256. Thus longer
+training generally degraded recovery here, but the dependence was not
+strictly monotonic.
+
+\section{Interpretation and audit trail}
+Affine probes can absorb invertible latent rescaling. The selected
+encoder remained rank eight, with singular values between 0.997195 and
+0.998187, versus 0.339419--0.754769 for the baseline random control.
+Selected posterior-mean variances ranged from 0.233299 to 1.003858 per
+mode; baseline values ranged from 0.045068 to 0.073672. The corresponding
+posterior Kullback--Leibler terms were 2.552077 and 0.365147. These
+diagnostics accompany the probe result rather than turning it into a
+claim about calibrated latent sampling.
+
+A separately fitted affine probe of one posterior draw per case obtained
+MSE 0.139594 for the selected model, 0.194469 for the baseline and 0.192391
+for the matched control. The untrained chart obtained 0.139448. These are
+descriptive sampled-code errors; no confidence intervals for these
+comparisons were recorded. They do not establish a generation benefit.
+The selected training trace records minibatch loss 19.068607 at the first
+update and 18.146175 at the last; different minibatches prevent treating
+these endpoints as a controlled before--after loss comparison.
+
+The defensible interpretation is retention of a useful low-frequency
+prior. Changing initialisation produces a large recoverability gain over
+random means on this deliberately smooth distribution, while optimisation
+adds no demonstrated gain over the untrained chart. Neither broader
+semantic representation quality, an advantage of the prime-based gain
+initialisation, nor image or audio generation is tested by this follow-up.
+
+The frozen protocol, selection, all 25 candidate scores and confirmation
+statistics are stored under
+\path{autoresearch/loop-261121-representation/} as
+\texttt{protocol.json}, \texttt{selection.json}, \texttt{results.tsv} and
+\texttt{confirmation.json}; \texttt{autoresearch.jsonl} retains the
+training traces and both controls. The measured source snapshot is
+\texttt{55e830d17af8}, with source and data hashes recorded in the protocol;
+the selected checkpoint hash begins \texttt{bb55fe129d8b}. The measured
+runtime was PyTorch 2.12.1 and NumPy 2.5.0, distinct from the updated release
+environment. A subsequent frozen-checkpoint compatibility replay under
+PyTorch 2.15.0 and NumPy 2.5.0 reproduced all three primary MSEs exactly
+(difference zero), as recorded in \texttt{runtime-validation.json}.
+That replay involved no retraining, reselection or new acceptance test;
+the reported search measurements and intervals remain those of the original
+runtime. Later TSV newline normalisation is output formatting only; the
+protocol's source hashes identify the measured snapshot.
+
+The runner checks finite losses,
+gradients and states, exact preservation of the frozen chart, and bounded
+readout gains. Confirmation records exact equality of state tensors and
+validation errors after checkpoint restoration. These records are
+distinct from the protocol's separately required full-test and lint
+release checks.
+
+The archived \path{docs/paper/esdm-v2.tex} at tag
+\href{https://github.com/tuned-org-uk/entropic-semantic-diffusion/tree/v2.0.0}{v2.0.0}
+remains the original manuscript. This separate v2.0.1 addendum reports a
+synthetic initialisation follow-up, without replacing its historical
+results.
+\end{document}

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77.0.0", "wheel"]
+requires = ["setuptools>=84.1.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "esdm"
-version = "2.0.0"
+version = "2.0.1"
 description = "Entropic semantic diffusion with free wave amplitudes and bounded spectral reconstruction weights"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -38,7 +38,7 @@ classifiers = [
 #   uv pip install -e .
 #
 dependencies = [
-    "torch>=2.3",
+    "torch>=2.13",
     "scipy>=1.13",
     "numpy>=1.26",
     "scikit-learn>=1.4",
