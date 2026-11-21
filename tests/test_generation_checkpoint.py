@@ -66,3 +66,15 @@ def test_generation_uses_saved_chart_rank_for_bare_checkpoint(tmp_path):
     main(["--checkpoint", str(checkpoint), "--dataset", "mnist", "--n-steps", "2",
           "--n-samples", "2", "--output-dir", str(tmp_path), "--save-embeddings"])
     assert torch.load(tmp_path / "embeddings.pt", weights_only=True).shape == (2, 16)
+
+
+def test_generation_accepts_v2_patch_checkpoint(tmp_path):
+    cfg = _config()
+    cfg["model"].update(n_nodes=16, dim_input=16, dim_latent=4, n_modes=4)
+    torch.manual_seed(3407)
+    checkpoint = tmp_path / "patch.pt"
+    torch.save({"model_version": "2.0.1", "model_config": cfg,
+                "model_state_dict": ESDM(cfg).state_dict()}, checkpoint)
+    main(["--checkpoint", str(checkpoint), "--dataset", "mnist", "--n-steps", "2",
+          "--n-samples", "2", "--output-dir", str(tmp_path), "--save-embeddings"])
+    assert torch.load(tmp_path / "embeddings.pt", weights_only=True).shape == (2, 16)
