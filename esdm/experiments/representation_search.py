@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from esdm.cli.generate import _restore_generation_model
 from esdm.experiments.v2_readout import (
     FEATURES, HALF_POWER_MODE, RANK, SEED, _model, _rng, path_data,
 )
@@ -23,6 +24,14 @@ RATES = (0.00003, 0.0001, 0.0003, 0.001, 0.003)
 BUDGETS = (16, 32, 64, 128, 256)
 BATCH = 64  # Design training batch size.
 BOOTSTRAPS = 2000  # Same interval resolution as the v2.0.0 diagnostic.
+
+
+class TrialFailure(RuntimeError):
+    """A failed trial with its completed-update evidence preserved."""
+
+    def __init__(self, error, record):
+        super().__init__(str(error))
+        self.record = record
 
 
 def fit_probe(code: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -80,24 +89,33 @@ def train(data, arm, rate, budget, baseline):
     chart = model.U_q.clone()
     trace = []
     stop = "budget"
-    for step, indices in enumerate(batches[:budget], 1):
-        optimizer.zero_grad(set_to_none=True)
-        out = model(inputs[indices])
-        if not torch.isfinite(out.loss):
-            raise FloatingPointError(f"nonfinite loss at step {step}")
-        out.loss.backward()
-        norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, error_if_nonfinite=True)
-        optimizer.step()
-        if any(not torch.isfinite(t).all() for t in model.state_dict().values()):
-            raise FloatingPointError(f"nonfinite state at step {step}")
-        trace.append({
-            "step": step, "loss": float(out.loss.detach()), "gradient_norm": float(norm),
-            "tau": float(model.clock.tau_n),
-            "terms": {key: float(value.detach()) for key, value in out.metrics.items()},
-        })
-        if model.clock.is_heat_death():
-            stop = "heat_death"
-            break
+    completed = 0
+    try:
+        for step, indices in enumerate(batches[:budget], 1):
+            optimizer.zero_grad(set_to_none=True)
+            out = model(inputs[indices])
+            if not torch.isfinite(out.loss):
+                raise FloatingPointError(f"nonfinite loss at step {step}")
+            out.loss.backward()
+            norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, error_if_nonfinite=True)
+            optimizer.step()
+            completed += 1
+            if any(not torch.isfinite(t).all() for t in model.state_dict().values()):
+                raise FloatingPointError(f"nonfinite state at step {step}")
+            trace.append({
+                "step": step, "loss": float(out.loss.detach()), "gradient_norm": float(norm),
+                "tau": float(model.clock.tau_n),
+                "terms": {key: float(value.detach()) for key, value in out.metrics.items()},
+            })
+            if model.clock.is_heat_death():
+                stop = "heat_death"
+                break
+    except (FloatingPointError, RuntimeError) as error:
+        raise TrialFailure(error, {
+            "arm": arm, "lr": rate, "max_updates": budget, "updates": completed,
+            "failure_step": step, "stop_reason": "crash", "trace": trace,
+        }) from error
+    # Invariant failures abort the whole search, rather than selecting around a defect.
     torch.testing.assert_close(model.U_q, chart, rtol=0, atol=0)
     weights = model.readout.weights().detach()
     assert ((weights >= 1 - model.readout.radius) & (weights <= 1 + model.readout.radius)).all()
@@ -133,7 +151,8 @@ def evaluate(model, training, heldout):
 
 def checkpoint(model, path, record):
     torch.save({
-        "model_version": "2.0.1",
+        "model_version": "2.0.0",  # Compatible architecture, not a release claim.
+        "proposed_release": "2.0.1",
         "model_config": {
             "model": {key: val for key, val in model.cfg["model"].items() if key != "L_base"},
             "clock": model.cfg["clock"],
@@ -141,6 +160,14 @@ def checkpoint(model, path, record):
         "model_state_dict": model.state_dict(), "experiment": record,
     }, path)
     return sha256(path.read_bytes()).hexdigest()
+
+
+def restore_checked(model, path):
+    saved = torch.load(path, map_location="cpu", weights_only=True)
+    restored = _restore_generation_model(saved["model_config"], saved["model_state_dict"]).eval()
+    for name, value in model.state_dict().items():
+        torch.testing.assert_close(restored.state_dict()[name], value, atol=0, rtol=0)
+    return restored
 
 
 def contrast(left, right):
@@ -210,10 +237,10 @@ def run(output: Path):
                 rows.append((trial, rate, budget, record["updates"], score, decision))
                 print(f"trial={trial:02d} lr={rate:g} budget={budget} "
                       f"validation_mse={score:.9f} {decision}", flush=True)
-            except (FloatingPointError, RuntimeError) as error:
+            except TrialFailure as error:
                 log({"kind": "candidate", "trial": trial, "lr": rate,
-                     "max_updates": budget, "decision": "crash", "error": str(error)})
-                rows.append((trial, rate, budget, 0, None, "crash"))
+                     **error.record, "decision": "crash", "error": str(error)})
+                rows.append((trial, rate, budget, error.record["updates"], None, "crash"))
                 print(f"trial={trial:02d} crash: {error}", flush=True)
     with (output / "results.tsv").open("w") as f:
         writer = csv.writer(f, delimiter="\t")
@@ -236,6 +263,14 @@ def run(output: Path):
     }
     # Freeze selection on disk before creating or looking at confirmation cases.
     write_json(output / "selection.json", selection)
+    restored = []
+    for model, name in ((winner, "winner"), (control, "baseline"), (matched, "matched-control")):
+        loaded = restore_checked(model, output / f"{name}.pt")
+        before, _ = evaluate(model, data.train.clean, validation)
+        after, _ = evaluate(loaded, data.train.clean, validation)
+        np.testing.assert_array_equal(before, after)
+        restored.append(loaded)
+    winner, control, matched = restored
     confirmation = draw_cases(data.basis, 2048, 101)
     errors, diagnostics = {}, {}
     for name, model in (
@@ -251,6 +286,7 @@ def run(output: Path):
     accepted = confirmation_accepts([comparisons["baseline"], comparisons["matched_control"]])
     result = {
         "accepted": accepted, "selection": selection,
+        "checkpoint_round_trip": "all state tensors and validation errors exactly equal",
         "confirmation_sha256": array_hash(confirmation), "diagnostics": diagnostics,
         "comparisons": comparisons,
         "fixed_chart_mse": float(np.square(confirmation @ chart @ chart.T - confirmation).mean()),
