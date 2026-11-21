@@ -1,0 +1,464 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern,microtype}
+\usepackage[hmargin=25mm,vmargin=23mm]{geometry}
+\usepackage{amsmath,amssymb,amsthm,booktabs}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+  pdftitle={Entropic Semantic Diffusion v2.0.0: Free wave amplitudes and bounded reconstruction gains},
+  pdfauthor={Lorenzo Moriondo}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\U}{U_q}
+\DeclareMathOperator{\li}{li}
+\DeclareMathOperator{\Ei}{Ei}
+\DeclareMathOperator{\diag}{diag}
+\DeclareMathOperator{\atanh}{atanh}
+\newtheorem{proposition}{Proposition}
+\title{\textbf{Entropic Semantic Diffusion v2.0.0}\\
+  Free wave amplitudes and bounded reconstruction gains}
+\author{Lorenzo Moriondo\\[-1pt]
+  \small tuned.org.uk \quad\textbar\quad
+  \href{https://orcid.org/0000-0002-8804-2963}{ORCID 0000-0002-8804-2963}}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+Projecting a wave state onto the unit sphere makes two signals in the same
+direction indistinguishable even when their amplitudes differ. Version 2.0.0
+of the Entropic Semantic Diffusion Model (ESDM) retains the raw state and
+limits the gain applied to each retained graph mode at reconstruction. The
+clock still advances by changes in the active modes' variational divergence.
+For the readout, we compare the inclusive prime count with the logarithmic
+integral at fixed integer arguments. Their ratio sets the initial gain;
+a relative error envelope sets the interval in which that gain can be learned.
+Schoenfeld's theorem motivates the interval under the Riemann hypothesis,
+but enforcing it requires only a bounded function. We prove a relative norm
+bound for the deterministic readout and give a scaling example with no
+absolute amplitude bound. On 512 held-out noisy path signals, fitted bounded
+gains reduced per-feature mean squared error from $0.022515$ (identity) to
+$0.022373$; unrestricted gains reached $0.022320$. Shuffling the initial
+prime residuals gave essentially the same error as keeping their order.
+After 32 end-to-end updates, a linear probe recovered the inputs less
+accurately from the encoder's posterior mean. These experiments establish
+neither a semantic advantage for primes nor improved latent encoding.
+\end{abstract}
+
+\section{What the readout should preserve}
+Consider two feature signals $u$ and $10u$, where $u$ is a unit eigenvector
+of a graph Laplacian. Both have the same Rayleigh quotient. A unit-norm
+projection also gives them the same state, so no decoder observing only that
+state can recover which amplitude was present. A diagonal gain $w$, in
+contrast, produces $wu$ and $10wu$. This difference matters even for
+unit-normalised observations: a preprocessing convention need not constrain a
+latent state after it has received a restoring force and external forcing from
+another model component.
+
+ESDM uses the same embedding in two ways. Its entries are coordinates of an
+observed item; they are also a signal on a graph whose vertices are the
+feature dimensions. ArrowSpace supplies this second geometry from a corpus
+\cite{arrowspace}. ESDM inherits its spectral loading and wave block from
+the Vibrational Deduction Transformer \cite{vdt}. A variational encoder
+conditions the wiring, while an internal clock determines the wave step and the
+amount of signal admitted by the diffusion decoder. The historical v0.4.1
+manuscript describes a related image model, ArrowSpace Latent Diffusion with
+Spectral Chart Conditioning (ALD-SC), that denoises a spatial latent
+\cite{archive}. Here the object being
+reconstructed is the feature signal of the entropic-clock ESDM. A bound on
+this specific map cannot be transferred to an image decoder or to the entire
+diffusion trajectory.
+
+\section{From an observation to a wave state}
+\paragraph{Geometry and encoding.}
+Let an observation $x\in\R^{1\times F}$ be a row vector on a feature graph
+with real symmetric Laplacian $L_F$. Retain $1\le q\le F$ orthonormal
+eigenvectors in ascending eigenvalue order, as columns of
+$\U=[u_1,\ldots,u_q]\in\R^{F\times q}$. Write $P=\U\U^\top$.
+The frozen graph supplies the reference frame; the model has a separate
+data-dependent wiring. Two encoder heads give a mean $\mu(x)$ and
+log-variance $\ell(x)$ for a diagonal Gaussian:
+\begin{equation}
+ z=\mu(x)+\exp\!\bigl(\ell(x)/2\bigr)\odot\xi,\qquad
+ \xi\sim\mathcal N(0,I_q).
+\end{equation}
+Numerical bounds on $\ell$ control scale parameters, not the realised
+sample $z$. A spectral loading network predicts positive mode loadings
+$\omega$ and a mixing matrix $S$. From
+$W=\U\diag(\omega)S$ and the base edges it constructs an effective Laplacian
+$L(z)$. Neither $W$ nor $\omega$ is the reconstruction gain defined below.
+
+\paragraph{Two sectors and their clock.}
+For each item, loadings strictly above the median across its modes form the
+bright (active) set. The remaining modes, the latent wiring and the frozen
+geometric prior form the dark sector. Let $K_n$ be the batch mean of the
+sum of the active modes' Kullback--Leibler (KL) divergences at update $n$.
+The spectral loading KL controls coupling to the prior. The split is
+inspired by relational time in a cold-atom system \cite{barontini}; $K_n$
+is a model statistic, not a measurement of thermodynamic entropy. Its total
+variation defines the clock and a cosine signal schedule:
+\begin{equation}
+ \Delta\tau_n=|K_n-K_{n-1}|,\quad
+ \tau_n=\sum_{j=1}^n\Delta\tau_j,\quad
+ \bar\alpha(\tau_n)=\cos^2\!\left(
+ \frac{\pi}{2}\min\{1,\tau_n/(3S_0)\}\right).
+ \label{eq:clock}
+\end{equation}
+Here $S_0>0$ is the first-batch entropy budget. The clock is nondecreasing;
+it does not advance between equal readings. Successive small increments can
+trigger a stopping rule. The entropic pump $\Lambda_n$ estimates the inverse
+magnitude of the finite-difference slope of $K$ against the log mean loading.
+The implementation regularises the denominator, caps the pump at $0.1F$
+before gating it by $\bar\alpha$, and limits the wave step $h$ by both
+$\Delta\tau_n$ and a spectral stability condition.
+
+\paragraph{The hybrid operator and recurrence.}
+At a wave substep, let $L$ denote the symmetric effective Laplacian used by
+the block (the base graph in the fixed-wiring case). First project the
+current row $Q_t$ onto the reference chart and take one heat step. Evaluate
+the Rayleigh gradient there and project the force onto the same chart:
+\begin{align}
+ f&=Q_t P,\qquad g=f-\tfrac12\sigma^2h\,fL,\qquad
+ R_L(g)=\frac{gLg^\top}{gg^\top}, \label{eq:heat}\\
+ \mathcal H_h(Q_t)&=\eta\,\frac{2(gL-R_L(g)g)}{gg^\top}\,P .
+ \label{eq:hybrid}
+\end{align}
+The expression is row-wise for nonzero $g$; the implementation floors the
+squared norm in the denominator. This is a gradient \emph{evaluated at}
+the filtered signal, not a chain-rule derivative through the entire heat
+step. With damping $\gamma$ and learned attention forcing $B_t$, the update
+is
+\begin{equation}
+ Q_{t+1}=2Q_t-Q_{t-1}-\gamma(Q_t-Q_{t-1})
+          -h^2\mathcal H_h(Q_t)+h^2\Lambda_n B_t .
+ \label{eq:wave}
+\end{equation}
+A forward call starts from rest, $Q_{-1}=Q_0=x$: the wave receives the
+observation directly, whereas $z$ conditions its wiring. At zero elapsed time the
+raw state therefore remains $x$. No step projects $Q_{t+1}$ to unit length.
+The clock and damping regulate the dynamics, but neither provides a uniform
+amplitude bound. In particular, linear scaling of the \emph{readout} below
+does not assume that the nonlinear recurrence scales linearly.
+
+\section{How prime counts specify gains}
+Use $s$ for an arithmetic argument, to distinguish it from a feature vector.
+The right-continuous prime count is $\pi(s)=\#\{p\le s:p\text{ prime}\}$:
+a prime at the evaluation point is counted in full, and no higher prime power
+receives a contribution. For $s>1$ define the real, unoffset logarithmic
+integral by \cite[Eq.~6.2.8]{dlmf}
+\begin{equation}
+ \li(s)=\operatorname{PV}\!\int_0^s\frac{dt}{\log t}=\Ei(\log s).
+\end{equation}
+The principal value is taken at $t=1$ and logarithms are natural.%
+\footnote{The offset convention $\operatorname{Li}(s)=\int_2^s dt/\log t
+=\li(s)-\li(2)$ differs by $\li(2)\simeq1.04516$. Substituting it into
+the residual or the ratio changes the initialisation.}
+Under the classical Riemann hypothesis (RH), which places all nontrivial
+zeros of the zeta function on the line $\Re s=1/2$,
+Schoenfeld's Corollary~1 \cite[Eq.~(6.18)]{schoenfeld} gives
+\begin{equation}
+ |\pi(s)-\li(s)| < B(s),\qquad
+ B(s)=\frac{\sqrt{s}\log s}{8\pi},\qquad s\ge2657 .
+ \label{eq:rh}
+\end{equation}
+The $\pi$ in $8\pi$ is the circle constant. Equation~\eqref{eq:rh} concerns
+an error in counting primes. It makes no statement about a Laplacian,
+an embedding or a wave amplitude. For the finite interval we use, the
+same arithmetic inequality is also known without assuming full RH
+\cite{johnston}.
+
+Assign to column $u_k$ the deterministic grid point
+\begin{equation}
+ s_k=\operatorname{round}\!\left(4096\cdot
+          16^{(k-1)/(q-1)}\right),\quad k=1,\ldots,q,\quad q>1;
+ \qquad s_1=4096\quad(q=1).
+\end{equation}
+The endpoints $4096$ and $65536$ span four doublings above the theorem's
+threshold. The assignment is by column index, not by the numerical value of
+a graph frequency. It is a modelling choice, not a consequence of the
+prime number theorem. Fix the half-width $d_k$ and compute the scaled
+arithmetic residual $r_k$ at each point:
+\begin{align}
+ d_k&=\frac{B(s_k)}{\li(s_k)}, &
+ r_k&=\frac{\pi(s_k)-\li(s_k)}{B(s_k)}, \label{eq:width}\\
+ \theta_k^{(0)}&=\atanh(r_k), &
+ w_k(\theta_k)&=1+d_k\tanh\theta_k . \label{eq:gain}
+\end{align}
+Verify $|r_k|<1$ before taking the inverse hyperbolic tangent; clipping a
+failed check would conceal an incorrect count, convention or grid. The
+initial gain then equals $\pi(s_k)/\li(s_k)$. The $q$ logits $\theta_k$
+can be optimised independently. After initialisation there is no requirement
+for a learned gain to equal the prime-count ratio.
+
+For example, at $4096$ there are $564$ primes, $\li(4096)\simeq576.923$,
+and the initial gain is $0.977601$ with half-width $0.036714$.
+At $65536$ these values are $6542$, $6583.987$, $0.993623$ and
+$0.017158$, respectively. An inclusive sieve and evaluation of $\Ei(\log s)$
+over every integer from $4096$ through $65536$ give
+$\max_s |(\pi(s)-\li(s))/B(s)|\simeq0.825800$ and
+$\max_s B(s)/\li(s)\simeq0.036714$. These finite numerical checks concern
+the initialiser; the parameterisation itself enforces the gain interval
+independently of RH at every subsequent update.
+
+\section{What the reconstruction bound implies}
+Let $Q$ denote the final raw wave row, $a=Q\U$ its retained coordinates and
+$Q_\perp=Q(I-P)$ its complement. The deterministic signal readout is
+\begin{align}
+ D_w(Q)&=Q+\bigl((Q\U)\odot(w-\mathbf1)\bigr)\U^\top
+       =Q_\perp+(a\odot w)\U^\top. \label{eq:readout}
+\end{align}
+The diffusion decoder forms
+\begin{equation}
+ \hat x=\sqrt{\bar\alpha(\tau)}\,D_w(Q)
+          +\sqrt{1-\bar\alpha(\tau)}\,\epsilon .
+ \label{eq:recon}
+\end{equation}
+Forward reconstruction sets $\epsilon=0$; in a stochastic decode the
+additive Gaussian noise is outside $D_w$. In particular, $\bar\alpha(0)=1$ gives
+the learned readout, not necessarily an identity reconstruction. All
+unretained directions pass through the signal readout with gain one; the
+subsequent clock factor multiplies both retained and unretained signal.
+The reverse sampler also uses $D_w$ at its signal readouts. Its initial
+wave and injected noise have Gaussian coordinates in the frozen chart;
+restricting their directions does not fix their magnitudes.
+
+\begin{proposition}[Relative distortion of the signal]
+For an orthonormal chart $\U^\top\U=I_q$ and finite real logits, set
+$d_*=\max_k d_k$. Then $|w_k-1|<d_k$ and
+\begin{equation}
+ \|D_w(Q)-Q\|_2\le d_*\|Q\U\|_2\le d_*\|Q\|_2 .
+ \label{eq:bound}
+\end{equation}
+Consequently $(1-d_*)\|Q\|_2\le\|D_w(Q)\|_2\le(1+d_*)\|Q\|_2$.
+\end{proposition}
+\begin{proof}
+The first assertion follows from $|\tanh\theta|<1$. For any chart row $b$,
+$\|b\U^\top\|_2^2=b\U^\top\U b^\top=\|b\|_2^2$. Therefore
+\[
+ \|D_w(Q)-Q\|_2^2=\sum_{k=1}^q a_k^2(w_k-1)^2
+       \le d_*^2\|a\|_2^2.
+\]
+Orthogonality gives $\|Q\|_2^2=\|Q_\perp\|_2^2+\|a\|_2^2$.
+Taking square roots gives \eqref{eq:bound}; the triangle and reverse triangle
+inequalities give the norm bounds. Floating-point saturation of $\tanh$ can
+reach an endpoint, so numerical checks allow the closed interval to rounding
+precision.
+\end{proof}
+
+For a fixed readout $D_w(cu_k^\top)=cw_k u_k^\top$ for any real $c$.
+Since $d_*<1$ on the chosen grid, $w_k$ is nonzero and the output norm grows
+without limit with $|c|$. A row orthogonal to every $u_k$ is reproduced
+exactly. Thus this readout preserves amplitude information even though it
+may attenuate or amplify a retained component. It does not itself compress
+an $F$-vector to $q$ numbers: the complement would be lost in a chart-only
+encoder, but is transmitted in \eqref{eq:readout}.
+
+Changing the sign of an eigenvector changes neither its rank-one projector
+nor the readout. Within a repeated-eigenvalue subspace the choice of
+orthonormal frame is arbitrary. Rotating that frame generally changes the
+readout if gains differ; even the retained subspace may depend on the frame
+if the truncation splits a repeated eigenvalue. Equation~\eqref{eq:bound}
+holds for each fixed frame. A checkpoint must keep its basis and gain order
+together to reproduce the same operator.
+
+\paragraph{Training objective.}
+In loss-minimisation form the regularised negative evidence lower bound
+(ELBO) used by ESDM is
+\begin{equation}
+ \mathcal J=\operatorname{MSE}(x,\hat x)+K_z+K_S+K_n+
+      \beta(K_S+K_n+S_{\rm dark}-S_0)^2 .
+\end{equation}
+Here MSE is mean squared error. $K_z$ regularises the diagonal Gaussian
+against a standard normal; $K_S$
+regularises the spectral loading posterior; $K_n$ is the bright KL that
+also advances the clock. The implementation uses $\beta\simeq1/S_0$.
+After the first batch $S_{\rm dark}=\max(0,S_0-K_S-K_n)$, so whenever
+$K_S+K_n\le S_0$ the last term vanishes by construction. It cannot by
+itself demonstrate physical conservation. The gains enter the objective
+through the reconstruction, without a prime-count penalty in the ELBO.
+
+\section{Synthetic encoding and decoding}
+\paragraph{Experimental design.}
+We draw 512 training and 512 independent test signals on an unweighted path
+with $F=32$ vertices (CPU, seed 3407). In its orthonormal discrete cosine
+basis the clean coefficients are independent zero-mean Gaussians with
+variance $v_j=1/(1+(j/4)^2)$, $j=0,\ldots,31$. Thus smooth modes are more
+energetic by design; the signal distribution makes no reference to primes.
+The decoding experiment adds independent Gaussian observation noise with
+standard deviation $0.15$ to each feature. Errors are per-feature squared
+differences, averaged within each held-out case and then over cases.
+
+\paragraph{Encoding.}
+At ranks $q=2,4,8,16,32$, we encode \emph{clean} held-out signals by
+$x\U$ and synthesise with $\U^\top$. We compare this chart-only projection
+with two codes from the untrained ESDM Gaussian encoder at the same rank:
+the posterior mean and one posterior draw per item. A separate affine
+least-squares probe, fitted only on training codes and clean targets,
+decodes each type of Gaussian code. The chart needs no fit. These
+comparisons measure recoverability from the code alone; because $Q_0=x$,
+a forward pass through the entire model is not a bottleneck test.
+
+\paragraph{Decoding.}
+At $q=8$ the input $Q$ is the noisy feature row, the target is the clean row,
+and the clock and additive decoder noise are omitted to isolate $D_w$.
+We compare five arms: identity held fixed; bounded logits initialised at
+zero (``smooth''); bounded logits initialised by the observed residuals
+(``prime''); the same normalised residuals permuted among columns, retaining
+the original $d_k$ (``shuffled''); and unrestricted diagonal gains
+initialised at one (``free''). The last four arms receive 100 full-batch Adam
+updates at learning rate $0.05$ on the same training pairs, with no early
+stopping. All five keep the complement at unit gain. We compare errors
+on identical test cases; 95\% percentile intervals for paired differences
+use 2,000 case bootstrap draws, conditional on this split and fit. They
+do not measure uncertainty across seeds or training runs.
+
+\paragraph{What the controls predict.}
+For a clean scalar coefficient $a$ of variance $v_j$ and independent noise
+$e$ of variance $\sigma_e^2=0.15^2$, the expected error of a linear gain is
+\[
+ \mathbb E[(w(a+e)-a)^2]=(w-1)^2v_j+w^2\sigma_e^2.
+\]
+The minimiser is $v_j/(v_j+\sigma_e^2)$. At $j=0$ this is $0.9780$, close
+to the first prime-initialised gain ($0.9776$). For modes $j=3$ through
+$7$ the optimum lies below the engineered lower bound: at $j=7$ the
+optimal gain is $0.91625$ but the interval starts at $0.98284$.
+An unrestricted gain can therefore remove noise that the
+bounded gain must transmit. All arms also transmit noise on 24 unretained
+directions, contributing $24\sigma_e^2/32=0.016875$ in expectation to
+per-feature MSE. This term accounts for three quarters of the identity
+arm's expected error and cancels in the paired contrasts.
+
+\section{Results}
+\paragraph{What survives encoding?}
+Table~\ref{tab:encoding} shows that the fixed path chart recovered more of
+the clean signal than either code from the untrained encoder at low ranks.
+This is expected: the chart is the generator's variance-ordered basis.
+At rank eight, replacing the mean by one posterior sample increased probe
+MSE by $0.10294$ (paired 95\% interval $[0.09777,0.10856]$). At full rank
+both the orthonormal chart and the probed affine mean map were numerically
+invertible on these signals. The remaining error of the sampled code does
+not measure the performance of a trained variational encoder.
+
+\begin{table}[htbp]
+\centering
+\caption{Encoding: held-out mean squared error per original feature for 512
+clean signals. The chart uses transpose synthesis; each posterior code uses
+its own affine probe fitted on 512 training cases. Lower is better.}
+\label{tab:encoding}
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+Rank $q$ & Path chart & Posterior mean & One posterior sample\\
+\midrule
+2  & 0.13686 & 0.15640 & 0.19246\\
+4  & 0.09269 & 0.13528 & 0.19358\\
+8  & 0.04536 & 0.08821 & 0.19115\\
+16 & 0.01563 & 0.04326 & 0.19046\\
+32 & $1.47\times10^{-30}$ & $1.03\times10^{-13}$ & 0.18102\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Does end-to-end training improve the code?}
+We trained one rank-eight ESDM on the 512 clean training signals, using
+the full ELBO loss for two epochs (seed 3407, minibatches of 32, Adam
+learning rate $0.0003$, weight decay $0.00001$). All 32 updates were finite;
+the largest absolute change to a readout logit was $0.010664$. We fitted
+separate affine probes to the training-set posterior means before and after
+training. On the same 512 held-out cases, probe MSE rose from $0.08821115$
+to $0.09270693$, a paired increase of $0.00449578$ (95\% case-bootstrap
+interval $[0.00398528,0.00502858]$). The posterior mean became less useful
+to this probe in this run. Because the wave path also receives the original
+features, this result does not measure the change in full-model reconstruction.
+
+\paragraph{Does the order of prime residuals help?}
+At initialisation the prime arm improved on identity, but shuffling the
+residuals preserved that improvement (Table~\ref{tab:decoding}). After
+fitting, the MSE difference for prime minus shuffled was
+$1.31\times10^{-7}$ (95\% interval $[-0.79,3.28]\times10^{-7}$).
+The prime arm finished slightly below the smooth start
+($-7.94\times10^{-7}$, interval $[-15.58,-0.41]\times10^{-7}$).
+All three bounded arms have the same feasible set; differences after a
+fixed optimisation budget need not persist at convergence. The unrestricted
+diagonal achieved the lowest error: prime minus free was
+$5.34\times10^{-5}$, interval $[2.35,8.45]\times10^{-5}$.
+
+\begin{table}[htbp]
+\centering
+\caption{Decoding: held-out per-feature MSE for identical noisy inputs and
+clean targets ($q=8$, 512 test cases). Min/max are over the eight final
+gains, not reconstructed coordinates. Identity remains fixed.}
+\label{tab:decoding}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Readout & Initial MSE & Final MSE & Min.\ gain & Max.\ gain\\
+\midrule
+Identity           & 0.022514806 & 0.022514806 & 1.00000 & 1.00000\\
+Smooth start       & 0.022514806 & 0.022374183 & 0.97089 & 0.98329\\
+Prime start        & 0.022420285 & 0.022373389 & 0.97055 & 0.98312\\
+Shuffled residuals & 0.022414795 & 0.022373259 & 0.97040 & 0.98306\\
+Free diagonal      & 0.022514806 & 0.022319945 & 0.94371 & 0.97983\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Where does the model apply the bound?}
+In the actual \texttt{ESDM.readout}, input coefficients $1$, $10$ and $1000$
+on the first mode gave $0.977601$, $9.77601$ and $977.601$. We also ran two
+consecutive clean batches of eight through the untrained model. For the
+first, $\tau=0$ and $\bar\alpha=1$; the raw wave norms ranged from $1.815$
+to $2.715$. For the second, $\tau=3.2323$ and $\bar\alpha=0.99598$;
+the raw norms ranged from $2.136$ to $3.367$. Reapplying
+$\sqrt{\bar\alpha}D_w$ to the stored pre-readout state reproduced the model
+output with maximum absolute discrepancy zero in both passes. This checks
+the placement of the bound, not the quality of a trained model.
+
+\section{Interpretation and reproducibility}
+The guaranteed property is a small, mode-dependent change to each signal
+relative to its input. The empirical trade-off on this path was a small
+improvement over identity at the cost of higher error than the free diagonal.
+The prime and shuffled starts do not establish a benefit specific to prime
+ordering. One graph, one split and one initialisation cannot establish a
+semantic or generative advantage, or validate long-run wave stability. The
+prime-grid calculation is finite and supplies no evidence for RH.
+
+To reproduce Tables~\ref{tab:encoding} and~\ref{tab:decoding}, run the
+following command from the repository root \cite{archive}:
+\begin{verbatim}
+uv run --no-sync python notebooks/run.py
+\end{verbatim}
+\noindent The runner executes \path{notebooks/encoding-quality.ipynb} and
+\path{notebooks/decoding.ipynb}. The full-precision results, split hashes,
+software versions and forward checks are in
+\path{docs/paper/v2-results/experiment.json}.
+
+\clearpage
+\begin{thebibliography}{9}
+\bibitem{arrowspace}
+L.~Moriondo. ArrowSpace: introducing Spectral Indexing for vector search.
+\emph{J. Open Source Softw.} 10, 9002 (2025).
+\href{https://doi.org/10.21105/joss.09002}{doi:10.21105/joss.09002}.
+\bibitem{vdt}
+L.~Moriondo. Vibrational Deduction Transformer (VDT) Leveraging Spectral
+methods, Theory of Sound and Associative Memory. Zenodo (2026).
+\href{https://doi.org/10.5281/zenodo.20816835}{doi:10.5281/zenodo.20816835}.
+\bibitem{archive}
+L.~Moriondo. \emph{Entropic Semantic Diffusion: ALD-SC---A Spectral Latent
+Diffusion Model}. July 2026 manuscript preserved as
+\texttt{docs/paper/esdm.tex}, v0.4.1, in the
+\href{https://github.com/tuned-org-uk/entropic-semantic-diffusion}{ESDM repository}.
+\bibitem{barontini}
+G.~Barontini. Testing the problem of time with cold atoms.
+\emph{Phys. Rev. Research} 8, L022047 (2026).
+\href{https://doi.org/10.1103/1h9j-df4k}{doi:10.1103/1h9j-df4k}.
+\bibitem{dlmf}
+NIST Digital Library of Mathematical Functions.
+\href{https://dlmf.nist.gov/6.2.E8}{Eq.~6.2.8, Logarithmic integral}.
+\bibitem{schoenfeld}
+L.~Schoenfeld. Sharper bounds for the Chebyshev functions $\theta(x)$ and
+$\psi(x)$. II. \emph{Math. Comp.} 30, 337--360 (1976), Cor.~1, p.~339.
+\href{https://doi.org/10.1090/S0025-5718-1976-0457374-X}{doi:10.1090/S0025-5718-1976-0457374-X}.
+\bibitem{johnston}
+D.~R.~Johnston. Improving bounds on prime counting functions by partial
+verification of the Riemann hypothesis. \emph{Ramanujan J.} 59, 1307--1321
+(2022). \href{https://doi.org/10.1007/s11139-022-00616-x}{doi:10.1007/s11139-022-00616-x}.
+\end{thebibliography}
+\end{document}
