@@ -4,8 +4,10 @@ Tests for Q-space reverse sampler (issue #29 Phase 1, Step 5).
 from __future__ import annotations
 
 import torch
+import pytest
 
 from esdm.models.esdm import ESDM
+from esdm.sampling.entropic_sampler import entropic_reverse_sde
 from esdm.sampling.q_space_sampler import q_space_reverse_sde
 
 
@@ -40,11 +42,49 @@ def test_q_sampler_output_shape():
     assert torch.all(torch.isfinite(samples))
 
 
-def test_q_sampler_normalized():
-    model = _build_small_model()
-    samples = q_space_reverse_sde(model, n_samples=4, n_steps=10, seed=3407)
-    norms = samples.norm(dim=-1)
-    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
+@pytest.mark.parametrize("sampler", [q_space_reverse_sde, entropic_reverse_sde])
+def test_single_grid_point_preserves_chart_prior_amplitudes(sampler):
+    torch.manual_seed(3407)
+    model = _build_small_model().double()
+    basis = model.U_q
+    # With no reverse transition the Q-space path still maps Q to data;
+    # the input-space path already holds data coordinates.
+    z = torch.randn(4, basis.shape[1], generator=torch.Generator().manual_seed(3407),
+                    dtype=basis.dtype)
+    if sampler is q_space_reverse_sde:
+        z = z * model.readout.weights()
+    torch.testing.assert_close(sampler(model, n_samples=4, n_steps=1), z @ basis.T)
+
+
+def test_q_reverse_transition_preserves_noise_and_applies_modal_gains():
+    torch.manual_seed(3407)
+    model = _build_small_model().double()
+    # At zero wave depth the score predictor returns its actual input. Three
+    # grid points isolate both the intermediate Gaussian and the terminal gain.
+    model.vibrational.n_steps = 0
+    basis = model.U_q
+    gen = torch.Generator().manual_seed(3407)
+    shape = (4, basis.shape[1])
+    initial = torch.randn(shape, generator=gen, dtype=basis.dtype)
+    torch.randn(shape, generator=gen, dtype=basis.dtype)  # posterior draw
+    noise = torch.randn(shape, generator=gen, dtype=basis.dtype)
+    gains = model.readout.weights().detach()
+    a_terminal = model.clock.alpha_bar(tau=model.clock.tau_max_est).sqrt()
+    a_mid = model.clock.alpha_bar(tau=model.clock.tau_max_est / 2).sqrt()
+    mid = a_mid * (a_terminal * initial * gains) + (1 - a_mid.square()).sqrt() * noise
+    expected = a_mid * mid * gains.square() @ basis.T
+    torch.testing.assert_close(q_space_reverse_sde(model, n_samples=4, n_steps=3), expected)
+
+
+def test_input_space_clean_endpoint_uses_readout_without_schedule_attenuation():
+    torch.manual_seed(3407)
+    model = _build_small_model().double()
+    model.vibrational.n_steps = 0
+    basis = model.U_q
+    z = torch.randn(4, basis.shape[1], generator=torch.Generator().manual_seed(3407),
+                    dtype=basis.dtype)
+    torch.testing.assert_close(entropic_reverse_sde(model, n_samples=4, n_steps=2),
+                               (z * model.readout.weights()) @ basis.T)
 
 
 def test_q_sampler_reproducible():
@@ -54,10 +94,13 @@ def test_q_sampler_reproducible():
     assert torch.allclose(s1, s2, atol=1e-4)
 
 
-def test_q_sampler_restores_state():
+@pytest.mark.parametrize("sampler", [q_space_reverse_sde, entropic_reverse_sde])
+def test_clock_sampler_preserves_model_and_rng(sampler):
     model = _build_small_model()
-    tau_before = float(model.clock.tau_n.item())
-    qtm1_before = model.vibrational.Q_tm1.clone()
-    _ = q_space_reverse_sde(model, n_samples=4, n_steps=10, seed=3407)
-    assert float(model.clock.tau_n.item()) == tau_before
-    assert torch.equal(model.vibrational.Q_tm1, qtm1_before)
+    before = {k: v.clone() for k, v in model.state_dict().items()}
+    rng = torch.get_rng_state()
+    samples = sampler(model, n_samples=3, n_steps=4)
+    assert model.training and not samples.requires_grad
+    torch.testing.assert_close(torch.get_rng_state(), rng)
+    for k, value in model.state_dict().items():
+        torch.testing.assert_close(value, before[k], msg=k)

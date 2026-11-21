@@ -1,6 +1,10 @@
 """
 ESDM fitness evaluation -- composite health score from docs/00-DESIGN.md §8.1.
 
+The thresholds below were calibrated for the pre-v2 unit-sphere recurrence.
+On v2 they are historical diagnostics, not a validated quality metric for
+unconstrained wave amplitudes or evidence about the learned reconstruction gains.
+
 Runs exp4/exp5 training and measures health criteria:
 - entropic-clock motion (tau_monotone, tau_range_bonus)
 - alpha_bar schedule decay
@@ -93,7 +97,8 @@ def compute_fitness_real(metrics: pd.DataFrame) -> dict:
 
     # Reconstruction quality during the active diffusion phase.
     # Measures median recon where alpha_bar > 0.01 (decoder is challenged).
-    # At alpha_bar=1, recon is trivially ~0 (x_hat = Q = x). At alpha_bar=0,
+    # In the historical identity readout, alpha_bar=1 gave x_hat=Q. In v2 it
+    # gives the bounded readout of Q, which need not equal x. At alpha_bar=0,
     # x_hat=0 and recon = ||x||^2/F. The meaningful range is in between.
     # Lower median = better decoder. Score: 10 pts if median < 0.001,
     # linearly decreasing to 0 at median > 0.01.

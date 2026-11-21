@@ -55,6 +55,13 @@ This package investigates the connection between vibrational systems as describe
 
 ## Architecture
 
+For the entropic-clock ESDM, v2.0.0 supersedes the historical sphere projection
+and identity signal readout. See the first section of `docs/00-DESIGN.md`.
+Keep Gaussian samples and vibrational amplitudes free; bound the modal weights
+at reconstruction only. A directional projection into the frozen chart limits
+the subspace, not the magnitudes of its coordinates. Do not interpret the
+separate topology sampler or historical fitness measurements as v2 evidence.
+
 The ESDM unifies two research tracks under one package:
 
 ### 1. Entropic-clock ESDM (ported from `esdm_legacy/`, now in `esdm/models/`)

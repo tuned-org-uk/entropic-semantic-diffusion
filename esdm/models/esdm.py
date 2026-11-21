@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from .bounded_readout import BoundedSpectralReadout
 from .clock import EntropicClock, ClockState
 from .diffusion_decoder import EntropicDiffusionDecoder
 from .elbo import esdm_elbo
@@ -55,6 +56,10 @@ class ESDM(nn.Module):
         self.dim_latent = cfg["model"]["dim_latent"]
         self.n_nodes = cfg["model"]["n_nodes"]
         self.n_modes = cfg["model"]["n_modes"]
+        if self.n_nodes != self.dim_input:
+            raise ValueError("n_nodes must equal dim_input for the feature-space wave and readout")
+        if not 1 <= self.dim_latent <= self.n_nodes:
+            raise ValueError("chart rank must satisfy 1 <= dim_latent <= n_nodes")
         # Mode threshold is derived per-batch as median(omega), not a fixed constant.
         # See 001-IMPLEMENTATION-PLAN.md §3.1.
         self.lam_s = cfg["model"].get("lam_s", 1.0)
@@ -90,35 +95,35 @@ class ESDM(nn.Module):
         # eta_init can be derived from L_F's spectral scale.
         L_base_cfg = cfg["model"].get("L_base", None)
         if L_base_cfg is not None:
-            L_base = torch.as_tensor(L_base_cfg, dtype=torch.float32)
+            L_base = torch.as_tensor(L_base_cfg).detach().to(self.clock.tau_n, copy=True)
             if L_base.shape != (self.n_nodes, self.n_nodes):
                 raise ValueError(
                     f"cfg['model']['L_base'] shape {tuple(L_base.shape)} does not match "
                     f"expected ({self.n_nodes}, {self.n_nodes})"
                 )
             self.register_buffer("L_base", L_base)
-            vals, vecs = torch.linalg.eigh(L_base.double())
-            vals = vals.float()
-            vecs = vecs.float()
+            # Do the one-off factorisation on CPU (MPS has no float64).
+            vals, vecs = torch.linalg.eigh(L_base.to(device="cpu", dtype=torch.float64))
+            vals = vals.to(L_base)
+            vecs = vecs.to(L_base)
             # Leading eigenvectors are those with smallest eigenvalues.
             self.register_buffer("U_q", vecs[:, :self.dim_latent])
             self.register_buffer("eigvals_q", vals[:self.dim_latent])
             # lambda_max = largest eigenvalue of L_F (last in ascending order).
             lambda_max = float(vals[-1].clamp(min=1e-8))
         else:
-            self.register_buffer("U_q", torch.randn(self.n_nodes, self.dim_latent))
             self.register_buffer("L_base", torch.eye(self.n_nodes))
-            self.register_buffer(
-                "eigvals_q",
-                torch.linalg.eigvalsh(self.L_base)[:self.dim_latent],
-            )
+            # For the identity graph the coordinate axes form an exact eigenbasis.
+            self.register_buffer("U_q", self.L_base[:, :self.dim_latent].clone())
+            self.register_buffer("eigvals_q", self.L_base.diagonal()[:self.dim_latent].clone())
             lambda_max = 2.0  # upper bound for normalised Laplacian
 
         # ArrowSpace lambdas: per-item energy scores from the graph build.
         # Defines the energy distribution on the Laplacian graph.
         lambdas = cfg["model"].get("lambdas", None)
         if lambdas is not None:
-            self.register_buffer("lambdas", torch.as_tensor(lambdas, dtype=torch.float32))
+            lambdas = torch.as_tensor(lambdas).detach().to(self.L_base, copy=True)
+            self.register_buffer("lambdas", lambdas)
         else:
             self.register_buffer("lambdas", None)
 
@@ -145,12 +150,43 @@ class ESDM(nn.Module):
         self.diffusion_decoder = EntropicDiffusionDecoder(
             dim=self.dim_input,
         )
+        self.readout = BoundedSpectralReadout(self.dim_latent)
 
         # Variational encoder: x -> (mu, logvar) for the spectral decoder.
         self.enc_mu = nn.Linear(self.dim_input, self.dim_latent)
         self.enc_logvar = nn.Linear(self.dim_input, self.dim_latent)
+        self.register_load_state_dict_pre_hook(self._prepare_checkpoint)
 
     # ------------------------------------------------------------------ #
+
+    def _prepare_checkpoint(self, module, state, prefix, *args) -> None:
+        """Check the v2 operator and allocate lazy buffers on the receiving device."""
+        logits = state.get(prefix + "readout.logits")
+        if logits is None:
+            raise ValueError("No v2 readout logits in checkpoint; use the original model or retrain.")
+        if not torch.isfinite(logits).all():
+            raise ValueError("Checkpoint contains non-finite readout logits.")
+        chart = state.get(prefix + "U_q")
+        if chart is None or chart.shape != self.U_q.shape or not chart.is_floating_point():
+            raise ValueError("Checkpoint must contain the matching frozen readout chart U_q.")
+        # Validate off-device once at load; float32 columns stored as double
+        # still have float32 roundoff. Allow rounding for lower precision saves.
+        tol = max(1e-5, torch.finfo(chart.dtype).eps)
+        basis = chart.detach().to(device="cpu", dtype=torch.float64)
+        eye = torch.eye(basis.shape[1], dtype=basis.dtype, device=basis.device)
+        if not torch.allclose(basis.T @ basis, eye, atol=tol, rtol=tol):
+            raise ValueError("Checkpoint readout requires an orthonormal chart.")
+
+        lazy = ("S_0", "_last_Q", "_last_recon", "lambdas", "vibrational.Q_tm1", "clock.rho_sign")
+        for key in lazy:
+            saved = state.get(prefix + key)
+            parent, _, leaf = key.rpartition(".")
+            owner = self.get_submodule(parent)
+            if saved is not None:
+                setattr(owner, leaf, self.L_base.new_empty(saved.shape))
+            elif owner is self:
+                # Optional buffers are absent from the state_dict before first use.
+                setattr(owner, leaf, None)
 
     def _compute_spectral_metrics(
         self,
@@ -212,14 +248,19 @@ class ESDM(nn.Module):
 
     # ------------------------------------------------------------------ #
 
-    def forward(self, x: Tensor) -> ESDMOutput:
-        """
-        End-to-end forward pass.
-        """
-        # 1. Variational encoding: x -> (mu, logvar) -> z (reparametrised)
+    def encode(
+        self, x: Tensor, *, generator: torch.Generator | None = None
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Return posterior mean, log variance and an unprojected Gaussian draw."""
         mu = self.enc_mu(x)
         logvar = self.enc_logvar(x).clamp(-6.0, 4.0)
-        z = mu + torch.exp(0.5 * logvar) * torch.randn_like(mu)
+        eps = torch.randn(mu.shape, dtype=mu.dtype, device=mu.device, generator=generator)
+        z = mu + torch.exp(0.5 * logvar) * eps
+        return mu, logvar, z
+
+    def forward(self, x: Tensor, *, generator: torch.Generator | None = None) -> ESDMOutput:
+        """Encode, evolve the raw wave, and reconstruct its bounded-gain signal."""
+        mu, logvar, z = self.encode(x, generator=generator)
 
         # 2. Spectral loading: produce L(z) and live spectral outputs.
         W, omega, S, L_z, log_var_S = self.spectral_decoder(z, self.U_q, self.L_base)
@@ -259,18 +300,9 @@ class ESDM(nn.Module):
         )
 
         # 5. Wave recurrence: Q_t gated by Lambda(tau).
-        # Fix 1: pipe L_z from the spectral decoder into the wave (was: L_base).
-        # When n_nodes == dim_input the shapes match directly. Otherwise we
-        # fall back to L_base for the smoke path and log a warning.
-        if L_z.shape[-1] == self.dim_input:
-            L_f_wave = L_z
-        else:
-            L_f_wave = self.L_base.expand(x.shape[0], -1, -1)
-
-        # Issue #20: pass U_q so the full hybridisation operator H is applied.
         Q, rho_plus, rho_minus = self.vibrational(
             x,
-            L_f=L_f_wave,
+            L_f=L_z,
             Lambda_tau=clock_state.Lambda_tau,
             delta_tau=clock_state.delta_tau,
             U_q=self.U_q,
@@ -282,7 +314,8 @@ class ESDM(nn.Module):
         self._last_Q = Q.detach().clone()
 
         # 7. Entropic diffusion decode: alpha_bar from clock
-        x_hat = self.diffusion_decoder(Q, L_z, self.clock, noise=torch.zeros_like(Q))
+        signal = self.readout(Q, self.U_q)
+        x_hat = self.diffusion_decoder(signal, L_z, self.clock, noise=torch.zeros_like(Q))
 
         # 8. ELBO with real kl_z (Fix 3)
         kl_z = self._kl_z(mu, logvar)

@@ -6,8 +6,8 @@ Unified package containing:
   - The 2.5-D dual-space score track (score3d, score25d, minimal surfaces)
   - Vendored VDT upstream code in ``esdm._vendor`` (verbatim, commit 55cec39)
 
-All graph/Laplacian/Rayleigh-quotient computation routes through the
-when the Rust bindings are absent).
+The v2 entropic-clock track reconstructs free-amplitude states using
+bounded gains in a frozen graph chart.
 
 """
 from importlib.metadata import version, PackageNotFoundError
@@ -15,6 +15,6 @@ from importlib.metadata import version, PackageNotFoundError
 try:
     __version__ = version("esdm")
 except PackageNotFoundError:
-    __version__ = "0.1.0.dev"
+    __version__ = "2.0.0"
 
 __all__ = ["__version__"]

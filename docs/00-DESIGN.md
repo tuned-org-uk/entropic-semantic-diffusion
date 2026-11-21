@@ -1,6 +1,59 @@
 # 00 — Entropic Semantic Diffusion Model (ESDM): Design Document
 
-> **Status:** v0.4.0 — topology-adaptive decoder (issue #24)
+> **Status:** v2.0.0 — free wave amplitudes and bounded reconstruction gains.
+> The following contract supersedes the unit-sphere projection and identity
+> readout in the historical sections below for the entropic-clock ESDM.
+
+### v2 reconstruction contract
+
+The Gaussian posterior still controls the distribution of latent samples.
+Neither those samples nor the raw wave state are clipped or projected to unit
+length. Damping, the step-size limit, and the entropy clock govern evolution;
+they do not impose a hard amplitude bound. Input preprocessing can still
+normalise observed data. Only the **modal gains of the signal readout** are
+constrained. With a frozen orthonormal chart (row-vector convention):
+
+$$D_w(Q)=Q+((QU_q)\odot(w-1))U_q^\top,\qquad
+\hat x=\sqrt{\bar\alpha}\,D_w(Q)+\sqrt{1-\bar\alpha}\,\epsilon.$$
+
+The complement is transmitted with gain one. For an eigenmode, multiplying
+the input amplitude by ten multiplies its readout by ten. The guarantee is on
+the multiplier, not the reconstructed feature, the additive Gaussian noise,
+the spectral-loading network's trainable matrices, or the whole model.
+
+For ascending retained chart indices use rounded, log-spaced integers from
+4096 to 65536 inclusive (one mode uses 4096). This fixed benchmark grid starts
+above Schoenfeld's conditional threshold of 2657 and spans four doublings.
+These are engineering choices, not graph frequencies. Define the **unoffset**
+logarithmic integral by the real exponential integral. Count primes inclusively,
+not prime powers. Set
+
+$$\operatorname{li}(x)=\operatorname{Ei}(\log x),\quad
+B(x)=\sqrt{x}\log(x)/(8\pi),\quad d_k=B(x_k)/\operatorname{li}(x_k),
+\quad w_k=1+d_k\tanh\theta_k.$$
+
+Under classical RH, [Schoenfeld's bound (1976), Corollary 1](https://doi.org/10.1090/S0025-5718-1976-0457374-X)
+controls the difference between the prime count and this integral on the chosen domain. It does not bound a
+graph waveform. Initialise the learnable logits using the finite measured
+residual, so the initial gain is the ratio of the count to the integral:
+
+$$\theta_k^{(0)}=\operatorname{atanh}
+ \big((\pi(x_k)-\operatorname{li}(x_k))/B(x_k)\big).$$
+
+Verify the open interval numerically before initialisation, rather than clipping
+an invalid residual. The weight bound then holds by construction throughout
+optimisation independently of RH. The mode ordering refers to the particular
+frozen checkpoint basis, not a rotation-invariant rule on degenerate eigenspaces.
+There is one trainable gain per retained mode so fitting can alter the relative
+contribution of different directions without altering their amplitudes upstream.
+
+On the full set of 61,441 integers in the grid's range, an inclusive sieve
+and float64 evaluation of the integral give a maximum absolute residual
+divided by the bound of 0.825800 (at 5380). This finite-domain numerical
+check explains why all grid initialisations have finite logits; it does
+not establish an asymptotic bound. Unlike the ALD-SC prime-power filter,
+this readout uses the ordinary count of primes and learns the gains.
+
 > **Sources:** Barontini 2026 (Phys. Rev. Research 8, L022047), VDT repo, quantum-vibrational repo, spectral-diffusion repo, ArrowSpace graph wiring formalism (Moriondo 2024)
 > **Supersedes:** `00-DESIGN_PREAMBLE.md`, `00-DESIGN_HYBRID.md` (now in `docs/legacy/`)
 
