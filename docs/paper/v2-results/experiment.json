@@ -1,0 +1,828 @@
+{
+  "schema_version": 1,
+  "reproduce": "uv run --no-sync python notebooks/run.py",
+  "runtime": {
+    "python": "3.12.12",
+    "machine": "arm64",
+    "os": "Darwin",
+    "esdm": "2.0.0",
+    "torch": "2.12.1",
+    "numpy": "2.5.0",
+    "scipy": "1.18.0",
+    "nbformat": "5.11.1",
+    "nbclient": "0.11.0",
+    "ipykernel": "7.4.0",
+    "matplotlib": "3.11.2"
+  },
+  "protocol": {
+    "seed": 3407,
+    "device": "cpu",
+    "features": 32,
+    "ranks": [
+      2,
+      4,
+      8,
+      16,
+      32
+    ],
+    "readout_rank": 8,
+    "n_train": 512,
+    "n_test": 512,
+    "data": "Unweighted path; independent Gaussian DCT-II coefficients, variance 1/(1+(k/4)^2), k=0..31. Clean targets; iid feature-space observation noise.",
+    "noise_sd": 0.15,
+    "half_power_mode": 4,
+    "metric": "MSE: mean squared error per original feature, then mean across held-out cases.",
+    "optimizer": "Adam, full batch, default betas/eps, no weight decay or stopping rule",
+    "updates": 100,
+    "learning_rate": 0.05,
+    "bootstrap_draws": 2000,
+    "interval": "Percentile 95% interval for mean paired per-case MSE differences. Conditional on the single fixed split, fitted parameters and initialisation; no refitting or multiplicity adjustment.",
+    "train_clean_sha256": "b46755d1f4f668602f46fdade0a0343fb1364892fcd380d3809d2a76d48d8c23",
+    "test_clean_sha256": "dd69ee8ef573069c12c634ade512412ac5036a5c318993b72e0b90d6c238e278",
+    "train_observed_sha256": "23a81f5dfeccf88e39f114c251a40e4a62e561644cfcde98fed4b35e2dff040d",
+    "test_observed_sha256": "690091ea1147e12cfa2b60eaea00d17a9a6afff43bfee8fc10a018cb6c8e660e"
+  },
+  "encoding": {
+    "scope": "Clean held-out inputs. Chart = projection and transpose synthesis, no fit. ESDM.encode = independently initialised, untrained model per rank; separate train-only affine least-squares probes for posterior mean and one sample per case. Probe error is not ESDM.forward reconstruction or ELBO performance.",
+    "rows": [
+      {
+        "rank": 2,
+        "chart_mse": 0.13685804169053492,
+        "mu_probe_mse": 0.15640275310087232,
+        "sample_probe_mse": 0.19246022117140033,
+        "mu_minus_chart": {
+          "mean": 0.01954471141033738,
+          "ci95": [
+            0.015461047952680808,
+            0.023677904233530105
+          ]
+        },
+        "sample_minus_mu": {
+          "mean": 0.03605746807052804,
+          "ci95": [
+            0.03237678149104609,
+            0.03982016821133344
+          ]
+        },
+        "heldout_logvar_range": [
+          -0.6778052449226379,
+          0.7623203992843628
+        ],
+        "heldout_sample_norm_range": [
+          0.04080118611454964,
+          4.50399923324585
+        ]
+      },
+      {
+        "rank": 4,
+        "chart_mse": 0.09269404171921469,
+        "mu_probe_mse": 0.13528158660355463,
+        "sample_probe_mse": 0.19357935160533785,
+        "mu_minus_chart": {
+          "mean": 0.04258754488433995,
+          "ci95": [
+            0.038461477841671046,
+            0.04711299003403232
+          ]
+        },
+        "sample_minus_mu": {
+          "mean": 0.05829776500178319,
+          "ci95": [
+            0.05399059407381581,
+            0.06314266357995287
+          ]
+        },
+        "heldout_logvar_range": [
+          -1.0101568698883057,
+          1.0627256631851196
+        ],
+        "heldout_sample_norm_range": [
+          0.42408427596092224,
+          4.365593433380127
+        ]
+      },
+      {
+        "rank": 8,
+        "chart_mse": 0.045358648627972536,
+        "mu_probe_mse": 0.08821115123240797,
+        "sample_probe_mse": 0.1911515331919259,
+        "mu_minus_chart": {
+          "mean": 0.04285250260443542,
+          "ci95": [
+            0.03971887521777664,
+            0.046081155956756346
+          ]
+        },
+        "sample_minus_mu": {
+          "mean": 0.10294038195951796,
+          "ci95": [
+            0.09776662572956114,
+            0.10856152122540565
+          ]
+        },
+        "heldout_logvar_range": [
+          -0.9713364243507385,
+          0.8774971961975098
+        ],
+        "heldout_sample_norm_range": [
+          0.7448241710662842,
+          5.33419132232666
+        ]
+      },
+      {
+        "rank": 16,
+        "chart_mse": 0.015631342464432957,
+        "mu_probe_mse": 0.043264603241722106,
+        "sample_probe_mse": 0.19046183385323517,
+        "mu_minus_chart": {
+          "mean": 0.02763326077728915,
+          "ci95": [
+            0.025942190930160838,
+            0.029365156452871584
+          ]
+        },
+        "sample_minus_mu": {
+          "mean": 0.14719723061151307,
+          "ci95": [
+            0.14057329401118898,
+            0.15412112981432435
+          ]
+        },
+        "heldout_logvar_range": [
+          -1.1988599300384521,
+          1.3432575464248657
+        ],
+        "heldout_sample_norm_range": [
+          2.117341995239258,
+          7.045330047607422
+        ]
+      },
+      {
+        "rank": 32,
+        "chart_mse": 1.4690523359258748e-30,
+        "mu_probe_mse": 1.0262389041014657e-13,
+        "sample_probe_mse": 0.18102168428837345,
+        "mu_minus_chart": {
+          "mean": 1.0262389041014657e-13,
+          "ci95": [
+            9.33685301536632e-14,
+            1.1311870837639962e-13
+          ]
+        },
+        "sample_minus_mu": {
+          "mean": 0.1810216842882708,
+          "ci95": [
+            0.17491806369064175,
+            0.1874450708588203
+          ]
+        },
+        "heldout_logvar_range": [
+          -1.1985423564910889,
+          1.153900384902954
+        ],
+        "heldout_sample_norm_range": [
+          3.922656297683716,
+          8.565061569213867
+        ]
+      }
+    ]
+  },
+  "trained_encoder": {
+    "scope": "One full-model fit on clean training cases only. Fresh affine probes separately map pre/post ESDM.encode posterior means to clean targets. Held-out probe MSE measures linearly recoverable information, not full forward reconstruction; raw features also feed the wave path.",
+    "seed": 3407,
+    "rank": 8,
+    "device": "cpu",
+    "optimizer": "Adam",
+    "learning_rate": 0.0003,
+    "weight_decay": 1e-05,
+    "grad_clip": null,
+    "dtype": "float32",
+    "epochs": 2,
+    "batch_size": 32,
+    "planned_updates": 32,
+    "batch_order_sha256": "7528aca24cf8a00862734d26273a746a2dacc850927c55bffce2fb88bfc51a16",
+    "before_mu_probe_mse": 0.08821115123240797,
+    "after_mu_probe_mse": 0.09270693045952894,
+    "after_minus_before": {
+      "mean": 0.0044957792271209775,
+      "ci95": [
+        0.0039852757957426575,
+        0.005028583767619708
+      ]
+    },
+    "before_gain_range": [
+      0.9776009917259216,
+      0.9938691258430481
+    ],
+    "after_gain_range": [
+      0.977843165397644,
+      0.9940529465675354
+    ],
+    "max_abs_logit_change": 0.01066434383392334,
+    "stop_reason": "fixed_budget",
+    "nonfinite_step": null,
+    "completed_updates": 32,
+    "finite_gradient_steps": 32,
+    "step_trace": [
+      {
+        "step": 1,
+        "loss": 15.03338623046875,
+        "grad_l2": 4.292964349736515,
+        "readout_grad_l2": 5.0213428086861954e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 2,
+        "loss": 14.673152923583984,
+        "grad_l2": 3.7481447834859214,
+        "readout_grad_l2": 4.3424148276763395e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 3,
+        "loss": 15.417276382446289,
+        "grad_l2": 3.7487118071235956,
+        "readout_grad_l2": 4.8711969402473904e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 4,
+        "loss": 16.227840423583984,
+        "grad_l2": 3.9918428667070356,
+        "readout_grad_l2": 4.960286643848949e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 5,
+        "loss": 15.761266708374023,
+        "grad_l2": 3.6714145814077805,
+        "readout_grad_l2": 4.444186199016295e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 6,
+        "loss": 14.247757911682129,
+        "grad_l2": 3.6317470210673637,
+        "readout_grad_l2": 5.103425480865216e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 7,
+        "loss": 14.835187911987305,
+        "grad_l2": 3.97694267800254,
+        "readout_grad_l2": 5.446259116960228e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 8,
+        "loss": 14.896780014038086,
+        "grad_l2": 3.566993131389584,
+        "readout_grad_l2": 4.883821685915175e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 9,
+        "loss": 16.78384017944336,
+        "grad_l2": 3.6675501686744947,
+        "readout_grad_l2": 6.56537367594983e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 10,
+        "loss": 15.095434188842773,
+        "grad_l2": 3.6535506907610578,
+        "readout_grad_l2": 6.761956778011983e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 11,
+        "loss": 16.470821380615234,
+        "grad_l2": 3.5813529887221165,
+        "readout_grad_l2": 6.186637664446172e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 12,
+        "loss": 17.28193473815918,
+        "grad_l2": 3.59895418819451,
+        "readout_grad_l2": 0.00010065842276103463,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 13,
+        "loss": 16.225893020629883,
+        "grad_l2": 4.092383636729385,
+        "readout_grad_l2": 0.00010872363051177333,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 14,
+        "loss": 14.79118537902832,
+        "grad_l2": 4.164486785275461,
+        "readout_grad_l2": 9.088567034088887e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 15,
+        "loss": 15.76220989227295,
+        "grad_l2": 3.754183325859763,
+        "readout_grad_l2": 0.00012360138583694436,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 16,
+        "loss": 16.440210342407227,
+        "grad_l2": 3.7388861396343245,
+        "readout_grad_l2": 9.540584665733052e-05,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 17,
+        "loss": 15.47430419921875,
+        "grad_l2": 3.520623813698694,
+        "readout_grad_l2": 0.00013294699982786785,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 18,
+        "loss": 15.942075729370117,
+        "grad_l2": 3.6750578550894795,
+        "readout_grad_l2": 0.0001793827380539041,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 19,
+        "loss": 16.296037673950195,
+        "grad_l2": 3.585294910041405,
+        "readout_grad_l2": 0.00016990306526024242,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 20,
+        "loss": 15.155128479003906,
+        "grad_l2": 3.842308514694409,
+        "readout_grad_l2": 0.00013433058631756852,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 21,
+        "loss": 16.28470230102539,
+        "grad_l2": 3.4015904991812644,
+        "readout_grad_l2": 0.00017414114229432584,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 22,
+        "loss": 15.481815338134766,
+        "grad_l2": 3.9617258595168456,
+        "readout_grad_l2": 0.00017059595240643283,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 23,
+        "loss": 16.00773048400879,
+        "grad_l2": 3.6709097485212,
+        "readout_grad_l2": 0.00017100965600113158,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 24,
+        "loss": 15.387056350708008,
+        "grad_l2": 4.046339520966044,
+        "readout_grad_l2": 0.0002569282273210771,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 25,
+        "loss": 15.591344833374023,
+        "grad_l2": 3.665502748960799,
+        "readout_grad_l2": 0.00023196429526659875,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 26,
+        "loss": 17.143836975097656,
+        "grad_l2": 3.889654974788706,
+        "readout_grad_l2": 0.00026473627381193114,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 27,
+        "loss": 15.165653228759766,
+        "grad_l2": 3.4915219766501324,
+        "readout_grad_l2": 0.00022309095584862378,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 28,
+        "loss": 16.252593994140625,
+        "grad_l2": 4.038393798697941,
+        "readout_grad_l2": 0.0002692110060592171,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 29,
+        "loss": 14.531713485717773,
+        "grad_l2": 3.501870812232761,
+        "readout_grad_l2": 0.00032106588890231627,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 30,
+        "loss": 16.36616325378418,
+        "grad_l2": 3.3979989186464814,
+        "readout_grad_l2": 0.0003309891516145435,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 31,
+        "loss": 16.358457565307617,
+        "grad_l2": 3.5706628298854373,
+        "readout_grad_l2": 0.0003272372116751039,
+        "n_grad_tensors": 27
+      },
+      {
+        "step": 32,
+        "loss": 15.613920211791992,
+        "grad_l2": 3.7766690196131765,
+        "readout_grad_l2": 0.00033786255158014384,
+        "n_grad_tensors": 27
+      }
+    ]
+  },
+  "decoding": {
+    "scope": "Noisy features Q to clean features via the isolated signal readout. No diffusion noise, clock updates, full-model loss or end-to-end training.",
+    "control": "Shuffled permutes the prime arm's normalised residuals across mode indices but retains each mode's radius and the exact residual histogram. This tests ordering, not the origin of the residual values.",
+    "radius": [
+      0.03671380132436752,
+      0.033378902822732925,
+      0.030189577490091324,
+      0.02717657759785652,
+      0.024359140545129776,
+      0.021748609840869904,
+      0.019348911941051483,
+      0.017157603055238724
+    ],
+    "shuffle_permutation": [
+      3,
+      7,
+      1,
+      0,
+      5,
+      6,
+      2,
+      4
+    ],
+    "arms": {
+      "identity": {
+        "initial": {
+          "mse": 0.022514805839060403,
+          "gains": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "trained": {
+          "mse": 0.022514805839060403,
+          "gains": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "updates": 0,
+        "trained_minus_initial": {
+          "mean": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "smooth": {
+        "initial": {
+          "mse": 0.022514805839060403,
+          "gains": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "trained": {
+          "mse": 0.022374183433060982,
+          "gains": [
+            0.9799160470040341,
+            0.9708867981096303,
+            0.9764060138988138,
+            0.9745322748554531,
+            0.9765218118747694,
+            0.97887278039891,
+            0.9811852900764347,
+            0.9832934437496433
+          ]
+        },
+        "updates": 100,
+        "trained_minus_initial": {
+          "mean": -0.000140622405999424,
+          "ci95": [
+            -0.00018221638176601137,
+            -0.00010071227910749387
+          ]
+        }
+      },
+      "prime": {
+        "initial": {
+          "mse": 0.02242028456602454,
+          "gains": [
+            0.9776009702450501,
+            0.9785214862916441,
+            0.98433313290279,
+            0.9866898825182575,
+            0.9874062797589339,
+            0.992068103169221,
+            0.9938691278489288,
+            0.9936228992931734
+          ]
+        },
+        "trained": {
+          "mse": 0.02237338945654746,
+          "gains": [
+            0.9798518095348655,
+            0.9705517345694736,
+            0.9765809568583035,
+            0.973597668778376,
+            0.9760141982757791,
+            0.9786338962026613,
+            0.981009596729466,
+            0.9831233767741197
+          ]
+        },
+        "updates": 100,
+        "trained_minus_initial": {
+          "mean": -4.689510947708016e-05,
+          "ci95": [
+            -6.457101116431902e-05,
+            -3.060864081368994e-05
+          ]
+        }
+      },
+      "shuffled": {
+        "initial": {
+          "mse": 0.022414794779994973,
+          "gains": [
+            0.9820188908235735,
+            0.9875938017624813,
+            0.9805737397237401,
+            0.983419614741771,
+            0.9911160211570246,
+            0.9931087625596657,
+            0.989958891211526,
+            0.9911294878206145
+          ]
+        },
+        "trained": {
+          "mse": 0.02237325875176878,
+          "gains": [
+            0.9798715752065481,
+            0.9704013455743508,
+            0.9765256836046154,
+            0.9733752213722912,
+            0.9761575662475628,
+            0.9786651304151135,
+            0.9808981086469057,
+            0.9830563498065303
+          ]
+        },
+        "updates": 100,
+        "trained_minus_initial": {
+          "mean": -4.153602822619318e-05,
+          "ci95": [
+            -6.199205520544324e-05,
+            -2.2961696263580485e-05
+          ]
+        }
+      },
+      "free": {
+        "initial": {
+          "mse": 0.022514805839060403,
+          "gains": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "trained": {
+          "mse": 0.022319944956482117,
+          "gains": [
+            0.9798344110053434,
+            0.9705576687716378,
+            0.9764579418307984,
+            0.9696056672218876,
+            0.9591661451077591,
+            0.9450986331251094,
+            0.9463613168640176,
+            0.943705067985554
+          ]
+        },
+        "updates": 100,
+        "trained_minus_initial": {
+          "mean": -0.00019486088257828464,
+          "ci95": [
+            -0.0002612429341615846,
+            -0.00013384385570058797
+          ]
+        }
+      }
+    },
+    "contrasts": {
+      "initial": {
+        "smooth_minus_identity": {
+          "mean": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ]
+        },
+        "prime_minus_identity": {
+          "mean": -9.452127303586526e-05,
+          "ci95": [
+            -0.00012342644064221596,
+            -6.757819716103255e-05
+          ]
+        },
+        "shuffled_minus_identity": {
+          "mean": -0.00010001105906543264,
+          "ci95": [
+            -0.00012603329431219883,
+            -7.593643711514772e-05
+          ]
+        },
+        "free_minus_identity": {
+          "mean": 0.0,
+          "ci95": [
+            0.0,
+            0.0
+          ]
+        },
+        "prime_minus_smooth": {
+          "mean": -9.452127303586526e-05,
+          "ci95": [
+            -0.00012342644064221596,
+            -6.757819716103255e-05
+          ]
+        },
+        "prime_minus_shuffled": {
+          "mean": 5.48978602956738e-06,
+          "ci95": [
+            -3.439517097378932e-06,
+            1.4215298346985496e-05
+          ]
+        },
+        "prime_minus_free": {
+          "mean": -9.452127303586526e-05,
+          "ci95": [
+            -0.00012342644064221596,
+            -6.757819716103255e-05
+          ]
+        }
+      },
+      "trained": {
+        "smooth_minus_identity": {
+          "mean": -0.000140622405999424,
+          "ci95": [
+            -0.00018221638176601137,
+            -0.00010071227910749387
+          ]
+        },
+        "prime_minus_identity": {
+          "mean": -0.00014141638251294542,
+          "ci95": [
+            -0.00018350695717169968,
+            -0.00010116801292505644
+          ]
+        },
+        "shuffled_minus_identity": {
+          "mean": -0.00014154708729162584,
+          "ci95": [
+            -0.00018374812138421923,
+            -0.00010111788648521088
+          ]
+        },
+        "free_minus_identity": {
+          "mean": -0.00019486088257828464,
+          "ci95": [
+            -0.0002612429341615846,
+            -0.00013384385570058797
+          ]
+        },
+        "prime_minus_smooth": {
+          "mean": -7.939765135214531e-07,
+          "ci95": [
+            -1.5584708665178033e-06,
+            -4.0980417752494446e-08
+          ]
+        },
+        "prime_minus_shuffled": {
+          "mean": 1.307047786804034e-07,
+          "ci95": [
+            -7.882813428528081e-08,
+            3.2770841486796634e-07
+          ]
+        },
+        "prime_minus_free": {
+          "mean": 5.344450006533922e-05,
+          "ci95": [
+            2.3474989583339832e-05,
+            8.445747211500378e-05
+          ]
+        }
+      }
+    }
+  },
+  "model_boundary": {
+    "scope": "Untrained full ESDM, eval mode, two consecutive batches of eight clean held-out samples. Diagnostic only; input skips the latent bottleneck in forward.",
+    "modal_input": [
+      1.0,
+      10.0,
+      1000.0
+    ],
+    "modal_output": [
+      0.9776009917259216,
+      9.776009559631348,
+      977.6009521484375
+    ],
+    "first_gain": 0.9776009917259216,
+    "first_radius": 0.03671380132436752,
+    "mu_shape": [
+      8,
+      8
+    ],
+    "logvar_shape": [
+      8,
+      8
+    ],
+    "z_norm_range": [
+      1.5441633462905884,
+      4.359333038330078
+    ],
+    "forward_passes": [
+      {
+        "tau": 0.0,
+        "alpha_bar": 1.0,
+        "raw_wave_norm_range": [
+          1.814881443977356,
+          2.7153446674346924
+        ],
+        "feature_mse": 2.4916902475524694e-05,
+        "loss": 16.349456787109375,
+        "max_abs_explicit_readout_error": 0.0
+      },
+      {
+        "tau": 3.232254981994629,
+        "alpha_bar": 0.9959831237792969,
+        "raw_wave_norm_range": [
+          2.1361045837402344,
+          3.3668365478515625
+        ],
+        "feature_mse": 5.307821265887469e-05,
+        "loss": 13.16463851928711,
+        "max_abs_explicit_readout_error": 0.0
+      }
+    ]
+  },
+  "sha256": {
+    "notebooks/encoding-quality.ipynb": "94f9f248a2e4137fef6fd53715a0ef610815f695fd2836df1389c96c0a0aee9a",
+    "notebooks/decoding.ipynb": "25ddc76381146f7432e5831d03c10642e7c8421a60118aa1fb71b9f79a7e4547",
+    "notebooks/run.py": "8fadc3e1d354dcc2b722353b6fd79a30644dc1d4b17576a1977d2deb1316dd51",
+    "esdm/experiments/v2_readout.py": "9867998ba51f03e6bd3d34f148789c8f92f260c476c3ac72e2bf370c9024ff10",
+    "esdm/models/bounded_readout.py": "e0499824b02dea314834fe00ac63a5729c1f05322fad01cd403ac22e4f23856e",
+    "esdm/models/esdm.py": "8f73eacc1f026beb5db922d537dc3a75620429364a0466715baf65371b2d61fb",
+    "esdm/models/clock.py": "9c17e5ac472e0a048be4ad188a70a4fd8fdb80131f0f4f7655639a46b0b44690",
+    "esdm/models/vibrational.py": "6bec809b9050e868e17b85b8c5b9fba3ef67d4b0db291cbd51c13155d200a3f6",
+    "esdm/models/diffusion_decoder.py": "4a502d83bf1065bbbd12a2d822d0ef718265c2b815e6033bf01821deb41e004c",
+    "esdm/models/elbo.py": "72bae71aaa93edbed839d6631cd3f137efb80d9e2bc05ada30d1fda049f86c76",
+    "esdm/_configs/default.yaml": "ff0b393b538f217ad839fa04d848ff5b64b8caf9ae8236d8a108082b12b30a06",
+    "uv.lock": "f3f3a730d1c51f7e78442559c59d193ddaaaba47ee5e3021c8ee7b4e217278ee"
+  }
+}
