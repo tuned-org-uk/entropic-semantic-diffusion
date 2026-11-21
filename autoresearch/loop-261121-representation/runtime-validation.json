@@ -1,0 +1,22 @@
+{
+  "purpose": "Compatibility replay of frozen checkpoints, no training, selection or new acceptance test",
+  "torch": "2.15.0",
+  "numpy": "2.5.0",
+  "checkpoints": {
+    "winner": {
+      "sha256": "bb55fe129d8bf239b32b6a6ce2272d5ecc04d8579fb4a217f6fbf501f2daa59e",
+      "mu_probe_mse": 0.04582097311105827,
+      "difference_from_measured": 0.0
+    },
+    "baseline": {
+      "sha256": "9e26e739a288cc654d14f6d342cfbfcd4ac11d3c06d8e7aaaca7c47b1e05184f",
+      "mu_probe_mse": 0.0933187467616749,
+      "difference_from_measured": 0.0
+    },
+    "matched-control": {
+      "sha256": "6ee63e01aeb50ed85537aefda69cdd3971fdeaf7f76f78da8fe4d7b0c0b9c9c2",
+      "mu_probe_mse": 0.08888420540130153,
+      "difference_from_measured": 0.0
+    }
+  }
+}

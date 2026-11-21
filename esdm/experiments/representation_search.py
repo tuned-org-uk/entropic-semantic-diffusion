@@ -243,7 +243,7 @@ def run(output: Path):
                 rows.append((trial, rate, budget, error.record["updates"], None, "crash"))
                 print(f"trial={trial:02d} crash: {error}", flush=True)
     with (output / "results.tsv").open("w") as f:
-        writer = csv.writer(f, delimiter="\t")
+        writer = csv.writer(f, delimiter="\t", lineterminator="\n")
         writer.writerow(("trial", "lr", "max_updates", "updates", "validation_mse", "decision"))
         writer.writerows(rows)
     if winner is None:

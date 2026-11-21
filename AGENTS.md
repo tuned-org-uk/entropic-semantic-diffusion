@@ -62,6 +62,20 @@ at reconstruction only. A directional projection into the frozen chart limits
 the subspace, not the magnitudes of its coordinates. Do not interpret the
 separate topology sampler or historical fitness measurements as v2 evidence.
 
+In v2.0.1 the trainable posterior mean starts at the frozen chart transpose,
+with zero bias. See `docs/representation-search.md` and ADR 0002. The first
+25-candidate representation search improved synthetic linear recoverability
+through this initialisation; it did not demonstrate a benefit from training
+over the untrained chart.
+
+For representation autoresearch, freeze validation/confirmation splits and
+acceptance rules before running. Publish one patch per successful completed
+search after confirmation and regression guards, not per provisional
+validation leader. Preserve rejected trials. Use the `Mec-iS` GitHub account,
+feature branches and pull requests for authorised publication. The frozen
+first-round protocol is `autoresearch.md`; new rounds need fresh confirmation
+streams and their own protocol rather than reusing the exposed test set.
+
 The ESDM unifies two research tracks under one package:
 
 ### 1. Entropic-clock ESDM (ported from `esdm_legacy/`, now in `esdm/models/`)

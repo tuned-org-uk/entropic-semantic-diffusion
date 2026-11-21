@@ -1,0 +1,9 @@
+{
+  "lr": 3e-05,
+  "max_updates": 16,
+  "updates": 16,
+  "validation_mse": 0.04509079082167147,
+  "checkpoint_sha256": "bb55fe129d8bf239b32b6a6ce2272d5ecc04d8579fb4a217f6fbf501f2daa59e",
+  "baseline_checkpoint_sha256": "9e26e739a288cc654d14f6d342cfbfcd4ac11d3c06d8e7aaaca7c47b1e05184f",
+  "matched_checkpoint_sha256": "6ee63e01aeb50ed85537aefda69cdd3971fdeaf7f76f78da8fe4d7b0c0b9c9c2"
+}
