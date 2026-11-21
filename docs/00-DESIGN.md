@@ -6,6 +6,24 @@
 
 ### v2 reconstruction contract
 
+#### Proposed v2.0.1 encoder initialisation
+
+The posterior mean should initially express coordinates in the same frozen
+chart used by the reconstruction operator:
+
+$$\mu(x)=xU_q,\qquad W_\mu^{(0)}=U_q^\top,\qquad b_\mu^{(0)}=0.$$
+
+The mean map remains trainable. This derives its initial state from the
+existing graph without adding a parameter or constraining latent amplitudes.
+The log-variance head and Gaussian reparameterisation are unchanged. A saved
+checkpoint replaces these initial weights normally. This proposal is tested
+under the frozen [autoresearch protocol](../autoresearch.md); acceptance
+requires a fresh confirmation set and regression guards. On smooth graph
+signals the prior is intentionally informative; its benefit is not evidence
+that training discovers the graph geometry.
+
+#### Signal readout
+
 The Gaussian posterior still controls the distribution of latent samples.
 Neither those samples nor the raw wave state are clipped or projected to unit
 length. Damping, the step-size limit, and the entropy clock govern evolution;

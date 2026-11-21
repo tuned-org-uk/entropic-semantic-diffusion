@@ -155,6 +155,11 @@ class ESDM(nn.Module):
         # Variational encoder: x -> (mu, logvar) for the spectral decoder.
         self.enc_mu = nn.Linear(self.dim_input, self.dim_latent)
         self.enc_logvar = nn.Linear(self.dim_input, self.dim_latent)
+        # Start in the existing graph chart; keep the map trainable and amplitudes free.
+        # See docs/00-DESIGN.md, v2.0.1 encoder initialisation.
+        with torch.no_grad():
+            self.enc_mu.weight.copy_(self.U_q.T)
+            self.enc_mu.bias.zero_()
         self.register_load_state_dict_pre_hook(self._prepare_checkpoint)
 
     # ------------------------------------------------------------------ #
