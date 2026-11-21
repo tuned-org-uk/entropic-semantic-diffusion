@@ -1,6 +1,54 @@
-# Entropic Semantic Diffusion (ESD)
+# Entropic Semantic Diffusion Model (ESDM) — v2.0.0
 
-> A learning architecture in which time is not given — it is *earned* from entropy.
+The entropic clock determines **when** reconstruction occurs. A new spectral
+readout determines **how much** each retained graph mode contributes. Its
+learned gains remain in fixed, positive intervals around one; the wave and the
+Gaussian latent can still have arbitrarily large amplitudes.
+
+For example, the first chart mode starts with a gain of about 0.9776, the ratio
+of the exact count of 564 primes up to 4096 to the logarithmic integral there.
+Training can move that gain between about 0.9633 and 1.0367. A tenfold increase
+in a fixed input wave still gives a tenfold signal at readout. The graph
+frequencies come from the graph, not from primes.
+
+**Start here:** [revised paper](docs/paper/esdm-v2.pdf) ·
+[LaTeX source](docs/paper/esdm-v2.tex) · [encoding quality](notebooks/encoding-quality.ipynb) ·
+[decoding](notebooks/decoding.ipynb) · [measured results](docs/paper/v2-results/experiment.json) ·
+[v2 design](docs/00-DESIGN.md#v2-reconstruction-contract) ·
+[parallel development items](docs/v2-work-items.md).
+
+```bash
+uv sync --locked --extra dev --group notebooks
+uv run --no-sync python notebooks/run.py
+uv run --no-sync pytest tests/ -q
+```
+
+To inspect the trained decoder separately from the entropy clock:
+
+```python
+mu, logvar, z = model.encode(x)                 # stochastic latent, no amplitude clipping
+gains = model.readout.weights()                 # one learned multiplier per chart mode
+signal = model.readout(wave, model.U_q)          # wave is a batch of feature-space rows
+```
+
+**Migration from 0.4.1:** retrain the entropic-clock model. Unit-sphere wave
+states and the identity signal readout in old checkpoints implement a
+different model. Use v2 weights and the original trained chart frame for
+v2 inference. An orthonormal basis within a repeated eigenspace is not
+unique, so rotating a saved frame without transforming the readout can
+change the result. Gains outside the retained chart are fixed at one.
+
+The synthetic v2 notebooks evaluate chart compression and reconstruction
+separately. After fitting, the bounded prime readout had a mean squared
+error of 0.02237339, compared with 0.02237326 for shuffled initialisation
+and 0.02231995 for freely learned gains (512 held-out path-graph signals).
+Thus the experiment demonstrates the weight constraint without establishing
+a prime-specific reconstruction advantage. In the encoding notebook, 32
+full-model updates **increased** held-out error from 0.088211 to 0.092707
+for a linear decoder fitted to the rank-eight posterior mean. This diagnoses
+what can be recovered from the encoded mean; the full model also has a direct
+wave path from the input. The historical CIFAR, fitness
+and timing figures below do not measure v2 image quality.
 
 ## Quick Start — Run experiment
 This can take 15-20 minutes:
@@ -38,8 +86,8 @@ Run the self-contained autoresearch driver to reproduce and improve the current 
 Check the current baseline fitness and the test guard:
 
 ```bash
-.venv/bin/python scripts/verify_fitness.py   # 103.95
-.venv/bin/python -m pytest tests/ -q         # 101 passed
+.venv/bin/python scripts/verify_fitness.py
+.venv/bin/python -m pytest tests/ -q
 ```
 
 See the [Autoresearch Loop](#autoresearch-loop) section below and `AGENTS.md` for the full protocol, parameter values, and open research issues.
@@ -157,35 +205,15 @@ Steps where `kl_tau` changes rapidly advance the diffusion schedule faster — d
 
 ### Architecture Pipeline
 
-```
-Input x  (B, D)
-     │
-     ▼
-┌─────────────────────────┐
-│  EntropicClock   [NEW]  │  accumulates τ from |Δkl_tau|
-│                         │  computes Λ(τ), dark_sector_entropy
-└────────────┬────────────┘
-             │  τ, Λ(τ), Δτ
-             ▼
-┌─────────────────────────┐
-│  VibrationalStateBlock  │  VDT wave recurrence
-│       [MODIFIED]        │  gated by Λ(τ), dt → Δτ
-└────────────┬────────────┘
-             │  Q_t, ρ_+, ρ_-
-             ▼
-┌─────────────────────────┐
-│  SpectralLoadingDecoder │  VDT — unchanged
-│                         │  z, U_q → W, ω, N_active, log_lam_s
-└────────────┬────────────┘
-             │  L(z), N_active, log_lam_s → feeds back to EntropicClock
-             ▼
-┌─────────────────────────┐
-│  EntropicDiffusion      │  SDM reverse chain
-│  Decoder  [MODIFIED]    │  ᾱ(τ) replaces cosine_alpha_bar(t, T)
-└────────────┬────────────┘
-             │  x̂
-             ▼
-      Prediction / Generation
+```text
+x ── Gaussian encoder ──► sample z ──► SpectralLoadingDecoder(z, U_q, L_base)
+│                                      ├──► L(z)
+│                                      └──► spectral KLs ──► EntropicClock
+│                                                               │
+└──► VibrationalStateBlock(x, L(z), U_q, pump, time step) ◄───────┘
+                 │ raw Q                                       │ alpha_bar
+                 ▼                                             ▼
+       BoundedSpectralReadout(Q, U_q) ───────────────► diffusion decoder ──► x_hat
 ```
 
 ### The ESDM ELBO
@@ -394,7 +422,7 @@ fitness score; unsuccessful changes are reverted automatically.
 
 #### Current baseline
 
-The latest kept baseline scores **103.95 / 123** (code commit `2e2a866`) and is reproduced by `scripts/verify_fitness.py`:
+The historical baseline scored **103.95 / 123** at commit `2e2a866` using `scripts/verify_fitness.py`:
 
 ```bash
 .venv/bin/python scripts/verify_fitness.py

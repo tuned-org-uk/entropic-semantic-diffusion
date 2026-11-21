@@ -8,6 +8,8 @@
 | W4: integration | Design, packaging, checkpoint policy, README, final checks | Package reports 2.0.0; reproducible commands, test/lint and notebook validation, migration guidance. |
 
 W1, W2 and W3 can proceed against the [fixed mathematical interface](00-DESIGN.md#v2-reconstruction-contract).
+The [architecture decision](adr/0001-bound-reconstruction-gains.md) records why
+the unit-sphere projection was removed and what stability guarantee is lost.
 W2 executes after W1 exposes the model API; W3 consumes W2's measured JSON;
 W4 verifies the combined revision. The historical 2.5-D score experiments and
 their separate topology samplers are not the entropic-clock signal readout.
@@ -25,9 +27,10 @@ uv run --no-sync ruff check esdm/ tests/ notebooks/run.py
 
 The [encoding notebook](../notebooks/encoding-quality.ipynb) measures clean
 held-out signal recovery at different chart ranks. Its fitted linear probes
-measure the information accessible in the untrained posterior, not a trained
-end-to-end autoencoder. The [decoding notebook](../notebooks/decoding.ipynb)
-fits five readout treatments on noisy training signals and evaluates them on
+measure the information accessible in the posterior. It also compares the
+same rank-eight posterior before and after a short end-to-end training run;
+the probe is not the model's reconstruction. The [decoding notebook](../notebooks/decoding.ipynb)
+compares five readout treatments on noisy training signals and evaluates them on
 shared held-out observations. The [receipt](paper/v2-results/experiment.json)
 records the configuration, data hashes, before/after errors, paired intervals
 and a full-model check. Rerun it when a hashed model or notebook changes.
@@ -37,3 +40,12 @@ including the chart dimension. The repository checkpoint producer
 (`scripts/validate_generation.py`) bundles the v2 model and clock configuration;
 the generation CLI restores the trained frame, readout logits and clock.
 Previous-model generation requires the earlier code, not a partially loaded v2.
+
+## Acceptance evidence
+
+| Item | Evidence in this revision |
+|---|---|
+| W1 | Zero-step raw-state and large-amplitude tests, sampler state restoration, readout bounds and strict checkpoint round trip in `tests/`. |
+| W2 | Both notebooks executed on CPU; JSON outputs matched the saved receipt. All 12 recorded file hashes verified. |
+| W3 | [Revised TeX](paper/esdm-v2.tex) and [PDF](paper/esdm-v2.pdf), using the same held-out measurements. |
+| W4 | Full default suite: 137 passed and five opt-in slow tests skipped. Ruff passed. The local wheel was verified against the package sources. |
