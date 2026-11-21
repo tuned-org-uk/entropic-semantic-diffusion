@@ -6,7 +6,10 @@ the fixed SDM ``cosine_alpha_bar(t, T=200)`` schedule with the entropic-time
 schedule provided by ``EntropicClock``:
 
     alpha_bar_t = clock.alpha_bar(tau=clock.tau_n)
-    x_hat = sqrt(alpha_bar_t) * Q + sqrt(1 - alpha_bar_t) * noise
+    x_hat = sqrt(alpha_bar_t) * signal + sqrt(1 - alpha_bar_t) * noise
+
+In the clock model, ``signal`` is the bounded spectral readout of the raw
+wave. The same gains never multiply the independently supplied noise.
 
 The VDT ``DiffusionDecoder`` is not used as a black box here because its
 interface is built around an embedding table ``E: (N, D)`` and node indices,
@@ -50,7 +53,7 @@ class EntropicDiffusionDecoder(nn.Module):
 
     def forward(
         self,
-        Q: Tensor,              # (B, F) vibrational state
+        Q: Tensor,              # (B, F) signal after spectral readout
         L_z: Tensor,            # (B, F, F) or (F, F) wiring Laplacian (unused here)
         clock: EntropicClock,   # entropic clock providing alpha_bar(tau)
         noise: Optional[Tensor] = None,

@@ -100,30 +100,24 @@ class WireGraph:
         energy scores. When graph_params is provided (eps, k, tau from the
         dataset config), uses them directly. When None, runs arrowspace_tuner.
         """
-        gp = dict(graph_params) if graph_params else None
-        if gp and gp.get("eps") is not None:
-            import arrowspace as asp
-            gp.pop("tau", None)
-            builder = (asp.ArrowSpaceBuilder()
-                       .with_seed(seed)
-                       .with_sampling("simple", 1.0)
-                       .with_dims_reduction(False, None))
-            aspace, gl = builder.build_full(graph_params=gp, items=items_np)
-            L_np = np.array(gl.to_dense())
-            lambdas_np = np.array(aspace.lambdas())
-        else:
-            import arrowspace_tuner as arrowspace
-            aspace, gl = arrowspace.optuna(
+        gp = dict(graph_params or {})
+        if gp.get("eps") is None:
+            from arrowspace_tuner import tune
+
+            gp = tune(
                 embeddings=items_np,
                 seed=seed,
                 k_low=max(3, k - 5),
                 k_high=k + 5,
             )
-            L_np = np.array(gl.to_dense())
-            lambdas_np = np.array(aspace.lambdas())
-
-        L = torch.from_numpy(L_np)
-        lambdas = torch.from_numpy(lambdas_np.astype(np.float32)) if lambdas_np is not None else None
+        gp.pop("tau", None)
+        builder = (asp.ArrowSpaceBuilder()
+                   .with_seed(seed)
+                   .with_sampling("simple", 1.0)
+                   .with_dims_reduction(False, None))
+        aspace, gl = builder.build_full(graph_params=gp, items=items_np)
+        L = torch.from_numpy(np.array(gl.to_dense()))
+        lambdas = torch.from_numpy(np.asarray(aspace.lambdas(), dtype=np.float32))
         return L, lambdas
 
 

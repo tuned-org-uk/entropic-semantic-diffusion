@@ -68,7 +68,9 @@ def main(argv: list[str] | None = None) -> None:
         prog="esdm-train",
         description="Train the Entropic Semantic Diffusion Model.",
     )
-    parser.add_argument("--config", "-c", default="esdm/_configs/default.yaml")
+    parser.add_argument(
+        "--config", "-c", default=str(Path(__file__).resolve().parents[1] / "_configs/default.yaml")
+    )
     parser.add_argument("--dataset", choices=DATASET_CHOICES, default="random")
     parser.add_argument("--lam-s", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=3407)
@@ -97,7 +99,7 @@ def main(argv: list[str] | None = None) -> None:
     logger.info("Starting training: %d steps, batch_size=%d", max_steps, batch_size)
     for step in range(max_steps):
         if loader is not None:
-            x = loader.train_batch(batch_size, seed=args.seed + step)
+            x = loader.train_batch(batch_size, seed=args.seed + step).to(model.L_base)
         else:
             x = torch.randn(batch_size, model.dim_input)
         optimizer.zero_grad()
@@ -108,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
             hc = model.health_check()
             logger.info(
                 "step=%d  loss=%.4f  tau_n=%.4f  alpha_bar=%.4f  heat_death=%s",
-                step, float(out.loss), hc["tau_n"],
+                step, float(out.loss.detach()), hc["tau_n"],
                 float(model.clock.alpha_bar()), hc["heat_death"],
             )
         if hc["heat_death"]:

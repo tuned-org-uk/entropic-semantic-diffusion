@@ -4,6 +4,7 @@ ESDM model components.
 Public API:
     from esdm.models import ESDM, EntropicClock, VibrationalStateBlock
 """
+from .bounded_readout import BoundedSpectralReadout
 from .clock import EntropicClock, ClockState
 from .esdm import ESDM, ESDMOutput
 from .vibrational import VibrationalStateBlock
@@ -14,6 +15,7 @@ from .spectral_kl import tau_mode_kl_per_mode
 __all__ = [
     "ESDM",
     "ESDMOutput",
+    "BoundedSpectralReadout",
     "EntropicClock",
     "ClockState",
     "VibrationalStateBlock",

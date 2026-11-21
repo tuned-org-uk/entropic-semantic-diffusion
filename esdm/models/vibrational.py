@@ -377,21 +377,6 @@ class VibrationalStateBlock(nn.Module):
             + Lambda_tau_t * dt2 * B_t
         )
 
-        # Project Q back onto the unit hypersphere S^{F-1}. The input
-        # embeddings are L2-normalised (||x|| = 1), so the wave recurrence
-        # must preserve this constraint. Without normalisation, Q drifts
-        # off the manifold and the Rayleigh gradient in H shrinks (it is
-        # normalised by ||F_tilde||^2), causing CFL instability.
-        Q_tp1 = F.normalize(Q_tp1.squeeze(-1), dim=-1).unsqueeze(-1)
-
-        # Angular displacement on the sphere: how much Q moved this step.
-        # Replaces net_energy_flow (||Q_{t+1}||^2 - ||Q_t||^2) which is
-        # identically 0 with normalisation.
-        with torch.no_grad():
-            cos_angle = (Q_t.squeeze(-1) * Q_tp1.squeeze(-1)).sum(dim=-1).clamp(-1.0, 1.0)
-            angle = torch.acos(cos_angle).mean()
-            self._last_angular_displacement.fill_(float(angle.item()))
-
         # Wire the signed density to the consecutive wave states.
         block.density.update(Q_t, Q_tp1, alpha=block.density_momentum)
         return Q_tp1
@@ -442,11 +427,13 @@ class VibrationalStateBlock(nn.Module):
             Q_tm1 = Q_t
             Q_t = Q_tp1
 
-        # Measure angular displacement across the full forward call.
+        # Measure direction only. The half-angle formula resolves small rotations
+        # without the loss of precision of acos near one.
         with torch.no_grad():
-            cos_full = (x.float() * Q_t.squeeze(-1).float()).sum(dim=-1).clamp(-1.0, 1.0)
-            angle_full = torch.acos(cos_full).mean()
-            self._last_angular_displacement.fill_(float(angle_full.item()))
+            start = F.normalize(x, dim=-1)
+            finish = F.normalize(Q_t.squeeze(-1), dim=-1)
+            angles = 2 * torch.atan2((start - finish).norm(dim=-1), (start + finish).norm(dim=-1))
+            self._last_angular_displacement.copy_(angles.mean())
 
         self.Q_tm1 = Q_tm1.detach().clone()
 

@@ -119,12 +119,13 @@ def main(argv=None):
     # Step 2: Save checkpoint
     ckpt_path = out_dir / "esdm_checkpoint.pt"
     torch.save({
+        "model_version": "2.0.0",
         "model_state_dict": model.state_dict(),
-        "config": {
-            "dim_input": model.dim_input,
-            "n_nodes": model.n_nodes,
-            "dim_latent": model.dim_latent,
-            "n_modes": model.n_modes,
+        "model_config": {
+            # The graph and dispersion tensors already travel in the state dict.
+            "model": {k: v for k, v in model.cfg["model"].items()
+                      if k not in {"L_base", "lambdas"}},
+            "clock": model.cfg["clock"],
         },
         "training": {
             "n_steps": len(metrics),

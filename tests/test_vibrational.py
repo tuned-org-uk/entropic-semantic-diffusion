@@ -58,9 +58,7 @@ def test_vibrational_matches_vdt_when_lambda_one():
             x, L_f, Lambda_tau=1.0, delta_tau=float(dt)
         )
 
-    # ESDM wrapper normalises Q to S^{F-1} after each step.
-    Q_vdt_norm = torch.nn.functional.normalize(Q_vdt.squeeze(-1), dim=-1)
-    assert torch.allclose(Q_esdm, Q_vdt_norm, atol=1e-5)
+    torch.testing.assert_close(Q_esdm, Q_vdt.squeeze(-1))
 
 
 def test_vibrational_forcing_vanishes_when_lambda_zero():
@@ -84,9 +82,7 @@ def test_vibrational_forcing_vanishes_when_lambda_zero():
         damp = block._vdt_block.gamma.view(1, 1, -1) * (Q_t - Q_tm1)
         Q_expected = 2.0 * Q_t - Q_tm1 - dt2 * L_term - damp
 
-    # ESDM normalises Q after the step.
-    Q_expected_norm = torch.nn.functional.normalize(Q_expected.squeeze(-1), dim=-1)
-    assert torch.allclose(Q_zero, Q_expected_norm, atol=1e-5)
+    torch.testing.assert_close(Q_zero, Q_expected.squeeze(-1))
 
 
 def test_vibrational_output_finite_for_random_inputs():
@@ -252,36 +248,33 @@ def test_hybridisation_q_equals_f_recovers_identity():
 
 
 # ---------------------------------------------------------------------------
-# S^{F-1} normalisation tests (issue #29, v0.3.2)
+# v2 free amplitudes
 # ---------------------------------------------------------------------------
 
 
-def test_q_normalised_to_unit_sphere():
-    """After the wave recurrence, each row of Q has unit L2 norm (S^{F-1})."""
+def test_q_preserves_input_at_zero_entropic_time():
     torch.manual_seed(3407)
     F = 16
     block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=2, dropout=0.0)
-    x = torch.nn.functional.normalize(torch.randn(8, F), dim=-1)
+    x = 10 * torch.randn(8, F)
     L_f = _random_L_f(F)
     vals, vecs = torch.linalg.eigh(L_f.double())
     U_q = vecs.float()[:, :4]
 
-    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
-    norms = Q.norm(dim=-1)
-    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
+    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.0, U_q=U_q)
+    torch.testing.assert_close(Q, x)
 
 
-def test_q_normalised_with_lambda_zero():
-    """Q is on S^{F-1} even with pump off (Lambda=0)."""
+def test_unforced_laplacian_wave_is_linear_in_initial_amplitude():
     torch.manual_seed(3407)
     F = 16
     block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=2, dropout=0.0)
-    x = torch.nn.functional.normalize(torch.randn(8, F), dim=-1)
+    x = torch.randn(8, F)
     L_f = _random_L_f(F)
 
     Q, _, _ = block(x, L_f, Lambda_tau=0.0, delta_tau=0.1)
-    norms = Q.norm(dim=-1)
-    assert torch.allclose(norms, torch.ones_like(norms), atol=1e-5)
+    scaled, _, _ = block(10 * x, L_f, Lambda_tau=0.0, delta_tau=0.1)
+    torch.testing.assert_close(scaled, 10 * Q)
 
 
 def test_angular_displacement_nonzero_for_different_inputs():
@@ -289,12 +282,17 @@ def test_angular_displacement_nonzero_for_different_inputs():
     torch.manual_seed(3407)
     F = 16
     block = VibrationalStateBlock(dim=F, n_heads=1, n_steps=2, dropout=0.0)
-    x = torch.nn.functional.normalize(torch.randn(4, F), dim=-1)
+    x = 3 * torch.randn(4, F)
     L_f = _random_L_f(F)
     vals, vecs = torch.linalg.eigh(L_f.double())
     U_q = vecs.float()[:, :4]
 
-    block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
+    Q, _, _ = block(x, L_f, Lambda_tau=1.0, delta_tau=0.1, U_q=U_q)
     diag = block.diagnostics()
-    assert diag["angular_displacement"] > 0.0
+    # atan2 of the orthogonal and parallel components is scale-invariant.
+    x_dir = x.double() / x.double().norm(dim=-1, keepdim=True)
+    parallel = (Q.double() * x_dir).sum(dim=-1)
+    orthogonal = Q.double() - parallel[:, None] * x_dir
+    expected = torch.atan2(orthogonal.norm(dim=-1), parallel).mean().item()
+    assert expected > 0 and abs(diag["angular_displacement"] - expected) < 1e-5
     assert diag["gamma_mean"] > 0.0

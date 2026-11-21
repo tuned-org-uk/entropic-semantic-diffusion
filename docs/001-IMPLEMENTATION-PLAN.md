@@ -1,6 +1,8 @@
 # 001 — ESDM Implementation Plan
 
-> **Status:** v0.4.0 — topology-adaptive decoder (issue #24)
+> **Status:** v2.0.0 — the [v2 reconstruction contract](00-DESIGN.md#v2-reconstruction-contract)
+> supersedes historical sphere and decoder requirements in this plan for the
+> entropic-clock track. See [parallel work items](v2-work-items.md).
 > **Depends on:** `docs/00-DESIGN.md`
 > **Target:** PyTorch >= 2.3, Python >= 3.12
 
